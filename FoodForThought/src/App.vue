@@ -1,13 +1,17 @@
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+
+const route = useRoute()
+const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
 </script>
 
 <template>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-success">
+  <nav v-if="showMainNav" class="navbar navbar-expand-lg navbar-dark bg-success">
     <div class="container">
 
       <RouterLink
-        to="/dashboard"
+        to="/home"
         class="navbar-brand"
       >
         🌱 FoodForThought
