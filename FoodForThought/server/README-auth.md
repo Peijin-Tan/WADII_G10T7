@@ -39,6 +39,9 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/foodforthou
   .catch(console.error)
 ```
 
+To start server:
+node index.js
+
 3. Client usage (from the Vue app):
 
 - Register: POST `/auth/register` JSON { email, password }

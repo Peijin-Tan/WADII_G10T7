@@ -1,5 +1,7 @@
 const express = require('express')
 const mongoose = require('mongoose')
+const dotenv = require('dotenv').config({ path: './config.env' });
+require("node:dns").setServers(["8.8.8.8", "1.1.1.1"]);
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
@@ -42,15 +44,31 @@ app.get('/csrf-token', csrfProtection, (req, res) => {
 })
 
 // Connect to Mongo and start server
-const MONGO = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/foodforthought'
-const PORT = process.env.PORT || 3001
+async function connectDb() {
+  const uri =
+    process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/foodforthought";
 
-mongoose
-  .connect(MONGO)
-  .then(() => {
-    app.listen(PORT, () => console.log(`Server listening on port ${PORT}`))
-  })
-  .catch((err) => {
-    console.error('Mongo connection error', err)
-    process.exit(1)
-  })
+  mongoose.set("strictQuery", true);
+  await mongoose.connect(uri);
+  return mongoose.connection;
+}
+
+(async () => {
+  try {
+    await connectDb();
+  } catch (err) {
+    console.error("Failed to start (MongoDB connection).");
+    console.error(
+      "Set MONGODB_URI (Atlas) or start local MongoDB on mongodb://127.0.0.1:27017"
+    );
+    console.error(err);
+    process.exit(1);
+  }
+
+  const hostname = "localhost";
+  const port = 8000;
+
+  app.listen(port, hostname, () => {
+    console.log(`Server running at http://${hostname}:${port}/`);
+  });
+})();
