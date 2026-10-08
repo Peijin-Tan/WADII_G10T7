@@ -3,12 +3,27 @@
     <div class="landing-card">
       <div class="brand-mark">🌱</div>
       <h1>Welcome to FoodForThought</h1>
-      <p>Your personal food management app.</p>
+        <p>Your personal food management app.</p>
 
-      <div class="action-row">
-        <RouterLink to="/login" class="btn btn-success">Login</RouterLink>
-        <RouterLink to="/register" class="btn btn-outline-dark">Register</RouterLink>
-      </div>
+        <div v-if="user" class="mb-3">
+          <strong>Signed in as:</strong> {{ user.name }} — <em>{{ user.role }}</em>
+        </div>
+
+        <div v-if="!user" class="role-selection">
+          <p class="mb-2">Continue as</p>
+          <div class="role-row">
+            <RouterLink :to="{ name: 'Login', query: { role: 'user' } }" class="role-card">User</RouterLink>
+            <RouterLink :to="{ name: 'Login', query: { role: 'admin' } }" class="role-card">Admin</RouterLink>
+          </div>
+          <div class="mt-3">
+            <RouterLink :to="{ name: 'Register', query: { role: 'user' } }" class="btn btn-outline-dark">Register</RouterLink>
+          </div>
+        </div>
+
+        <div v-else class="action-row">
+          <RouterLink v-if="user && user.role === 'admin'" to="/admin" class="btn btn-dark">Admin</RouterLink>
+          <RouterLink to="/dashboard" class="btn btn-success">Dashboard</RouterLink>
+        </div>
     </div>
   </div>
 </template>
@@ -66,6 +81,36 @@ p {
   flex-wrap: wrap;
 }
 
+.role-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.role-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.role-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #f1fdf6;
+  color: #0f5132;
+  border: 1px solid rgba(25,135,84,0.12);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.role-card:hover {
+  transform: translateY(-3px);
+}
+
 .btn {
   min-width: 130px;
   border-radius: 10px;
@@ -96,3 +141,17 @@ p {
   color: #ffffff;
 }
 </style>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { getUser } from '../../utils/authClient'
+
+const user = ref(getUser())
+
+onMounted(() => {
+  // reset auth session when landing on home
+  localStorage.removeItem('user')
+  localStorage.removeItem('token')
+  user.value = null
+})
+</script>
