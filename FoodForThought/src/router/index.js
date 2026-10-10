@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
+import NotFound from '../components/Error/NotFound.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -10,7 +11,11 @@ const router = createRouter({
       path: '/',
       redirect: '/home'
     },
-
+    {
+      path: '/NotFound',
+      name: 'NotFound',
+      component: () => import('../components/Error/NotFound.vue')
+    },
     {
       path: '/dashboard',
       name: 'dashboard',

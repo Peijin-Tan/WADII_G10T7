@@ -43,11 +43,15 @@ const menuOpen = ref(false)
             <div class="d-flex align-items-center gap-3">
               <img class="app-avatar" alt="Profile"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              
-              </div>
+              <span class="d-none d-md-inline text-success">John Doe</span>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
+                </div>
+            </div>
           </div>
         </div>
-      </div>
+     
     </nav>
   </header>
 
