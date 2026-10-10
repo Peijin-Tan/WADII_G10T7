@@ -13,52 +13,37 @@ const router = createRouter({
 
     {
       path: '/dashboard',
-      name: 'Dashboard',
+      name: 'dashboard',
       component: Dashboard
     },
 
     {
       path: '/pantry',
-      name: 'Pantry',
+      name: 'pantry',
       component: Pantry
     },
 
     {
       path: '/recipes',
-      name: 'Recipes',
+      name: 'recipes',
       component: Recipes
     },
     {
-      path: '/admin',
-      name: 'Admin',
-      component: () => import('../views/Admin.vue')
-    },
-    {
       path: '/login',
-      name: 'Login',
+      name: 'login',
       component: () => import('../components/Auth/login.vue')
     },
     {
       path: '/register',
-      name: 'Register',
+      name: 'register',
       component: () => import('../components/Auth/register.vue')
     },
     {
       path: '/home',
-      name: 'Home',
+      name: 'home',
       component: () => import('../components/Auth/home.vue')
     }
   ],
-})
-
-// simple route guard: block dashboard unless logged in, and protect admin by role
-router.beforeEach((to, from, next) => {
-  const userRaw = localStorage.getItem('user')
-  const user = userRaw ? JSON.parse(userRaw) : null
-
-  if (to.path === '/dashboard' && !user) return next('/login')
-  if (to.path === '/admin' && (!user || user.role !== 'admin')) return next('/home')
-  next()
 })
 
 export default router
