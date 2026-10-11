@@ -6,8 +6,8 @@ const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
 
-const authRouter = require('./src/router/auth')
-const adminRouter = require('./src/router/admin')
+//const authRouter = require('./src/router/auth')
+//const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 
 const app = express()
@@ -30,10 +30,10 @@ const limiter = rateLimit({
 app.use(limiter)
 
 // Mount auth routes
-app.use('/auth', authRouter)
+//app.use('/auth', authRouter)
 
 // Mount admin
-app.use('/admin', adminRouter)
+//app.use('/admin', adminRouter)
 
 // Expose a simple CSRF token endpoint (uses csurf internally)
 // This endpoint will set a CSRF cookie when called by the client.
