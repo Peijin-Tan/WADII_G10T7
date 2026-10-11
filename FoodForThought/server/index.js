@@ -8,6 +8,7 @@ const cookieParser = require('cookie-parser')
 
 const authRouter = require('./src/router/auth')
 const adminRouter = require('./src/router/admin')
+const postsRouter = require('./src/router/Post')
 
 const app = express()
 
@@ -72,3 +73,6 @@ async function connectDb() {
     console.log(`Server running at http://${hostname}:${port}/`);
   });
 })();
+
+//Mount Posts
+app.use('/posts', postsRouter)
