@@ -6,8 +6,8 @@ const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
 
-const authRouter = require('./routes/auth')
-const adminRouter = require('./routes/admin')
+const authRouter = require('./src/router/auth')
+const adminRouter = require('./src/router/admin')
 
 const app = express()
 
