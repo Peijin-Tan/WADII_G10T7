@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
+import NotFound from '../components/Error/NotFound.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -10,55 +11,44 @@ const router = createRouter({
       path: '/',
       redirect: '/home'
     },
-
+    {
+      path: '/NotFound',
+      name: 'NotFound',
+      component: () => import('../components/Error/NotFound.vue')
+    },
     {
       path: '/dashboard',
-      name: 'Dashboard',
+      name: 'dashboard',
       component: Dashboard
     },
 
     {
       path: '/pantry',
-      name: 'Pantry',
+      name: 'pantry',
       component: Pantry
     },
 
     {
       path: '/recipes',
-      name: 'Recipes',
+      name: 'recipes',
       component: Recipes
     },
     {
-      path: '/admin',
-      name: 'Admin',
-      component: () => import('../views/Admin.vue')
-    },
-    {
       path: '/login',
-      name: 'Login',
+      name: 'login',
       component: () => import('../components/Auth/login.vue')
     },
     {
       path: '/register',
-      name: 'Register',
+      name: 'register',
       component: () => import('../components/Auth/register.vue')
     },
     {
       path: '/home',
-      name: 'Home',
+      name: 'home',
       component: () => import('../components/Auth/home.vue')
     }
   ],
-})
-
-// simple route guard: block dashboard unless logged in, and protect admin by role
-router.beforeEach((to, from, next) => {
-  const userRaw = localStorage.getItem('user')
-  const user = userRaw ? JSON.parse(userRaw) : null
-
-  if (to.path === '/dashboard' && !user) return next('/login')
-  if (to.path === '/admin' && (!user || user.role !== 'admin')) return next('/home')
-  next()
 })
 
 export default router
