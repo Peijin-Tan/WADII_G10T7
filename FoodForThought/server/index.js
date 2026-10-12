@@ -10,6 +10,7 @@ const cookieParser = require('cookie-parser')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 
+
 const app = express()
 
 // Basic security middlewares
