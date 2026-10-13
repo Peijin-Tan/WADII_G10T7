@@ -39,6 +39,21 @@
           </div>
         </div>
       </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Community</h5>
+
+            <p class="card-text">
+              Discover meals shared by the community.
+            </p>
+
+            <RouterLink to="/community" class="btn btn-success">
+              View Community
+            </RouterLink>
+          </div>
+        </div>
+      </div>
 
     </div>
 
