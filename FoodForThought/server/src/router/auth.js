@@ -63,9 +63,62 @@ router.post('/login', async (req, res) => {
   }
 })
 
+// POST /auth/register
+router.post('/register', async (req, res) => {
+  const { name, email, password, role } = req.body || {}
+
+  const safeRole = typeof role === 'string' && ['user', 'admin'].includes(role)
+    ? role
+    : 'user'
+
+  if (
+    typeof name !== 'string' || !name.trim() ||
+    typeof email !== 'string' || !email.trim() ||
+    typeof password !== 'string' || !password ||
+    typeof role !== 'string' || !['user', 'admin'].includes(role)
+  ) {
+    return res.status(400).json({
+      message: 'Name, email, password, and a valid role are required'
+    })
+  }
+
+  try {
+    const existingUser = await User.findOne({ email: email.trim().toLowerCase() })
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'Email is already registered'
+      })
+    }
+
+    const newUser = new User({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      role: safeRole
+    })
+
+    await newUser.save()
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: {
+        _id: newUser._id,
+        name: newUser.name,
+        role: newUser.role
+      }
+    })
+  } catch (err) {
+    console.error('Register error:', err)
+    res.status(500).json({
+      message: 'Unable to register user',
+      error: err.message
+    })
+  }
+})
+
 // GET /auth/me — verifies a token and returns the user
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user })
 })
 
-module.exports = router
+module.exports = router;

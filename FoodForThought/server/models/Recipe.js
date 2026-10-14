@@ -4,8 +4,8 @@ const recipeSchema = new mongoose.Schema(
   {
     externalId: {
       type: Number,
-      required: true,
-      unique: true
+      required: false,
+      default: undefined
     },
 
     title: {
@@ -103,7 +103,9 @@ const recipeSchema = new mongoose.Schema(
     }],
 
     source: {
-      type: String
+      type: String,
+      enum: ['spoonacular', 'user'],
+      default: 'user'
     },
 
     sourceUrl: {
