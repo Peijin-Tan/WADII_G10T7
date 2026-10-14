@@ -1,5 +1,6 @@
 const express = require('express')
 const mongoose = require('mongoose')
+const cors = require('cors')
 const dotenv = require('dotenv').config({ path: './config.env' });
 require("node:dns").setServers(["8.8.8.8", "1.1.1.1"]);
 const helmet = require('helmet')
@@ -10,8 +11,12 @@ const authRouter = require('./src/router/auth')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 
-
 const app = express()
+
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+}))
 
 // Basic security middlewares
 app.use(helmet())
