@@ -8,17 +8,31 @@ const Recipe = require('../../models/Recipe')
 
 const router = express.Router()
 router.get('/', async (req, res) => {
-  
   try {
-
     const posts = await Post.find()
-    .populate('userId', 'name')
-    .populate('recipeId')
-    .sort({ createdAt: -1 })
-    res.json(posts)
+      .populate('userId', 'name')
+      .populate('recipeId')
+      .sort({ createdAt: -1 })
+
+    const results = []
+
+    for (const post of posts) {
+      const likeCount = await Like.countDocuments({
+        postId: post._id
+      })
+
+      const postData = post.toObject()
+      postData.likeCount = likeCount
+
+      results.push(postData)
+    }
+
+    res.json(results)
   } catch (err) {
     console.error(err)
-    res.status(500).json({ message: 'Failed to retrieve posts' })
+    res.status(500).json({
+      message: 'Failed to retrieve posts'
+    })
   }
 })
 
@@ -214,6 +228,115 @@ router.post('/', requireAuth, async (req, res) => {
 
     return res.status(500).json({
       message: 'Failed to create the recipe post'
+    })
+  }
+})
+
+// GET /posts/liked — posts the logged-in user has liked
+router.get('/liked', requireAuth, async (req, res) => {
+  try {
+    const likes = await Like.find({
+      userId: req.user._id
+    })
+
+    const postIds = []
+
+    for (const like of likes) {
+      postIds.push(like.postId.toString())
+    }
+
+    res.json(postIds)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      message: 'Failed to retrieve your likes'
+    })
+  }
+})
+
+// POST /posts/:id/like — like a post
+router.post('/:id/like', requireAuth, async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isObjectIdOrHexString(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'Post not found'
+      })
+    }
+
+    try {
+      await Like.create({
+        userId: req.user._id,
+        postId: postId
+      })
+    } catch (err) {
+      // Already liked: keep the existing like
+      if (err.code !== 11000) {
+        throw err
+      }
+    }
+
+    const likeCount = await Like.countDocuments({
+      postId: postId
+    })
+
+    res.json({
+      liked: true,
+      likeCount: likeCount
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      message: 'Failed to like post'
+    })
+  }
+})
+
+// DELETE /posts/:id/like — unlike a post
+router.delete('/:id/like', requireAuth, async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isObjectIdOrHexString(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'Post not found'
+      })
+    }
+
+    await Like.deleteOne({
+      userId: req.user._id,
+      postId: postId
+    })
+
+    const likeCount = await Like.countDocuments({
+      postId: postId
+    })
+
+    res.json({
+      liked: false,
+      likeCount: likeCount
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      message: 'Failed to unlike post'
     })
   }
 })

@@ -35,6 +35,11 @@ const submitting = ref(false)
 const postError = ref('')
 const success = ref('')
 
+//Like details
+const likedPostIds = ref([])
+const likingPostIds = ref([])
+const likeError = ref('')
+
 function addIngredient() {
   ingredients.value.push({
     name: '',
@@ -204,7 +209,94 @@ async function createPost() {
   }
 }
 
-onMounted(loadPosts)
+async function loadMyLikes() {
+  likedPostIds.value = []
+
+  if (!auth.token) return
+
+  try {
+    const response = await axios.get('/posts/liked', {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
+
+    likedPostIds.value = response.data
+  } catch (err) {
+    if (err.response?.status === 401) {
+      auth.logout()
+    } else {
+      likeError.value = 'Unable to load your likes.'
+    }
+  }
+}
+
+async function toggleLike(post) {
+  likeError.value = ''
+
+  if (!auth.token) {
+    likeError.value = 'Please log in to like posts.'
+    return
+  }
+
+  if (likingPostIds.value.includes(post._id)) return
+
+  likingPostIds.value.push(post._id)
+
+  const config = {
+    headers: {
+      Authorization: `Bearer ${auth.token}`
+    }
+  }
+
+  try {
+    let response
+
+    if (likedPostIds.value.includes(post._id)) {
+      response = await axios.delete(
+        `/posts/${post._id}/like`,
+        config
+      )
+    } else {
+      response = await axios.post(
+        `/posts/${post._id}/like`,
+        {},
+        config
+      )
+    }
+
+    post.likeCount = response.data.likeCount
+
+    const index = likedPostIds.value.indexOf(post._id)
+
+    if (response.data.liked) {
+      if (index === -1) {
+        likedPostIds.value.push(post._id)
+      }
+    } else if (index !== -1) {
+      likedPostIds.value.splice(index, 1)
+    }
+  } catch (err) {
+    if (err.response?.status === 401) {
+      auth.logout()
+      likedPostIds.value = []
+      likeError.value = 'Please log in again to like posts.'
+    } else {
+      likeError.value =
+        err.response?.data?.message || 'Unable to update your like.'
+    }
+  } finally {
+    const index = likingPostIds.value.indexOf(post._id)
+
+    if (index !== -1) {
+      likingPostIds.value.splice(index, 1)
+    }
+  }
+}
+onMounted(async () => {
+  await loadPosts()
+  await loadMyLikes()
+})
 </script>
 
 <template>
@@ -298,7 +390,7 @@ onMounted(loadPosts)
                 v-model="image"
                 type="text"
                 class="form-control"
-                placeholder="/img/chicken-rice.jpg"
+                placeholder="/img/chicken_rice.jpg"
                 required
               >
               <div class="form-text">
@@ -484,6 +576,10 @@ onMounted(loadPosts)
     <!-- Community feed -->
     <h2 class="h4">Community posts</h2>
 
+    <p v-if="likeError" class="text-danger" role="alert">
+      {{ likeError }}
+    </p>
+
     <p v-if="loading">Loading posts...</p>
 
     <div v-else-if="error">
@@ -514,7 +610,7 @@ onMounted(loadPosts)
 
           <p class="preserve-lines">{{ post.content }}</p>
 
-          <!-- Supports older posts with their own image -->
+          <!-- Image belonging to an older text-only post -->
           <img
             v-if="post.image"
             :src="post.image"
@@ -532,7 +628,7 @@ onMounted(loadPosts)
             </span>
           </div>
 
-          <!-- Recipe details returned by populate('recipeId') -->
+          <!-- Linked recipe -->
           <div
             v-if="post.recipeId && typeof post.recipeId === 'object'"
             class="border-top mt-3 pt-3"
@@ -575,6 +671,28 @@ onMounted(loadPosts)
                 {{ instruction.description }}
               </li>
             </ol>
+          </div>
+
+          <!-- Like / unlike -->
+          <div class="border-top mt-3 pt-3">
+            <button
+              v-if="auth.user"
+              type="button"
+              class="btn"
+              :class="likedPostIds.includes(post._id)
+                ? 'btn-success'
+                : 'btn-outline-success'"
+              :disabled="likingPostIds.includes(post._id)"
+              @click="toggleLike(post)"
+            >
+              {{ likedPostIds.includes(post._id) ? 'Unlike' : 'Like' }}
+              · {{ post.likeCount ?? 0 }}
+            </button>
+
+            <span v-else class="text-muted">
+              {{ post.likeCount ?? 0 }} likes ·
+              <RouterLink to="/login">Log in to like</RouterLink>
+            </span>
           </div>
         </div>
       </div>
