@@ -3,13 +3,18 @@ const Post = require('../../models/Post')
 const Like = require('../../models/Like')
 const User = require('../../models/User')
 const requireAuth = require('../middleware/auth')
+const mongoose = require('mongoose')
+const Recipe = require('../../models/Recipe')
 
 const router = express.Router()
 router.get('/', async (req, res) => {
   
   try {
 
-    const posts = await Post.find().populate('userId', 'name').sort({ createdAt: -1 })
+    const posts = await Post.find()
+    .populate('userId', 'name')
+    .populate('recipeId')
+    .sort({ createdAt: -1 })
     res.json(posts)
   } catch (err) {
     console.error(err)
@@ -163,7 +168,7 @@ router.post('/', requireAuth, async (req, res) => {
     // Both documents save together, or neither saves
     await mongoose.connection.transaction(async (session) => {
       const newRecipe = new Recipe({
-        origin: 'community',
+        source: 'user',
         createdBy: req.user._id,
         title: recipe.title.trim(),
         summary: recipe.summary.trim(),
