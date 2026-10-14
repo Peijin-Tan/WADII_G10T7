@@ -1,4 +1,5 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const Post = require('../../models/Post')
 const Like = require('../../models/Like')
 const User = require('../../models/User')
@@ -14,6 +15,42 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Failed to retrieve posts' })
+  }
+})
+
+router.delete('/:id', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      message: 'Admin access required to delete posts'
+    })
+  }
+
+  const { id } = req.params
+
+  if (!mongoose.isObjectIdOrHexString(id)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const deletedPost = await Post.findByIdAndDelete(id)
+
+    if (!deletedPost) {
+      return res.status(404).json({
+        message: 'Post not found'
+      })
+    }
+
+    return res.json({
+      message: 'Post deleted successfully',
+      postId: id
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({
+      message: 'Unable to delete post'
+    })
   }
 })
 

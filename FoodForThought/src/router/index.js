@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
-import NotFound from '../components/Error/NotFound.vue'
 import Community from '../views/Community.vue'
 
 const router = createRouter({
@@ -13,14 +12,14 @@ const router = createRouter({
       redirect: '/home'
     },
     {
-      path: '/NotFound',
-      name: 'NotFound',
-      component: () => import('../components/Error/NotFound.vue')
-    },
-    {
       path: '/dashboard',
       name: 'dashboard',
       component: Dashboard
+    },
+    {
+      path: '/admindashboard',
+      name: 'admindashboard',
+      component: () => import('../views/admindashboard.vue')
     },
 
     {
