@@ -5,13 +5,16 @@ require("node:dns").setServers(["8.8.8.8", "1.1.1.1"]);
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
-
 const authRouter = require('./src/router/auth')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
-
+const recipeRouter = require('./src/router/recipe')
+const cors = require('cors')
 
 const app = express()
+app.use(cors({
+  origin: 'http://localhost:5173'
+}))
 
 // Basic security middlewares
 app.use(helmet())
@@ -34,6 +37,7 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
+app.use('/recipes', recipeRouter)
 
 // Mount admin
 //app.use('/admin', adminRouter)
