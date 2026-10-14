@@ -176,6 +176,34 @@ router.post('/', requireAuth, async (req, res) => {
     })
   }
 
+  if (
+    !Array.isArray(recipe.cuisine) ||
+    recipe.cuisine.length === 0
+  ) {
+    return res.status(400).json({
+      message: 'Select at least one cuisine'
+    })
+  }
+
+  const cleanedCuisine = []
+
+  for (const cuisine of recipe.cuisine) {
+    if (
+      typeof cuisine !== 'string' ||
+      cuisine.trim() === ''
+    ) {
+      return res.status(400).json({
+        message: 'Each cuisine must be non-empty text'
+      })
+    }
+
+    const cuisineName = cuisine.trim()
+
+    if (!cleanedCuisine.includes(cuisineName)) {
+      cleanedCuisine.push(cuisineName)
+    }
+  }
+
   try {
     let createdPost
 
@@ -191,7 +219,7 @@ router.post('/', requireAuth, async (req, res) => {
         prepTime: recipe.prepTime,
         cookingTime: recipe.cookingTime,
         totalTime: recipe.prepTime + recipe.cookingTime,
-        cuisine: [],
+        cuisine: cleanedCuisine,
         dietaryCategories: [],
         allergens: [],
         nutrition: [],
