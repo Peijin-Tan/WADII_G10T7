@@ -10,15 +10,76 @@ const posts = ref([])
 const loading = ref(true)
 const error = ref('')
 
-// Create-post form
+// Post details
 const content = ref('')
-const image = ref('')
 const tagsText = ref('')
+
+// Recipe details
+const title = ref('')
+const summary = ref('')
+const image = ref('')
+const servings = ref(1)
+const prepTime = ref(0)
+const cookingTime = ref(0)
+
+const ingredients = ref([
+  { name: '', amount: 1, unit: '' }
+])
+
+const instructions = ref([
+  { description: '' }
+])
+
+// Form status
 const submitting = ref(false)
 const postError = ref('')
 const success = ref('')
 
-// Retrieve posts from the backend
+function addIngredient() {
+  ingredients.value.push({
+    name: '',
+    amount: 1,
+    unit: ''
+  })
+}
+
+function removeIngredient(index) {
+  if (ingredients.value.length > 1) {
+    ingredients.value.splice(index, 1)
+  }
+}
+
+function addStep() {
+  instructions.value.push({
+    description: ''
+  })
+}
+
+function removeStep(index) {
+  if (instructions.value.length > 1) {
+    instructions.value.splice(index, 1)
+  }
+}
+
+function resetForm() {
+  content.value = ''
+  tagsText.value = ''
+  title.value = ''
+  summary.value = ''
+  image.value = ''
+  servings.value = 1
+  prepTime.value = 0
+  cookingTime.value = 0
+
+  ingredients.value = [
+    { name: '', amount: 1, unit: '' }
+  ]
+
+  instructions.value = [
+    { description: '' }
+  ]
+}
+
 async function loadPosts() {
   loading.value = true
   error.value = ''
@@ -33,7 +94,6 @@ async function loadPosts() {
   }
 }
 
-// Send a new post to the backend
 async function createPost() {
   if (submitting.value) return
 
@@ -46,11 +106,54 @@ async function createPost() {
   }
 
   if (content.value.trim() === '') {
-    postError.value = 'Please enter some content.'
+    postError.value = 'Please enter your post content.'
     return
   }
 
-  // Convert comma-separated text into an array
+  if (
+    title.value.trim() === '' ||
+    summary.value.trim() === '' ||
+    image.value.trim() === ''
+  ) {
+    postError.value = 'Enter a recipe title, description, and picture URL or path.'
+    return
+  }
+
+  if (!Number.isInteger(servings.value) || servings.value < 1) {
+    postError.value = 'Servings must be a positive whole number.'
+    return
+  }
+
+  if (
+    !Number.isFinite(prepTime.value) ||
+    prepTime.value < 0 ||
+    !Number.isFinite(cookingTime.value) ||
+    cookingTime.value < 0
+  ) {
+    postError.value = 'Enter valid preparation and cooking times.'
+    return
+  }
+
+  for (const ingredient of ingredients.value) {
+    if (
+      ingredient.name.trim() === '' ||
+      !Number.isFinite(ingredient.amount) ||
+      ingredient.amount <= 0 ||
+      ingredient.unit.trim() === ''
+    ) {
+      postError.value = 'Each ingredient needs a name, positive amount, and unit.'
+      return
+    }
+  }
+
+  for (const instruction of instructions.value) {
+    if (instruction.description.trim() === '') {
+      postError.value = 'Please complete every instruction step.'
+      return
+    }
+  }
+
+  // Convert comma-separated tags into an array
   const tags = []
 
   for (const value of tagsText.value.split(',')) {
@@ -63,9 +166,17 @@ async function createPost() {
 
   const data = {
     content: content.value.trim(),
-    image: image.value.trim(),
-    recipeId: null,
-    tags: tags
+    tags: tags,
+    recipe: {
+      title: title.value.trim(),
+      summary: summary.value.trim(),
+      image: image.value.trim(),
+      servings: servings.value,
+      prepTime: prepTime.value,
+      cookingTime: cookingTime.value,
+      ingredients: ingredients.value,
+      instructions: instructions.value
+    }
   }
 
   submitting.value = true
@@ -77,17 +188,17 @@ async function createPost() {
       }
     })
 
-    // Clear the form after successful creation
-    content.value = ''
-    image.value = ''
-    tagsText.value = ''
-    success.value = 'Your post was created!'
-
-    // Retrieve the updated feed
+    resetForm()
+    success.value = 'Your recipe post was created!'
     await loadPosts()
   } catch (err) {
-    postError.value =
-      err.response?.data?.message || 'Unable to create your post.'
+    if (err.response?.status === 401) {
+      auth.logout()
+      postError.value = 'Your login has expired. Please log in again.'
+    } else {
+      postError.value =
+        err.response?.data?.message || 'Unable to create your recipe post.'
+    }
   } finally {
     submitting.value = false
   }
@@ -97,101 +208,300 @@ onMounted(loadPosts)
 </script>
 
 <template>
-  <div class="container mt-4">
+  <div class="container my-4">
     <h1>Community</h1>
+    <p class="text-muted">
+      Share your homemade recipes and discover what others are cooking.
+    </p>
 
-    <!-- Create-post form -->
+    <p v-if="postError" class="text-danger" role="alert">
+      {{ postError }}
+    </p>
+
+    <p v-if="success" class="text-success" role="status">
+      {{ success }}
+    </p>
+
+    <!-- Create a recipe post -->
     <div v-if="auth.user" class="card mb-4">
       <div class="card-body">
-        <h5>Create a post</h5>
-        <p>Posting as {{ auth.user.name }}</p>
+        <h5 class="card-title">Share a homemade recipe</h5>
+        <p class="text-muted">Posting as {{ auth.user.name }}</p>
 
         <form @submit.prevent="createPost">
-          <div class="mb-3">
-            <label for="postContent" class="form-label">
-              Share your meal
-            </label>
+          <fieldset :disabled="submitting">
+            <div class="mb-3">
+              <label for="postContent" class="form-label">
+                Your message
+              </label>
+              <textarea
+                id="postContent"
+                v-model="content"
+                class="form-control"
+                rows="3"
+                maxlength="2000"
+                placeholder="Tell us about your recipe!"
+                required
+              ></textarea>
+            </div>
 
-            <textarea
-              id="postContent"
-              v-model="content"
-              class="form-control"
-              rows="4"
-              maxlength="2000"
-              placeholder="What did you cook today?"
-              required
-            ></textarea>
-          </div>
+            <div class="mb-3">
+              <label for="postTags" class="form-label">
+                Tags (optional)
+              </label>
+              <input
+                id="postTags"
+                v-model="tagsText"
+                type="text"
+                class="form-control"
+                placeholder="home-cooked, meal-prep"
+              >
+              <div class="form-text">Separate tags with commas.</div>
+            </div>
 
-          <div class="mb-3">
-            <label for="postImage" class="form-label">
-              Image URL or path (optional)
-            </label>
+            <h5 class="mt-4">Recipe details</h5>
 
-            <input
-              id="postImage"
-              v-model="image"
-              type="text"
-              class="form-control"
-              placeholder="/img/chicken-rice.jpg"
+            <div class="mb-3">
+              <label for="recipeTitle" class="form-label">
+                Recipe title
+              </label>
+              <input
+                id="recipeTitle"
+                v-model="title"
+                type="text"
+                class="form-control"
+                placeholder="Homemade Chicken Rice"
+                required
+              >
+            </div>
+
+            <div class="mb-3">
+              <label for="recipeSummary" class="form-label">
+                Recipe description
+              </label>
+              <textarea
+                id="recipeSummary"
+                v-model="summary"
+                class="form-control"
+                rows="3"
+                placeholder="Describe the dish."
+                required
+              ></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label for="recipeImage" class="form-label">
+                Recipe picture URL or path
+              </label>
+              <input
+                id="recipeImage"
+                v-model="image"
+                type="text"
+                class="form-control"
+                placeholder="/img/chicken-rice.jpg"
+                required
+              >
+              <div class="form-text">
+                Enter an image URL or a path to an existing image.
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label for="recipeServings" class="form-label">
+                  Servings
+                </label>
+                <input
+                  id="recipeServings"
+                  v-model.number="servings"
+                  type="number"
+                  min="1"
+                  step="1"
+                  class="form-control"
+                  required
+                >
+              </div>
+
+              <div class="col-md-4">
+                <label for="recipePrepTime" class="form-label">
+                  Prep time (minutes)
+                </label>
+                <input
+                  id="recipePrepTime"
+                  v-model.number="prepTime"
+                  type="number"
+                  min="0"
+                  step="any"
+                  class="form-control"
+                  required
+                >
+              </div>
+
+              <div class="col-md-4">
+                <label for="recipeCookingTime" class="form-label">
+                  Cooking time (minutes)
+                </label>
+                <input
+                  id="recipeCookingTime"
+                  v-model.number="cookingTime"
+                  type="number"
+                  min="0"
+                  step="any"
+                  class="form-control"
+                  required
+                >
+              </div>
+            </div>
+
+            <h6>Ingredients</h6>
+
+            <div
+              v-for="(ingredient, index) in ingredients"
+              :key="index"
+              class="row g-2 mb-3"
             >
-          </div>
+              <div class="col-md-5">
+                <label
+                  :for="'ingredientName' + index"
+                  class="form-label"
+                >
+                  Ingredient {{ index + 1 }}
+                </label>
+                <input
+                  :id="'ingredientName' + index"
+                  v-model="ingredient.name"
+                  class="form-control"
+                  placeholder="Chicken"
+                  required
+                >
+              </div>
 
-          <div class="mb-3">
-            <label for="postTags" class="form-label">
-              Tags (optional, separated by commas)
-            </label>
+              <div class="col-md-2">
+                <label
+                  :for="'ingredientAmount' + index"
+                  class="form-label"
+                >
+                  Amount
+                </label>
+                <input
+                  :id="'ingredientAmount' + index"
+                  v-model.number="ingredient.amount"
+                  type="number"
+                  min="0.000001"
+                  step="any"
+                  class="form-control"
+                  required
+                >
+              </div>
 
-            <input
-              id="postTags"
-              v-model="tagsText"
-              type="text"
-              class="form-control"
-              placeholder="home-cooked, high-protein"
+              <div class="col-md-3">
+                <label
+                  :for="'ingredientUnit' + index"
+                  class="form-label"
+                >
+                  Unit
+                </label>
+                <input
+                  :id="'ingredientUnit' + index"
+                  v-model="ingredient.unit"
+                  class="form-control"
+                  placeholder="g, cups, pieces"
+                  required
+                >
+              </div>
+
+              <div class="col-md-2 d-flex align-items-end">
+                <button
+                  type="button"
+                  class="btn btn-outline-danger"
+                  :disabled="ingredients.length === 1"
+                  @click="removeIngredient(index)"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-outline-success mb-4"
+              @click="addIngredient"
             >
-          </div>
+              Add ingredient
+            </button>
 
-          <p v-if="postError" class="text-danger" role="alert">
-            {{ postError }}
-          </p>
+            <h6>Instructions</h6>
 
-          <p v-if="success" class="text-success" role="status">
-            {{ success }}
-          </p>
+            <div
+              v-for="(instruction, index) in instructions"
+              :key="index"
+              class="mb-3"
+            >
+              <label :for="'recipeStep' + index" class="form-label">
+                Step {{ index + 1 }}
+              </label>
+              <textarea
+                :id="'recipeStep' + index"
+                v-model="instruction.description"
+                class="form-control mb-2"
+                rows="2"
+                required
+              ></textarea>
 
-          <button
-            type="submit"
-            class="btn btn-success"
-            :disabled="submitting"
-          >
-            {{ submitting ? 'Posting...' : 'Create Post' }}
-          </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-danger"
+                :disabled="instructions.length === 1"
+                @click="removeStep(index)"
+              >
+                Remove step
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-outline-success mb-3"
+              @click="addStep"
+            >
+              Add step
+            </button>
+
+            <div>
+              <button type="submit" class="btn btn-success">
+                {{ submitting ? 'Posting...' : 'Share Recipe' }}
+              </button>
+            </div>
+          </fieldset>
         </form>
       </div>
     </div>
 
     <p v-else>
       <RouterLink to="/login">Log in</RouterLink>
-      to share a post.
+      to share your homemade recipe.
     </p>
 
     <!-- Community feed -->
+    <h2 class="h4">Community posts</h2>
+
     <p v-if="loading">Loading posts...</p>
 
     <div v-else-if="error">
-      <p class="text-danger">{{ error }}</p>
+      <p class="text-danger" role="alert">{{ error }}</p>
       <button class="btn btn-primary" @click="loadPosts">
         Try again
       </button>
     </div>
 
-    <p v-else-if="posts.length === 0">No posts yet.</p>
+    <p v-else-if="posts.length === 0">
+      No posts yet. Be the first to share a recipe!
+    </p>
 
     <div v-else>
       <div
         v-for="post in posts"
         :key="post._id"
-        class="card mb-3"
+        class="card mb-4"
       >
         <div class="card-body">
           <h5 class="card-title">
@@ -202,16 +512,17 @@ onMounted(loadPosts)
             {{ new Date(post.createdAt).toLocaleString() }}
           </p>
 
-          <p class="post-content">{{ post.content }}</p>
+          <p class="preserve-lines">{{ post.content }}</p>
 
+          <!-- Supports older posts with their own image -->
           <img
             v-if="post.image"
             :src="post.image"
             alt="Shared meal"
-            class="img-fluid mb-2"
+            class="recipe-image mb-3"
           >
 
-          <div>
+          <div class="mb-2">
             <span
               v-for="tag in post.tags"
               :key="tag"
@@ -220,6 +531,51 @@ onMounted(loadPosts)
               {{ tag }}
             </span>
           </div>
+
+          <!-- Recipe details returned by populate('recipeId') -->
+          <div
+            v-if="post.recipeId && typeof post.recipeId === 'object'"
+            class="border-top mt-3 pt-3"
+          >
+            <h5>{{ post.recipeId.title }}</h5>
+
+            <img
+              v-if="post.recipeId.image"
+              :src="post.recipeId.image"
+              :alt="post.recipeId.title"
+              class="recipe-image mb-3"
+            >
+
+            <p class="preserve-lines">{{ post.recipeId.summary }}</p>
+
+            <p class="text-muted">
+              Servings: {{ post.recipeId.servings }}
+              · Prep: {{ post.recipeId.prepTime }} minutes
+              · Cooking: {{ post.recipeId.cookingTime }} minutes
+            </p>
+
+            <h6>Ingredients</h6>
+            <ul>
+              <li
+                v-for="(ingredient, index) in post.recipeId.ingredients"
+                :key="index"
+              >
+                {{ ingredient.amount }} {{ ingredient.unit }}
+                {{ ingredient.name }}
+              </li>
+            </ul>
+
+            <h6>Instructions</h6>
+            <ol>
+              <li
+                v-for="instruction in post.recipeId.instructions"
+                :key="instruction.step"
+                class="preserve-lines mb-2"
+              >
+                {{ instruction.description }}
+              </li>
+            </ol>
+          </div>
         </div>
       </div>
     </div>
@@ -227,7 +583,14 @@ onMounted(loadPosts)
 </template>
 
 <style scoped>
-.post-content {
+.preserve-lines {
   white-space: pre-wrap;
+}
+
+.recipe-image {
+  display: block;
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
 }
 </style>

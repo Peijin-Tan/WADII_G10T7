@@ -18,37 +18,23 @@ router.get('/', async (req, res) => {
 })
 
 router.post('/', requireAuth, async (req, res) => {
-  // 1. Read the submitted fields
   const body = req.body || {}
 
   const content = body.content
-  const image = body.image === undefined ? '' : body.image
-  const recipeId = body.recipeId === undefined ? null : body.recipeId
   const tags = body.tags === undefined ? [] : body.tags
+  const recipe = body.recipe
 
-  // 2. Validate content
-  if (typeof content !== 'string') {
-    return res.status(400).json({
-      message: 'Content must be text'
-    })
-  }
-
-  const cleanedContent = content.trim()
-
-  if (cleanedContent.length === 0 || cleanedContent.length > 2000) {
+  // Validate the post
+  if (
+    typeof content !== 'string' ||
+    content.trim() === '' ||
+    content.trim().length > 2000
+  ) {
     return res.status(400).json({
       message: 'Post content must contain 1–2000 characters'
     })
   }
 
-  // 3. Validate image
-  if (typeof image !== 'string') {
-    return res.status(400).json({
-      message: 'Image must be a URL or file path'
-    })
-  }
-
-  // 4. Validate tags
   if (!Array.isArray(tags)) {
     return res.status(400).json({
       message: 'Tags must be an array'
@@ -71,48 +57,158 @@ router.post('/', requireAuth, async (req, res) => {
     }
   }
 
-  try {
-    // 5. Check the optional recipe link
-    if (recipeId !== null) {
-      if (!mongoose.isObjectIdOrHexString(recipeId)) {
-        return res.status(400).json({
-          message: 'Invalid recipe ID'
-        })
-      }
+  // Validate the recipe
+  if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
+    return res.status(400).json({
+      message: 'Recipe details are required'
+    })
+  }
 
-      const recipe = await Recipe.findById(recipeId)
+  const requiredTextFields = ['title', 'summary', 'image']
 
-      if (!recipe) {
-        return res.status(404).json({
-          message: 'Recipe not found'
-        })
-      }
+  for (const field of requiredTextFields) {
+    if (
+      typeof recipe[field] !== 'string' ||
+      recipe[field].trim() === ''
+    ) {
+      return res.status(400).json({
+        message: `Recipe ${field} is required`
+      })
+    }
+  }
+
+  if (!Number.isInteger(recipe.servings) || recipe.servings < 1) {
+    return res.status(400).json({
+      message: 'Servings must be a positive whole number'
+    })
+  }
+
+  if (
+    !Number.isFinite(recipe.prepTime) ||
+    recipe.prepTime < 0 ||
+    !Number.isFinite(recipe.cookingTime) ||
+    recipe.cookingTime < 0
+  ) {
+    return res.status(400).json({
+      message: 'Preparation and cooking times must be non-negative numbers'
+    })
+  }
+
+  if (
+    !Array.isArray(recipe.ingredients) ||
+    recipe.ingredients.length === 0
+  ) {
+    return res.status(400).json({
+      message: 'Add at least one ingredient'
+    })
+  }
+
+  const cleanedIngredients = []
+
+  for (const ingredient of recipe.ingredients) {
+    if (
+      !ingredient ||
+      typeof ingredient.name !== 'string' ||
+      ingredient.name.trim() === '' ||
+      !Number.isFinite(ingredient.amount) ||
+      ingredient.amount <= 0 ||
+      typeof ingredient.unit !== 'string' ||
+      ingredient.unit.trim() === ''
+    ) {
+      return res.status(400).json({
+        message: 'Each ingredient needs a name, positive amount, and unit'
+      })
     }
 
-    // 6. Save the post using the verified user's ID
-    const post = await Post.create({
-      userId: req.user._id,
-      content: cleanedContent,
-      image: image.trim(),
-      recipeId: recipeId,
-      tags: cleanedTags
+    cleanedIngredients.push({
+      name: ingredient.name.trim(),
+      amount: ingredient.amount,
+      unit: ingredient.unit.trim()
+    })
+  }
+
+  if (
+    !Array.isArray(recipe.instructions) ||
+    recipe.instructions.length === 0
+  ) {
+    return res.status(400).json({
+      message: 'Add at least one instruction'
+    })
+  }
+
+  const cleanedInstructions = []
+
+  for (let i = 0; i < recipe.instructions.length; i++) {
+    const instruction = recipe.instructions[i]
+
+    if (
+      !instruction ||
+      typeof instruction.description !== 'string' ||
+      instruction.description.trim() === ''
+    ) {
+      return res.status(400).json({
+        message: 'Each instruction needs a description'
+      })
+    }
+
+    cleanedInstructions.push({
+      step: i + 1,
+      description: instruction.description.trim()
+    })
+  }
+
+  try {
+    let createdPost
+
+    // Both documents save together, or neither saves
+    await mongoose.connection.transaction(async (session) => {
+      const newRecipe = new Recipe({
+        origin: 'community',
+        createdBy: req.user._id,
+        title: recipe.title.trim(),
+        summary: recipe.summary.trim(),
+        image: recipe.image.trim(),
+        servings: recipe.servings,
+        prepTime: recipe.prepTime,
+        cookingTime: recipe.cookingTime,
+        totalTime: recipe.prepTime + recipe.cookingTime,
+        cuisine: [],
+        dietaryCategories: [],
+        allergens: [],
+        nutrition: [],
+        ingredients: cleanedIngredients,
+        instructions: cleanedInstructions
+      })
+
+      await newRecipe.save({ session })
+
+      createdPost = new Post({
+        userId: req.user._id,
+        content: content.trim(),
+        tags: cleanedTags,
+        recipeId: newRecipe._id
+      })
+
+      await createdPost.save({ session })
     })
 
-    // 7. Include the author's name in the response
-    await post.populate('userId', 'name')
+    await createdPost.populate([
+      { path: 'userId', select: 'name' },
+      { path: 'recipeId' }
+    ])
 
-    return res.status(201).json(post)
+    return res.status(201).json(createdPost)
   } catch (err) {
     console.error(err)
 
     if (err.name === 'ValidationError') {
       return res.status(400).json({
-        message: 'Invalid post data'
+        message: 'Invalid post or recipe data'
       })
     }
 
     return res.status(500).json({
-      message: 'Failed to create post'
+      message: 'Failed to create the recipe post'
     })
   }
 })
