@@ -90,18 +90,6 @@ const menuOpen = ref(false)
   </footer>
 </template>
 
-<!--
-  In your existing <script>, add ONE ref next to showMainNav:
-
-  <script setup>
-  import { ref } from 'vue'
-  const menuOpen = ref(false)
-  ...your existing code (showMainNav etc.)
-  </script>
-
-  (Options API: add  data() { return { menuOpen: false } }  instead.)
--->
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');

@@ -13,10 +13,31 @@ const images = {
 }
 
 const url = "http://localhost:8000"
-
+const weekPlan = ref([])
 async function getWeeklyPlan() {
   try {
-    const res = await axios.get(`${url}/`)
+    const res = await axios.get(`${url}/`, { params: { start } })
+    weekPlan.value = res.data
+    /*
+    {
+        "_id": "66f200000000000000000001",
+        "userId": "66f000000000000000000002",
+        "weekStart": "2026-09-27T16:00:00.000Z",
+        "entries": [
+            {
+                "recipeId": "66f100000000000000000001",
+                "dayOfWeek": 0,
+                "mealSlot": "dinner",
+                "servings": 2,
+                "status": "Cooked",
+                "cookedAt": "2026-09-28T11:00:00.000Z",
+                "_id": "66f400000000000000000001"
+            },
+        ],
+        "createdAt": "2026-09-25T16:00:00.000Z",
+        "updatedAt": "2026-10-04T08:00:00.000Z"
+    },
+    */
   } catch (error) {
     console.log(error)
   }
@@ -66,6 +87,7 @@ const weekLabel = computed(() => {
 const hasPlan = computed(() => weekOffset.value === 0)
 
 /* ---------- Days ---------- */
+// sum daily recpies calories (from recipe collection)
 const sampleKcal = ['2,080', '1,970', '2,110', '2,040', '2,190', '2,140', '1,820']
 
 const days = computed(() =>
@@ -105,6 +127,9 @@ const ctaText = computed(() =>
 )
 
 /* ---------- Meals ---------- */
+/* mealplan database --> recipeID (from recipe collection), get recipe info ()
+*/
+
 const meals = [
   {
     slot: 'Breakfast • 08:00 AM',
@@ -172,6 +197,7 @@ const pantryRecipes = [
 /* ---------- Grocery sync button ---------- */
 const syncState = ref('idle') // idle | syncing | done
 
+// TRY auto sync??
 const syncLabel = computed(() => {
   if (syncState.value === 'syncing') return 'Syncing 34 Items...'
   if (syncState.value === 'done') return 'Ingredients Synced!'
@@ -271,43 +297,58 @@ function sendToGrocery() {
                 </div>
 
                 <!-- Day summary -->
-                <div
-                  class="fft-card fft-card-bordered d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
-                  <div class="d-flex flex-column gap-1">
-                    <div class="d-flex align-items-center flex-wrap gap-2">
-                      <h2 class="fft-headline-md m-0">{{ activeDayLong }}</h2>
-                      <span class="fft-pill" :class="dayStatus.class">{{ dayStatus.text }}</span>
-                    </div>
-                    <div v-if="!hasPlan" class="fft-label-sm text-fft-muted">No meals planned yet</div>
-                    <div v-if="hasPlan" class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
-                      <span class="d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined text-fft-secondary"
-                          style="font-size: 16px">local_fire_department</span>
-                        <strong>2,110</strong> kcal target
-                      </span>
-                      <span class="text-fft-outline">•</span>
-                      <span class="d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined text-fft-primary"
-                          style="font-size: 16px">restaurant</span>
-                        3 meals planned
-                      </span>
-                      <span class="text-fft-outline">•</span>
-                      <span class="d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined text-fft-outline" style="font-size: 16px">timer</span>
-                        45m active cook time
-                      </span>
-                      <span class="text-fft-outline">•</span>
-                      <span class="d-flex align-items-center gap-1 text-fft-primary fw-medium">
-                        <span class="material-symbols-outlined" style="font-size: 16px">inventory_2</span>
-                        100% pantry stock ready
-                      </span>
+                <div class="fft-card fft-card-bordered p-0 overflow-hidden">
+                  <div class="p-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                    <div class="d-flex flex-column gap-1">
+                      <div class="d-flex align-items-center flex-wrap gap-2">
+                        <h2 class="fft-headline-md m-0">{{ activeDayLong }}</h2>
+                        <span class="fft-pill" :class="dayStatus.class">{{ dayStatus.text }}</span>
+                      </div>
+                      <div v-if="!hasPlan" class="fft-label-sm text-fft-muted">No meals planned yet</div>
+                      <div v-if="hasPlan" class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
+                        <span class="d-flex align-items-center gap-1">
+                          <span class="material-symbols-outlined text-fft-secondary"
+                            style="font-size: 16px">local_fire_department</span>
+                          <strong>2,110</strong> kcal target
+                        </span>
+                        <span class="text-fft-outline">•</span>
+                        <span class="d-flex align-items-center gap-1">
+                          <span class="material-symbols-outlined text-fft-primary"
+                            style="font-size: 16px">restaurant</span>
+                          3 meals planned
+                        </span>
+                        <span class="text-fft-outline">•</span>
+                        <span class="d-flex align-items-center gap-1">
+                          <span class="material-symbols-outlined text-fft-outline" style="font-size: 16px">timer</span>
+                          45m active cook time
+                        </span>
+                        <span class="text-fft-outline">•</span>
+                        <span class="d-flex align-items-center gap-1 text-fft-primary fw-medium">
+                          <span class="material-symbols-outlined" style="font-size: 16px">inventory_2</span>
+                          100% pantry stock ready
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="d-flex align-items-center gap-2">
-                    <button class="btn fft-btn-primary d-flex align-items-center gap-1" type="button">
-                      <span class="material-symbols-outlined" style="font-size: 18px">add</span>
-                      <span>Add Meal / Snack</span>
+                  <!-- Shopping sync -->
+                  <div
+                    class="fft-sync-bar d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-2 px-3 py-1">
+                      <div class="fft-round-icon fft-bg-green-light text-fft-primary">
+                        <span class="material-symbols-outlined" style="font-size: 20px">shopping_cart_checkout</span>
+                      </div>
+                      <div class="d-flex flex-column">
+                        <span class="fft-label-md">Ready to shop?</span>
+                        <span class="fft-body-sm text-fft-muted">{{ ctaText }}</span>
+                      </div>
+                    </div>
+                    <button type="button"
+                      class="btn fft-btn-primary d-flex align-items-center justify-content-center gap-2 flex-shrink-0"
+                      :disabled="syncState !== 'idle' || !hasPlan" @click="sendToGrocery">
+                      <span class="material-symbols-outlined" :class="{ 'fft-spin': syncState === 'syncing' }"
+                        style="font-size: 18px">{{ syncIcon }}</span>
+                      <span>{{ syncLabel }}</span>
                     </button>
                   </div>
                 </div>
@@ -375,7 +416,7 @@ function sendToGrocery() {
                         <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
                           <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>{{
                             meal.canPrep ? 'Swap' :
-                          'Swap Meal' }}
+                              'Swap Meal' }}
                         </button>
                       </div>
                     </div>
@@ -516,28 +557,6 @@ function sendToGrocery() {
                         style="font-size: 18px">drag_indicator</span>
                     </div>
                   </div>
-                </div>
-
-                <!-- Grocery CTA -->
-                <div class="fft-cta d-flex flex-column gap-2">
-                  <div class="d-flex align-items-center justify-content-between">
-                    <span class="fft-label-sm fft-upper fw-semibold fft-fixed-light">Shopping Sync</span>
-                    <span class="material-symbols-outlined fft-fixed-light"
-                      style="font-size: 20px">shopping_cart_checkout</span>
-                  </div>
-                  <div>
-                    <p class="fft-headline-sm m-0">Ready to Shop?</p>
-                    <p class="fft-body-sm fft-cta-sub mt-1 mb-0">
-                      {{ ctaText }}
-                    </p>
-                  </div>
-                  <button type="button"
-                    class="btn fft-cta-btn w-100 d-flex align-items-center justify-content-center gap-2 mt-1"
-                    :disabled="syncState !== 'idle' || !hasPlan" @click="sendToGrocery">
-                    <span class="material-symbols-outlined" :class="{ 'fft-spin': syncState === 'syncing' }"
-                      style="font-size: 18px">{{ syncIcon }}</span>
-                    <span>{{ syncLabel }}</span>
-                  </button>
                 </div>
               </div>
             </aside>

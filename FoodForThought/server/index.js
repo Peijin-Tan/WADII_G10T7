@@ -9,6 +9,7 @@ const cookieParser = require('cookie-parser')
 const authRouter = require('./src/router/auth')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
+const plannerRouter = require('./src/router/Planner')
 
 
 const app = express()
@@ -34,6 +35,7 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
+app.use('/planner', plannerRouter)
 
 // Mount admin
 //app.use('/admin', adminRouter)
