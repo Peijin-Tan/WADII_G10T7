@@ -244,7 +244,7 @@ async function createPost() {
       }
     })
 
-    resetForm()
+    resetForm() 
     success.value = 'Your recipe post was created!'
     await loadPosts()
     activeTab.value = 'mine'
