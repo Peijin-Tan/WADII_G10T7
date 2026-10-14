@@ -6,7 +6,7 @@ const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
 
-//const authRouter = require('./src/router/auth')
+const authRouter = require('./src/router/auth')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 
@@ -30,8 +30,10 @@ const limiter = rateLimit({
 })
 app.use(limiter)
 
-// Mount auth routes
-//app.use('/auth', authRouter)
+
+// Mount routes
+app.use('/auth', authRouter)
+app.use('/posts', postsRouter)
 
 // Mount admin
 //app.use('/admin', adminRouter)
@@ -74,6 +76,3 @@ async function connectDb() {
     console.log(`Server running at http://${hostname}:${port}/`);
   });
 })();
-
-//Mount Posts
-app.use('/posts', postsRouter)
