@@ -3,33 +3,48 @@ import { ref, computed } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 
 const route = useRoute()
+const isAdminDashboard = computed(() => route.path === '/admindashboard')
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
 const menuOpen = ref(false)
 </script>
 
 <template>
   <header v-if="showMainNav" class="app-navbar sticky-top">
-    <!-- container-fluid = spans all 12 columns edge to edge -->
     <nav class="navbar navbar-expand-md app-navbar-bar">
       <div class="container-fluid px-3 px-md-4">
-        <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
+        <RouterLink
+          v-if="!isAdminDashboard"
+          to="/home"
+          class="navbar-brand app-brand"
+          @click="menuOpen = false"
+        >
           🌱 FoodForThought
         </RouterLink>
 
-        <!-- Hamburger: visible below md (xs + sm) -->
+        <RouterLink
+          v-else
+          to="/admindashboard"
+          class="navbar-brand app-brand"
+          @click="menuOpen = false"
+        >
+          🛡️ Admin Dashboard
+        </RouterLink>
+
         <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
           aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
           <span class="navbar-toggler-icon"></span>
         </button>
 
-        <!-- Collapsible area -->
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <ul class="navbar-nav app-nav me-md-auto ms-md-4 my-3 my-md-0">
+          <ul v-if="!isAdminDashboard" class="navbar-nav app-nav me-md-auto ms-md-4 my-3 my-md-0">
             <li class="nav-item">
               <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
             </li>
             <li class="nav-item">
               <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
+            </li>
+            <li class="nav-item">
+              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
             </li>
             <li class="nav-item">
               <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
@@ -39,19 +54,18 @@ const menuOpen = ref(false)
             </li>
           </ul>
 
-          <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
+          <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0 ms-auto">
             <div class="d-flex align-items-center gap-3">
               <img class="app-avatar" alt="Profile"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              <span class="d-none d-md-inline text-success">John Doe</span>
+              <span class="d-none d-md-inline text-success">{{ isAdminDashboard ? 'Admin User' : 'John Doe' }}</span>
             </div>
             <div class="d-flex align-items-center gap-3">
-                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
-                </div>
+              <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink>
             </div>
           </div>
         </div>
-     
+      </div>
     </nav>
   </header>
 
