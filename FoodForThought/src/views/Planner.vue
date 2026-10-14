@@ -15,17 +15,17 @@ const images = {
 const url = "http://localhost:8000"
 
 async function getWeeklyPlan() {
-    try {
-        const res = await axios.get(`${url}/`)
-    } catch (error) {
-        console.log(error)
-    }
+  try {
+    const res = await axios.get(`${url}/`)
+  } catch (error) {
+    console.log(error)
+  }
 }
 
 /* ---------- Control bar ---------- */
 const metrics = computed(() => [
-  { label: 'Planned Meals', value: hasPlan.value ? '21' : '0', unit: '/ 21', icon: 'restaurant_menu', bg: 'sw-bg-green-light text-sw-primary' },
-  { label: 'Daily Calorie Avg', value: hasPlan.value ? '2,050' : '—', unit: hasPlan.value ? 'kcal' : '', icon: 'local_fire_department', bg: 'sw-bg-peach text-sw-secondary' },
+  { label: 'Planned Meals', value: hasPlan.value ? '21' : '0', unit: '/ 21', icon: 'restaurant_menu', bg: 'fft-bg-green-light text-fft-primary' },
+  { label: 'Daily Calorie Avg', value: hasPlan.value ? '2,050' : '—', unit: hasPlan.value ? 'kcal' : '', icon: 'local_fire_department', bg: 'fft-bg-peach text-fft-secondary' },
 ])
 
 /* ---------- Week navigation ---------- */
@@ -92,10 +92,10 @@ const activeDayLong = computed(() =>
 
 const dayStatus = computed(() => {
   const d = days.value[activeIndex.value].date
-  if (sameDay(d, today)) return { text: 'In Progress', class: 'sw-pill-green' }
+  if (sameDay(d, today)) return { text: 'In Progress', class: 'fft-pill-green' }
   return d < today
-    ? { text: 'Completed', class: 'sw-pill-gray' }
-    : { text: 'Upcoming', class: 'sw-pill-amber' }
+    ? { text: 'Completed', class: 'fft-pill-gray' }
+    : { text: 'Upcoming', class: 'fft-pill-amber' }
 })
 
 const ctaText = computed(() =>
@@ -108,9 +108,9 @@ const ctaText = computed(() =>
 const meals = [
   {
     slot: 'Breakfast • 08:00 AM',
-    slotClass: 'sw-pill-gray',
+    slotClass: 'fft-pill-gray',
     logged: true,
-    tags: [{ text: 'Fiber-Rich', class: 'sw-pill-gray' }],
+    tags: [{ text: 'Fiber-Rich', class: 'fft-pill-gray' }],
     title: 'Cinnamon Apple Steel-Cut Oatmeal',
     desc: 'Topped with warm caramelized gala apples, toasted pecans, and a delicate maple drizzle.',
     kcal: 360,
@@ -122,10 +122,10 @@ const meals = [
   },
   {
     slot: 'Lunch • 12:30 PM',
-    slotClass: 'sw-pill-green',
+    slotClass: 'fft-pill-green',
     tags: [
-      { text: 'Vegan', class: 'sw-pill-gray' },
-      { text: '10m Fast Prep', class: 'sw-pill-peach' },
+      { text: 'Vegan', class: 'fft-pill-gray' },
+      { text: '10m Fast Prep', class: 'fft-pill-peach' },
     ],
     title: 'Green Goddess Chickpea & Avocado Salad Bowl',
     desc: 'Tossed baby kale, diced ripe avocado, roasted spiced chickpeas, and creamy green goddess dressing.',
@@ -146,9 +146,9 @@ const cookingSteps = [
 
 /* ---------- Sidebar ---------- */
 const macros = [
-  { name: 'Protein', grams: '130g', percent: 88, colorClass: 'sw-ring-primary' },
-  { name: 'Carbs', grams: '210g', percent: 96, colorClass: 'sw-ring-secondary' },
-  { name: 'Fats', grams: '65g', percent: 82, colorClass: 'sw-ring-tertiary' },
+  { name: 'Protein', grams: '130g', percent: 88, colorClass: 'fft-ring-primary' },
+  { name: 'Carbs', grams: '210g', percent: 96, colorClass: 'fft-ring-secondary' },
+  { name: 'Fats', grams: '65g', percent: 82, colorClass: 'fft-ring-tertiary' },
 ]
 
 const pantryRecipes = [
@@ -195,33 +195,30 @@ function sendToGrocery() {
 </script>
 
 <template>
-  <div class="savorweek">
-    <main class="sw-main">
+  <div class="foodforthought">
+    <main class="fft-main">
       <!-- ============ CONTROL BAR + STATS ============ -->
-      <section class="sw-controls px-4 py-3">
-        <div class="container-fluid sw-container d-flex flex-column gap-3">
+      <section class="fft-controls px-4 py-3">
+        <div class="container-fluid fft-container d-flex flex-column gap-3">
           <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
             <div class="d-flex align-items-center flex-wrap gap-3">
               <div class="d-flex align-items-baseline gap-2">
-                <span class="sw-headline-lg">Week of {{ weekRange }}</span>
-                <span class="sw-tag">{{ weekLabel }}</span>
+                <span class="fft-headline-lg">Week of {{ weekRange }}</span>
+                <span class="fft-tag">{{ weekLabel }}</span>
               </div>
 
               <!-- Week navigator -->
-              <div class="sw-week-switcher d-flex align-items-center gap-1">
-                <button class="sw-icon-btn sw-icon-btn-sm" title="Previous week" aria-label="Previous week" type="button" @click="weekOffset--">
+              <div class="fft-week-switcher d-flex align-items-center gap-1">
+                <button class="fft-icon-btn fft-icon-btn-sm" title="Previous week" aria-label="Previous week"
+                  type="button" @click="weekOffset--">
                   <span class="material-symbols-outlined">chevron_left</span>
                 </button>
-                <button
-                  type="button"
-                  class="sw-chip"
-                  :disabled="weekOffset === 0"
-                  title="Jump to the current week"
-                  @click="weekOffset = 0"
-                >
+                <button type="button" class="fft-chip" :disabled="weekOffset === 0" title="Jump to the current week"
+                  @click="weekOffset = 0">
                   This week
                 </button>
-                <button class="sw-icon-btn sw-icon-btn-sm" title="Next week" aria-label="Next week" type="button" @click="weekOffset++">
+                <button class="fft-icon-btn fft-icon-btn-sm" title="Next week" aria-label="Next week" type="button"
+                  @click="weekOffset++">
                   <span class="material-symbols-outlined">chevron_right</span>
                 </button>
               </div>
@@ -231,16 +228,16 @@ function sendToGrocery() {
           <!-- Metric tiles -->
           <div class="row g-3 pt-1">
             <div v-for="m in metrics" :key="m.label" class="col-6 col-md-3">
-              <div class="sw-tile d-flex align-items-center justify-content-between h-100">
+              <div class="fft-tile d-flex align-items-center justify-content-between h-100">
                 <div class="d-flex flex-column">
-                  <span class="sw-label-sm sw-upper text-sw-muted">{{ m.label }}</span>
-                  <span class="sw-headline-md" :class="{ 'text-sw-primary': m.accent }">
+                  <span class="fft-label-sm fft-upper text-fft-muted">{{ m.label }}</span>
+                  <span class="fft-headline-md" :class="{ 'text-fft-primary': m.accent }">
                     {{ m.value }}
-                    <span v-if="m.unit" class="sw-body-sm text-sw-outline">{{ m.unit }}</span>
-                    <span v-if="m.note" class="sw-label-sm text-sw-primary ms-1">{{ m.note }}</span>
+                    <span v-if="m.unit" class="fft-body-sm text-fft-outline">{{ m.unit }}</span>
+                    <span v-if="m.note" class="fft-label-sm text-fft-primary ms-1">{{ m.note }}</span>
                   </span>
                 </div>
-                <div class="sw-round-icon" :class="m.bg">
+                <div class="fft-round-icon" :class="m.bg">
                   <span class="material-symbols-outlined" style="font-size: 20px">{{ m.icon }}</span>
                 </div>
               </div>
@@ -251,28 +248,22 @@ function sendToGrocery() {
 
       <!-- ============ PLANNER ============ -->
       <section class="px-4 py-4">
-        <div class="container-fluid sw-container-wide">
+        <div class="container-fluid fft-container-wide">
           <div class="row g-4 align-items-start">
             <!-- Left: day picker + meals -->
             <div class="col-12 col-xl">
               <div class="d-flex flex-column gap-4">
                 <!-- Day tabs -->
-                <div class="sw-day-strip">
-                  <div class="d-flex align-items-center gap-1 p-1 sw-day-strip-inner">
-                    <button
-                      v-for="(d, i) in days"
-                      :key="d.name"
-                      type="button"
-                      class="sw-day"
-                      :class="{ active: activeIndex === i }"
-                      @click="activeIndex = i"
-                    >
+                <div class="fft-day-strip">
+                  <div class="d-flex align-items-center gap-1 p-1 fft-day-strip-inner">
+                    <button v-for="(d, i) in days" :key="d.name" type="button" class="fft-day"
+                      :class="{ active: activeIndex === i }" @click="activeIndex = i">
                       <div class="d-flex align-items-center gap-2">
-                        <span class="sw-label-md fw-semibold">{{ d.name }}</span>
-                        <span v-if="d.today" class="sw-today-pill">Today</span>
-                        <span v-else class="sw-day-count">{{ d.meals }}</span>
+                        <span class="fft-label-md fw-semibold">{{ d.name }}</span>
+                        <span v-if="d.today" class="fft-today-pill">Today</span>
+                        <span v-else class="fft-day-count">{{ d.meals }}</span>
                       </div>
-                      <span class="sw-day-kcal">
+                      <span class="fft-day-kcal">
                         {{ d.kcal }} kcal<template v-if="d.today"> · {{ d.meals }}</template>
                       </span>
                     </button>
@@ -280,30 +271,33 @@ function sendToGrocery() {
                 </div>
 
                 <!-- Day summary -->
-                <div class="sw-card sw-card-bordered d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                <div
+                  class="fft-card fft-card-bordered d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
                   <div class="d-flex flex-column gap-1">
                     <div class="d-flex align-items-center flex-wrap gap-2">
-                      <h2 class="sw-headline-md m-0">{{ activeDayLong }}</h2>
-                      <span class="sw-pill" :class="dayStatus.class">{{ dayStatus.text }}</span>
+                      <h2 class="fft-headline-md m-0">{{ activeDayLong }}</h2>
+                      <span class="fft-pill" :class="dayStatus.class">{{ dayStatus.text }}</span>
                     </div>
-                    <div v-if="!hasPlan" class="sw-label-sm text-sw-muted">No meals planned yet</div>
-                    <div v-if="hasPlan" class="d-flex align-items-center flex-wrap gap-3 sw-label-sm text-sw-muted">
+                    <div v-if="!hasPlan" class="fft-label-sm text-fft-muted">No meals planned yet</div>
+                    <div v-if="hasPlan" class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
                       <span class="d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined text-sw-secondary" style="font-size: 16px">local_fire_department</span>
+                        <span class="material-symbols-outlined text-fft-secondary"
+                          style="font-size: 16px">local_fire_department</span>
                         <strong>2,110</strong> kcal target
                       </span>
-                      <span class="text-sw-outline">•</span>
+                      <span class="text-fft-outline">•</span>
                       <span class="d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined text-sw-primary" style="font-size: 16px">restaurant</span>
+                        <span class="material-symbols-outlined text-fft-primary"
+                          style="font-size: 16px">restaurant</span>
                         3 meals planned
                       </span>
-                      <span class="text-sw-outline">•</span>
+                      <span class="text-fft-outline">•</span>
                       <span class="d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined text-sw-outline" style="font-size: 16px">timer</span>
+                        <span class="material-symbols-outlined text-fft-outline" style="font-size: 16px">timer</span>
                         45m active cook time
                       </span>
-                      <span class="text-sw-outline">•</span>
-                      <span class="d-flex align-items-center gap-1 text-sw-primary fw-medium">
+                      <span class="text-fft-outline">•</span>
+                      <span class="d-flex align-items-center gap-1 text-fft-primary fw-medium">
                         <span class="material-symbols-outlined" style="font-size: 16px">inventory_2</span>
                         100% pantry stock ready
                       </span>
@@ -311,11 +305,7 @@ function sendToGrocery() {
                   </div>
 
                   <div class="d-flex align-items-center gap-2">
-                    <button class="btn sw-btn-soft d-flex align-items-center gap-1" type="button">
-                      <span class="material-symbols-outlined" style="font-size: 18px">print</span>
-                      <span>Print Day Card</span>
-                    </button>
-                    <button class="btn sw-btn-primary d-flex align-items-center gap-1" type="button">
+                    <button class="btn fft-btn-primary d-flex align-items-center gap-1" type="button">
                       <span class="material-symbols-outlined" style="font-size: 18px">add</span>
                       <span>Add Meal / Snack</span>
                     </button>
@@ -323,11 +313,13 @@ function sendToGrocery() {
                 </div>
 
                 <!-- Meal cards -->
-                <div v-if="!hasPlan" class="sw-card sw-card-bordered text-center py-5 d-flex flex-column align-items-center gap-2">
-                  <span class="material-symbols-outlined text-sw-outline" style="font-size: 40px">edit_calendar</span>
-                  <h3 class="sw-headline-sm m-0">Nothing planned for {{ activeDayLong }} yet</h3>
-                  <p class="sw-body-sm text-sw-muted m-0">Drag a recipe from the Pantry Drawer or add a meal to get started.</p>
-                  <button class="btn sw-btn-primary d-flex align-items-center gap-1 mt-2" type="button">
+                <div v-if="!hasPlan"
+                  class="fft-card fft-card-bordered text-center py-5 d-flex flex-column align-items-center gap-2">
+                  <span class="material-symbols-outlined text-fft-outline" style="font-size: 40px">edit_calendar</span>
+                  <h3 class="fft-headline-sm m-0">Nothing planned for {{ activeDayLong }} yet</h3>
+                  <p class="fft-body-sm text-fft-muted m-0">Drag a recipe from the Pantry Drawer or add a meal to get
+                    started.</p>
+                  <button class="btn fft-btn-primary d-flex align-items-center gap-1 mt-2" type="button">
                     <span class="material-symbols-outlined" style="font-size: 18px">add</span>
                     <span>Add Meal</span>
                   </button>
@@ -335,27 +327,26 @@ function sendToGrocery() {
 
                 <div v-if="hasPlan" class="d-flex flex-column gap-3">
                   <!-- Breakfast / Lunch -->
-                  <div v-for="meal in meals" :key="meal.title" class="sw-card sw-card-bordered sw-hover-lift">
+                  <div v-for="meal in meals" :key="meal.title" class="fft-card fft-card-bordered fft-hover-lift">
                     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                      <div class="d-flex flex-column gap-2 flex-grow-1 sw-min-0">
+                      <div class="d-flex flex-column gap-2 flex-grow-1 fft-min-0">
                         <div class="d-flex align-items-center flex-wrap gap-2">
-                          <span class="sw-pill sw-upper fw-semibold" :class="meal.slotClass">{{ meal.slot }}</span>
-                          <span v-if="meal.logged" class="d-flex align-items-center gap-1 sw-label-sm text-sw-primary fw-semibold">
-                            <span class="material-symbols-outlined" style="font-size: 16px">check_circle</span>Logged Cooked
+                          <span class="fft-pill fft-upper fw-semibold" :class="meal.slotClass">{{ meal.slot }}</span>
+                          <span v-if="meal.logged"
+                            class="d-flex align-items-center gap-1 fft-label-sm text-fft-primary fw-semibold">
+                            <span class="material-symbols-outlined" style="font-size: 16px">check_circle</span>Logged
+                            Cooked
                           </span>
-                          <span
-                            v-for="tag in meal.tags"
-                            :key="tag.text"
-                            class="sw-pill fw-semibold"
-                            :class="tag.class"
-                          >{{ tag.text }}</span>
+                          <span v-for="tag in meal.tags" :key="tag.text" class="fft-pill fw-semibold"
+                            :class="tag.class">{{ tag.text
+                            }}</span>
                         </div>
 
-                        <h3 class="sw-headline-sm m-0">{{ meal.title }}</h3>
-                        <p class="sw-body-sm text-sw-muted m-0">{{ meal.desc }}</p>
+                        <h3 class="fft-headline-sm m-0">{{ meal.title }}</h3>
+                        <p class="fft-body-sm text-fft-muted m-0">{{ meal.desc }}</p>
 
-                        <div class="d-flex align-items-center flex-wrap gap-3 sw-label-sm text-sw-muted pt-1">
-                          <span class="fw-semibold text-sw-dark">{{ meal.kcal }} kcal</span>
+                        <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted pt-1">
+                          <span class="fw-semibold text-fft-dark">{{ meal.kcal }} kcal</span>
                           <span>•</span>
                           <span>{{ meal.protein }}g Protein</span>
                           <span>•</span>
@@ -365,98 +356,91 @@ function sendToGrocery() {
                         </div>
 
                         <div class="d-flex align-items-center flex-wrap gap-2 pt-1">
-                          <span class="sw-label-sm text-sw-outline">Pantry Check:</span>
-                          <span
-                            v-for="item in meal.pantry"
-                            :key="item"
-                            class="sw-label-sm text-sw-primary d-flex align-items-center"
-                          >
+                          <span class="fft-label-sm text-fft-outline">Pantry Check:</span>
+                          <span v-for="item in meal.pantry" :key="item"
+                            class="fft-label-sm text-fft-primary d-flex align-items-center">
                             <span class="material-symbols-outlined" style="font-size: 14px">check</span> {{ item }}
                           </span>
                         </div>
                       </div>
 
                       <div class="d-flex flex-md-column align-items-stretch justify-content-end gap-2 flex-shrink-0">
-                        <button v-if="meal.canPrep" class="btn sw-btn-primary d-flex align-items-center gap-1" type="button">
+                        <button v-if="meal.canPrep" class="btn fft-btn-primary d-flex align-items-center gap-1"
+                          type="button">
                           <span class="material-symbols-outlined" style="font-size: 16px">done</span>Mark Prepped
                         </button>
-                        <button class="btn sw-btn-soft d-flex align-items-center gap-1" type="button">
+                        <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button">
                           <span class="material-symbols-outlined" style="font-size: 16px">menu_book</span>Recipe Steps
                         </button>
-                        <button class="btn sw-btn-ghost d-flex align-items-center gap-1" type="button">
-                          <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>{{ meal.canPrep ? 'Swap' : 'Swap Meal' }}
+                        <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
+                          <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>{{
+                            meal.canPrep ? 'Swap' :
+                          'Swap Meal' }}
                         </button>
                       </div>
                     </div>
                   </div>
 
                   <!-- Dinner highlight -->
-                  <div class="sw-card sw-card-bordered p-0 overflow-hidden sw-hover-lift">
+                  <div class="fft-card fft-card-bordered p-0 overflow-hidden fft-hover-lift">
                     <div class="d-flex flex-column flex-lg-row">
-                      <div class="sw-dinner-img position-relative flex-shrink-0">
-                        <img :src="images.dinner" alt="Moroccan Chickpea Stew" class="w-100 h-100 sw-cover" />
-                        <div class="sw-overlay-badge d-flex align-items-center gap-1">
+                      <div class="fft-dinner-img position-relative flex-shrink-0">
+                        <img :src="images.dinner" alt="Moroccan Chickpea Stew" class="w-100 h-100 fft-cover" />
+                        <div class="fft-overlay-badge d-flex align-items-center gap-1">
                           <span class="material-symbols-outlined" style="font-size: 14px">star</span>Dinner Highlight
                         </div>
-                        <div class="sw-overlay-time">07:00 PM Planned</div>
+                        <div class="fft-overlay-time">07:00 PM Planned</div>
                       </div>
 
-                      <div class="p-3 d-flex flex-column justify-content-between gap-3 flex-grow-1 sw-min-0">
+                      <div class="p-3 d-flex flex-column justify-content-between gap-3 flex-grow-1 fft-min-0">
                         <div class="d-flex flex-column gap-2">
                           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                             <div class="d-flex align-items-center flex-wrap gap-2">
-                              <span class="sw-pill sw-pill-green fw-semibold">Plant-Based / Comfort</span>
-                              <span class="sw-pill sw-pill-amber fw-semibold">High-Fiber</span>
-                              <span class="sw-pill sw-pill-gray fw-semibold">Pantry Ready (100%)</span>
+                              <span class="fft-pill fft-pill-green fw-semibold">Plant-Based / Comfort</span>
+                              <span class="fft-pill fft-pill-amber fw-semibold">High-Fiber</span>
+                              <span class="fft-pill fft-pill-gray fw-semibold">Pantry Ready (100%)</span>
                             </div>
-                            <span class="sw-label-sm text-sw-primary fw-semibold d-flex align-items-center gap-1">
-                              <span class="material-symbols-outlined" style="font-size: 16px">schedule</span>30m · 4 Servings
+                            <span class="fft-label-sm text-fft-primary fw-semibold d-flex align-items-center gap-1">
+                              <span class="material-symbols-outlined" style="font-size: 16px">schedule</span>30m · 4
+                              Servings
                             </span>
                           </div>
 
-                          <h3 class="sw-headline-md m-0">Moroccan Spiced Lentil &amp; Sweet Potato Stew</h3>
-                          <p class="sw-body-sm text-sw-muted m-0">
-                            Simmered with warming cinnamon, ground cumin, tender sweet potatoes, chickpeas, and fresh cilantro leaves.
+                          <h3 class="fft-headline-md m-0">Moroccan Spiced Lentil &amp; Sweet Potato Stew</h3>
+                          <p class="fft-body-sm text-fft-muted m-0">
+                            Simmered with warming cinnamon, ground cumin, tender sweet potatoes, chickpeas, and fresh
+                            cilantro leaves.
                           </p>
 
-                          <div class="d-flex align-items-center flex-wrap gap-3 sw-label-sm text-sw-muted">
-                            <span class="fw-semibold text-sw-dark" style="font-size: 15px">620 kcal</span>
+                          <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
+                            <span class="fw-semibold text-fft-dark" style="font-size: 15px">620 kcal</span>
                             <span>•</span>
-                            <span class="fw-medium text-sw-dark">32g Protein</span>
+                            <span class="fw-medium text-fft-dark">32g Protein</span>
                             <span>•</span>
-                            <span class="fw-medium text-sw-dark">68g Carbs</span>
+                            <span class="fw-medium text-fft-dark">68g Carbs</span>
                             <span>•</span>
-                            <span class="fw-medium text-sw-dark">18g Fat</span>
-                          </div>
-
-                          <div class="sw-steps">
-                            <span class="sw-label-sm sw-upper text-sw-outline fw-semibold">3-Step Cooking Flow</span>
-                            <div class="row g-2 sw-step-text text-sw-muted mt-0">
-                              <div v-for="(step, i) in cookingSteps" :key="i" class="col-12 col-sm-4 d-flex align-items-start gap-2">
-                                <span class="sw-step-num">{{ i + 1 }}</span>
-                                <span>{{ step }}</span>
-                              </div>
-                            </div>
+                            <span class="fw-medium text-fft-dark">18g Fat</span>
                           </div>
                         </div>
 
                         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                           <div class="d-flex align-items-center gap-2">
-                            <button class="btn sw-btn-primary sw-btn-lg d-flex align-items-center gap-2" type="button">
+                            <button class="btn fft-btn-primary fft-btn-lg d-flex align-items-center gap-2"
+                              type="button">
                               <span class="material-symbols-outlined" style="font-size: 18px">play_circle</span>
                               <span>Start Cooking Mode</span>
                             </button>
-                            <button class="btn sw-btn-soft sw-btn-lg d-flex align-items-center gap-1" type="button">
+                            <button class="btn fft-btn-soft fft-btn-lg d-flex align-items-center gap-1" type="button">
                               <span class="material-symbols-outlined" style="font-size: 18px">menu_book</span>
                               <span>View Recipe Details</span>
                             </button>
                           </div>
                           <div class="d-flex align-items-center gap-1">
-                            <button class="btn sw-btn-ghost d-flex align-items-center gap-1" type="button">
+                            <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
                               <span class="material-symbols-outlined" style="font-size: 16px">shopping_cart</span>
                               <span>Add Extras to Grocery</span>
                             </button>
-<button class="btn sw-btn-ghost d-flex align-items-center gap-1" type="button">
+                            <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
                               <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>
                               <span>Swap</span>
                             </button>
@@ -470,103 +454,88 @@ function sendToGrocery() {
             </div>
 
             <!-- Right: sidebar -->
-            <aside class="col-12 col-xl-auto sw-sidebar">
+            <aside class="col-12 col-xl-auto fft-sidebar">
               <div class="d-flex flex-column gap-3">
                 <!-- Macro rings -->
-                <div class="sw-card sw-card-lg d-flex flex-column gap-3">
+                <div class="fft-card fft-card-lg d-flex flex-column gap-3">
                   <div class="d-flex align-items-center justify-content-between">
                     <div>
-                      <span class="sw-label-sm sw-upper text-sw-outline fw-semibold">Weekly Balance</span>
-                      <p class="sw-headline-sm m-0">Macro Targets</p>
+                      <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Weekly Balance</span>
+                      <p class="fft-headline-sm m-0">Macro Targets</p>
                     </div>
-                    <span class="sw-pill sw-pill-green fw-medium">94% on track</span>
+                    <span class="fft-pill fft-pill-green fw-medium">94% on track</span>
                   </div>
 
                   <div class="d-flex align-items-center justify-content-between gap-2 py-1">
                     <div v-for="ring in macros" :key="ring.name" class="d-flex flex-column align-items-center gap-1">
-                      <div class="position-relative d-flex align-items-center justify-content-center sw-ring">
-                        <svg class="sw-ring-svg" viewBox="0 0 36 36">
-                          <path
-                            class="sw-ring-track"
+                      <div class="position-relative d-flex align-items-center justify-content-center fft-ring">
+                        <svg class="fft-ring-svg" viewBox="0 0 36 36">
+                          <path class="fft-ring-track"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            fill="none"
-                            stroke-width="3.5"
-                          />
-                          <path
-                            :class="ring.colorClass"
+                            fill="none" stroke-width="3.5" />
+                          <path :class="ring.colorClass"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            fill="none"
-                            :stroke-dasharray="`${ring.percent}, 100`"
-                            stroke-linecap="round"
-                            stroke-width="3.5"
-                          />
+                            fill="none" :stroke-dasharray="`${ring.percent}, 100`" stroke-linecap="round"
+                            stroke-width="3.5" />
                         </svg>
-                        <span class="position-absolute sw-label-md fw-semibold">{{ ring.percent }}%</span>
+                        <span class="position-absolute fft-label-md fw-semibold">{{ ring.percent }}%</span>
                       </div>
-                      <span class="sw-label-sm fw-semibold">{{ ring.grams }}</span>
-                      <span class="sw-label-sm text-sw-outline">{{ ring.name }}</span>
+                      <span class="fft-label-sm fw-semibold">{{ ring.grams }}</span>
+                      <span class="fft-label-sm text-fft-outline">{{ ring.name }}</span>
                     </div>
                   </div>
                 </div>
 
                 <!-- Pantry drawer -->
-                <div class="sw-card sw-card-lg d-flex flex-column gap-3">
+                <div class="fft-card fft-card-lg d-flex flex-column gap-3">
                   <div class="d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-1">
-                      <span class="material-symbols-outlined text-sw-primary" style="font-size: 20px">shelves</span>
-                      <p class="sw-headline-sm m-0">Pantry Drawer</p>
+                      <span class="material-symbols-outlined text-fft-primary" style="font-size: 20px">shelves</span>
+                      <p class="fft-headline-sm m-0">Pantry Drawer</p>
                     </div>
-                    <span class="sw-label-sm text-sw-muted">Drag to day</span>
+                    <span class="fft-label-sm text-fft-muted">Drag to day</span>
                   </div>
 
-                  <p class="sw-body-sm text-sw-muted m-0">
+                  <p class="fft-body-sm text-fft-muted m-0">
                     Recipes matching ingredients currently stored in your kitchen.
                   </p>
 
                   <div class="d-flex flex-column gap-1">
-                    <div
-                      v-for="r in pantryRecipes"
-                      :key="r.title"
-                      class="sw-draggable d-flex align-items-center justify-content-between"
-                      draggable="true"
-                    >
-                      <div class="d-flex align-items-center gap-2 sw-min-0">
-                        <div class="sw-thumb flex-shrink-0">
-                          <img :src="r.img" :alt="r.title" class="w-100 h-100 sw-cover" />
+                    <div v-for="r in pantryRecipes" :key="r.title"
+                      class="fft-draggable d-flex align-items-center justify-content-between" draggable="true">
+                      <div class="d-flex align-items-center gap-2 fft-min-0">
+                        <div class="fft-thumb flex-shrink-0">
+                          <img :src="r.img" :alt="r.title" class="w-100 h-100 fft-cover" />
                         </div>
-                        <div class="d-flex flex-column sw-min-0">
-                          <span class="sw-label-md text-truncate">{{ r.title }}</span>
-                          <span class="sw-label-sm text-sw-outline">{{ r.meta }}</span>
+                        <div class="d-flex flex-column fft-min-0">
+                          <span class="fft-label-md text-truncate">{{ r.title }}</span>
+                          <span class="fft-label-sm text-fft-outline">{{ r.meta }}</span>
                         </div>
                       </div>
-                      <span class="material-symbols-outlined text-sw-outline sw-drag-handle" style="font-size: 18px">drag_indicator</span>
+                      <span class="material-symbols-outlined text-fft-outline fft-drag-handle"
+                        style="font-size: 18px">drag_indicator</span>
                     </div>
                   </div>
                 </div>
 
                 <!-- Grocery CTA -->
-                <div class="sw-cta d-flex flex-column gap-2">
+                <div class="fft-cta d-flex flex-column gap-2">
                   <div class="d-flex align-items-center justify-content-between">
-                    <span class="sw-label-sm sw-upper fw-semibold sw-fixed-light">Shopping Sync</span>
-                    <span class="material-symbols-outlined sw-fixed-light" style="font-size: 20px">shopping_cart_checkout</span>
+                    <span class="fft-label-sm fft-upper fw-semibold fft-fixed-light">Shopping Sync</span>
+                    <span class="material-symbols-outlined fft-fixed-light"
+                      style="font-size: 20px">shopping_cart_checkout</span>
                   </div>
                   <div>
-                    <p class="sw-headline-sm m-0">Ready to Shop?</p>
-                    <p class="sw-body-sm sw-cta-sub mt-1 mb-0">
+                    <p class="fft-headline-sm m-0">Ready to Shop?</p>
+                    <p class="fft-body-sm fft-cta-sub mt-1 mb-0">
                       {{ ctaText }}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    class="btn sw-cta-btn w-100 d-flex align-items-center justify-content-center gap-2 mt-1"
-                    :disabled="syncState !== 'idle' || !hasPlan"
-                    @click="sendToGrocery"
-                  >
-                    <span
-                      class="material-symbols-outlined"
-                      :class="{ 'sw-spin': syncState === 'syncing' }"
-                      style="font-size: 18px"
-                    >{{ syncIcon }}</span>
+                  <button type="button"
+                    class="btn fft-cta-btn w-100 d-flex align-items-center justify-content-center gap-2 mt-1"
+                    :disabled="syncState !== 'idle' || !hasPlan" @click="sendToGrocery">
+                    <span class="material-symbols-outlined" :class="{ 'fft-spin': syncState === 'syncing' }"
+                      style="font-size: 18px">{{ syncIcon }}</span>
                     <span>{{ syncLabel }}</span>
                   </button>
                 </div>
@@ -583,52 +552,54 @@ function sendToGrocery() {
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 /* ===== Design tokens (from the original Tailwind config) ===== */
-.savorweek {
-  --sw-background: #fafaf3;
-  --sw-surface: #fafaf3;
-  --sw-surface-lowest: #ffffff;
-  --sw-surface-low: #f4f4ed;
-  --sw-surface-container: #eeeee8;
-  --sw-surface-high: #e8e9e2;
-  --sw-surface-highest: #e3e3dc;
-  --sw-on-surface: #1a1c18;
-  --sw-on-surface-variant: #424842;
-  --sw-outline: #727972;
-  --sw-outline-variant: #c2c8c0;
+.foodforthought {
+  --fft-background: #fafaf3;
+  --fft-surface: #fafaf3;
+  --fft-surface-lowest: #ffffff;
+  --fft-surface-low: #f4f4ed;
+  --fft-surface-container: #eeeee8;
+  --fft-surface-high: #e8e9e2;
+  --fft-surface-highest: #e3e3dc;
+  --fft-on-surface: #1a1c18;
+  --fft-on-surface-variant: #424842;
+  --fft-outline: #727972;
+  --fft-outline-variant: #c2c8c0;
 
-  --sw-primary: #32533c;
-  --sw-primary-container: #4a6b53;
-  --sw-on-primary: #ffffff;
-  --sw-on-primary-container: #c5eacc;
-  --sw-primary-fixed: #c7ecce;
-  --sw-primary-fixed-dim: #abcfb2;
-  --sw-on-primary-fixed: #01210f;
+  --fft-primary: #32533c;
+  --fft-primary-container: #4a6b53;
+  --fft-on-primary: #ffffff;
+  --fft-on-primary-container: #c5eacc;
+  --fft-primary-fixed: #c7ecce;
+  --fft-primary-fixed-dim: #abcfb2;
+  --fft-on-primary-fixed: #01210f;
 
-  --sw-secondary: #a23e18;
-  --sw-secondary-fixed: #ffdbcf;
-  --sw-on-secondary-fixed: #390c00;
+  --fft-secondary: #a23e18;
+  --fft-secondary-fixed: #ffdbcf;
+  --fft-on-secondary-fixed: #390c00;
 
-  --sw-tertiary: #6b4400;
-  --sw-tertiary-fixed: #ffddb5;
-  --sw-on-tertiary-fixed: #2a1800;
+  --fft-tertiary: #6b4400;
+  --fft-tertiary-fixed: #ffddb5;
+  --fft-on-tertiary-fixed: #2a1800;
 
-  --sw-radius: 0.5rem;
-  --sw-radius-xl: 0.75rem;
-  --sw-radius-2xl: 1rem;
+  --fft-radius: 0.5rem;
+  --fft-radius-xl: 0.75rem;
+  --fft-radius-2xl: 1rem;
 
   font-family: 'Inter', sans-serif;
   font-size: 15px;
   line-height: 24px;
-  color: var(--sw-on-surface);
-  background: var(--sw-background);
+  color: var(--fft-on-surface);
+  background: var(--fft-background);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
 
-.savorweek *::-webkit-scrollbar { display: none; }
+.foodforthought *::-webkit-scrollbar {
+  display: none;
+}
 
-.savorweek .material-symbols-outlined {
+.foodforthought .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
   font-style: normal;
@@ -642,292 +613,661 @@ function sendToGrocery() {
 }
 
 /* ===== Typography helpers ===== */
-.savorweek .sw-headline-lg { font: 600 32px/40px 'Outfit', sans-serif; letter-spacing: -0.01em; }
-.savorweek .sw-headline-md { font: 500 24px/32px 'Outfit', sans-serif; }
-.savorweek .sw-headline-sm { font: 500 20px/28px 'Outfit', sans-serif; }
-.savorweek h2.sw-headline-md,
-.savorweek h3.sw-headline-md,
-.savorweek h3.sw-headline-sm,
-.savorweek .sw-headline-sm.fw-semibold { font-weight: 600; }
-.savorweek .sw-brand { font: 500 24px/32px 'Outfit', sans-serif; color: var(--sw-primary); letter-spacing: -0.01em; }
-.savorweek .sw-label-md { font: 600 12px/16px 'Inter', sans-serif; letter-spacing: 0.02em; }
-.savorweek .sw-label-sm { font: 600 11px/14px 'Inter', sans-serif; letter-spacing: 0.03em; }
-.savorweek .sw-body-sm { font: 400 13px/20px 'Inter', sans-serif; }
-.savorweek .sw-upper { text-transform: uppercase; letter-spacing: 0.06em; }
+.foodforthought .fft-headline-lg {
+  font: 600 32px/40px 'Outfit', sans-serif;
+  letter-spacing: -0.01em;
+}
 
-.savorweek .text-sw-primary { color: var(--sw-primary) !important; }
-.savorweek .text-sw-secondary { color: var(--sw-secondary) !important; }
-.savorweek .text-sw-muted { color: var(--sw-on-surface-variant) !important; }
-.savorweek .text-sw-outline { color: var(--sw-outline) !important; }
-.savorweek .text-sw-dark { color: var(--sw-on-surface) !important; }
-.savorweek .sw-fixed-light { color: var(--sw-primary-fixed); }
-.savorweek .sw-min-0 { min-width: 0; }
-.savorweek .sw-cover { object-fit: cover; }
+.foodforthought .fft-headline-md {
+  font: 500 24px/32px 'Outfit', sans-serif;
+}
+
+.foodforthought .fft-headline-sm {
+  font: 500 20px/28px 'Outfit', sans-serif;
+}
+
+.foodforthought h2.fft-headline-md,
+.foodforthought h3.fft-headline-md,
+.foodforthought h3.fft-headline-sm,
+.foodforthought .fft-headline-sm.fw-semibold {
+  font-weight: 600;
+}
+
+.foodforthought .fft-brand {
+  font: 500 24px/32px 'Outfit', sans-serif;
+  color: var(--fft-primary);
+  letter-spacing: -0.01em;
+}
+
+.foodforthought .fft-label-md {
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.foodforthought .fft-label-sm {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.foodforthought .fft-body-sm {
+  font: 400 13px/20px 'Inter', sans-serif;
+}
+
+.foodforthought .fft-upper {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.foodforthought .text-fft-primary {
+  color: var(--fft-primary) !important;
+}
+
+.foodforthought .text-fft-secondary {
+  color: var(--fft-secondary) !important;
+}
+
+.foodforthought .text-fft-muted {
+  color: var(--fft-on-surface-variant) !important;
+}
+
+.foodforthought .text-fft-outline {
+  color: var(--fft-outline) !important;
+}
+
+.foodforthought .text-fft-dark {
+  color: var(--fft-on-surface) !important;
+}
+
+.foodforthought .fft-fixed-light {
+  color: var(--fft-primary-fixed);
+}
+
+.foodforthought .fft-min-0 {
+  min-width: 0;
+}
+
+.foodforthought .fft-cover {
+  object-fit: cover;
+}
 
 /* ===== Header ===== */
-.savorweek .sw-header {
+.foodforthought .fft-header {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 1030;
   background: rgba(250, 250, 243, 0.9);
   backdrop-filter: blur(20px);
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
 }
-.savorweek .sw-header-inner { height: 80px; }
-.savorweek .sw-logo { height: 32px; width: auto; object-fit: contain; }
 
-.savorweek .sw-nav {
-  padding: 4px;
-  background: var(--sw-surface-low);
-  border-radius: var(--sw-radius);
+.foodforthought .fft-header-inner {
+  height: 80px;
 }
-.savorweek .sw-nav-link {
+
+.foodforthought .fft-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.foodforthought .fft-nav {
+  padding: 4px;
+  background: var(--fft-surface-low);
+  border-radius: var(--fft-radius);
+}
+
+.foodforthought .fft-nav-link {
   padding: 8px 16px;
-  border-radius: var(--sw-radius);
+  border-radius: var(--fft-radius);
   font: 600 14px/20px 'Inter', sans-serif;
   letter-spacing: 0.01em;
-  color: var(--sw-on-surface-variant);
+  color: var(--fft-on-surface-variant);
   text-decoration: none;
   transition: background-color 0.15s, color 0.15s;
 }
-.savorweek .sw-nav-link:hover { background: var(--sw-surface-high); color: var(--sw-on-surface); }
-.savorweek .sw-nav-link.active {
-  background: var(--sw-primary-container);
-  color: var(--sw-on-primary-container);
+
+.foodforthought .fft-nav-link:hover {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-nav-link.active {
+  background: var(--fft-primary-container);
+  color: var(--fft-on-primary-container);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.savorweek .sw-search { width: 100%; max-width: 320px; }
-.savorweek .sw-search-icon {
-  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-  font-size: 20px; color: var(--sw-outline); pointer-events: none;
+.foodforthought .fft-search {
+  width: 100%;
+  max-width: 320px;
 }
-.savorweek .sw-search-input {
+
+.foodforthought .fft-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: var(--fft-outline);
+  pointer-events: none;
+}
+
+.foodforthought .fft-search-input {
   padding: 8px 16px 8px 40px;
-  background: var(--sw-surface-lowest);
+  background: var(--fft-surface-lowest);
   border: 0;
-  border-radius: var(--sw-radius);
+  border-radius: var(--fft-radius);
   font: 400 13px/20px 'Inter', sans-serif;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
-.savorweek .sw-search-input:focus {
-  box-shadow: 0 0 0 2px var(--sw-primary);
-  background: var(--sw-surface-lowest);
+
+.foodforthought .fft-search-input:focus {
+  box-shadow: 0 0 0 2px var(--fft-primary);
+  background: var(--fft-surface-lowest);
 }
 
-.savorweek .sw-week-switcher {
-  background: var(--sw-surface-low);
+.foodforthought .fft-week-switcher {
+  background: var(--fft-surface-low);
   padding: 4px;
-  border-radius: var(--sw-radius);
+  border-radius: var(--fft-radius);
 }
 
-.savorweek .sw-icon-btn {
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center;
+.foodforthought .fft-icon-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  border-radius: var(--sw-radius);
-  background: var(--sw-surface-low);
-  color: var(--sw-on-surface-variant);
+  border-radius: var(--fft-radius);
+  background: var(--fft-surface-low);
+  color: var(--fft-on-surface-variant);
   transition: background-color 0.15s, color 0.15s;
 }
-.savorweek .sw-icon-btn:hover { background: var(--sw-surface-high); color: var(--sw-on-surface); }
-.savorweek .sw-icon-btn .material-symbols-outlined { font-size: 20px; }
-.savorweek .sw-icon-btn-sm { width: 32px; height: 32px; background: transparent; }
-.savorweek .sw-icon-btn-sm .material-symbols-outlined { font-size: 18px; }
-.savorweek .sw-notif-dot {
-  position: absolute; top: 8px; right: 8px;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--sw-secondary);
+
+.foodforthought .fft-icon-btn:hover {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface);
 }
-.savorweek .sw-avatar {
-  width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
-  box-shadow: 0 0 0 2px var(--sw-primary-fixed);
+
+.foodforthought .fft-icon-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.foodforthought .fft-icon-btn-sm {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+}
+
+.foodforthought .fft-icon-btn-sm .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.foodforthought .fft-notif-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fft-secondary);
+}
+
+.foodforthought .fft-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px var(--fft-primary-fixed);
 }
 
 /* ===== Buttons ===== */
-.savorweek .btn { border: 0; border-radius: var(--sw-radius); font: 600 12px/16px 'Inter', sans-serif; letter-spacing: 0.02em; padding: 8px 16px; transition: background-color 0.15s, color 0.15s; }
-.savorweek .sw-btn-primary { background: var(--sw-primary); color: var(--sw-on-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
-.savorweek .sw-btn-primary:hover { background: var(--sw-primary-container); color: var(--sw-on-primary); }
-.savorweek .sw-btn-soft { background: var(--sw-surface-low); color: var(--sw-on-surface); }
-.savorweek .sw-btn-soft:hover { background: var(--sw-surface-high); color: var(--sw-on-surface); }
-.savorweek .sw-btn-ghost { background: transparent; color: var(--sw-outline); padding: 8px 12px; }
-.savorweek .sw-btn-ghost:hover { color: var(--sw-on-surface); background: transparent; }
-.savorweek .sw-btn-lg { border-radius: var(--sw-radius-xl); padding: 10px 20px; }
+.foodforthought .btn {
+  border: 0;
+  border-radius: var(--fft-radius);
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  padding: 8px 16px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.foodforthought .fft-btn-primary {
+  background: var(--fft-primary);
+  color: var(--fft-on-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.foodforthought .fft-btn-primary:hover {
+  background: var(--fft-primary-container);
+  color: var(--fft-on-primary);
+}
+
+.foodforthought .fft-btn-soft {
+  background: var(--fft-surface-low);
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-btn-soft:hover {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-btn-ghost {
+  background: transparent;
+  color: var(--fft-outline);
+  padding: 8px 12px;
+}
+
+.foodforthought .fft-btn-ghost:hover {
+  color: var(--fft-on-surface);
+  background: transparent;
+}
+
+.foodforthought .fft-btn-lg {
+  border-radius: var(--fft-radius-xl);
+  padding: 10px 20px;
+}
 
 /* ===== Main layout ===== */
-.savorweek .sw-main { padding-top: 0; background: var(--sw-background); min-height: 100vh; }
-.savorweek .sw-container { max-width: 1280px; }
-.savorweek .sw-container-wide { max-width: 1720px; }
+.foodforthought .fft-main {
+  padding-top: 0;
+  background: var(--fft-background);
+  min-height: 100vh;
+}
+
+.foodforthought .fft-container {
+  max-width: 1280px;
+}
+
+.foodforthought .fft-container-wide {
+  max-width: 1720px;
+}
 
 /* ===== Control bar ===== */
-.savorweek .sw-controls { background: var(--sw-surface-low); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
-.savorweek .sw-tag {
+.foodforthought .fft-controls {
+  background: var(--fft-surface-low);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.foodforthought .fft-tag {
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--sw-primary);
-  background: var(--sw-primary-fixed);
+  color: var(--fft-primary);
+  background: var(--fft-primary-fixed);
   padding: 2px 8px;
   border-radius: 4px;
 }
-.savorweek .sw-segmented { background: var(--sw-surface-highest); padding: 4px; border-radius: var(--sw-radius); }
-.savorweek .sw-segment {
-  border: 0; background: transparent;
-  padding: 4px 8px; border-radius: 4px;
+
+.foodforthought .fft-segmented {
+  background: var(--fft-surface-highest);
+  padding: 4px;
+  border-radius: var(--fft-radius);
+}
+
+.foodforthought .fft-segment {
+  border: 0;
+  background: transparent;
+  padding: 4px 8px;
+  border-radius: 4px;
   font: 600 11px/14px 'Inter', sans-serif;
-  color: var(--sw-on-surface-variant);
+  color: var(--fft-on-surface-variant);
   transition: color 0.15s;
 }
-.savorweek .sw-segment:hover { color: var(--sw-on-surface); }
-.savorweek .sw-segment.active { background: var(--sw-surface); color: var(--sw-on-surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 
-.savorweek .sw-chip {
-  border: 0; border-radius: 9999px;
+.foodforthought .fft-segment:hover {
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-segment.active {
+  background: var(--fft-surface);
+  color: var(--fft-on-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.foodforthought .fft-chip {
+  border: 0;
+  border-radius: 9999px;
   padding: 4px 12px;
-  background: var(--sw-surface-high);
-  color: var(--sw-on-surface-variant);
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface-variant);
   font: 600 11px/14px 'Inter', sans-serif;
   transition: background-color 0.15s;
 }
-.savorweek .sw-chip:hover { background: var(--sw-surface-highest); }
-.savorweek .sw-chip:disabled { opacity: 0.5; cursor: default; }
-.savorweek .sw-chip.active { background: var(--sw-primary-container); color: var(--sw-on-primary-container); }
+
+.foodforthought .fft-chip:hover {
+  background: var(--fft-surface-highest);
+}
+
+.foodforthought .fft-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.foodforthought .fft-chip.active {
+  background: var(--fft-primary-container);
+  color: var(--fft-on-primary-container);
+}
 
 /* ===== Cards, tiles, pills ===== */
-.savorweek .sw-tile { background: var(--sw-surface-lowest); padding: 16px; border-radius: var(--sw-radius-xl); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-.savorweek .sw-round-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.savorweek .sw-bg-green-light { background: var(--sw-primary-fixed); }
-.savorweek .sw-bg-gray { background: var(--sw-surface-high); }
-.savorweek .sw-bg-peach { background: var(--sw-secondary-fixed); }
-.savorweek .sw-bg-green-mid { background: var(--sw-primary-fixed-dim); color: var(--sw-on-primary-fixed); }
-
-.savorweek .sw-card {
-  background: var(--sw-surface-lowest);
+.foodforthought .fft-tile {
+  background: var(--fft-surface-lowest);
   padding: 16px;
-  border-radius: var(--sw-radius-2xl);
+  border-radius: var(--fft-radius-xl);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-.savorweek .sw-card-lg { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
-.savorweek .sw-card-bordered { border: 1px solid rgba(194, 200, 192, 0.4); }
-.savorweek .sw-hover-lift { transition: box-shadow 0.2s; }
-.savorweek .sw-hover-lift:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
 
-.savorweek .sw-pill {
+.foodforthought .fft-round-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.foodforthought .fft-bg-green-light {
+  background: var(--fft-primary-fixed);
+}
+
+.foodforthought .fft-bg-gray {
+  background: var(--fft-surface-high);
+}
+
+.foodforthought .fft-bg-peach {
+  background: var(--fft-secondary-fixed);
+}
+
+.foodforthought .fft-bg-green-mid {
+  background: var(--fft-primary-fixed-dim);
+  color: var(--fft-on-primary-fixed);
+}
+
+.foodforthought .fft-card {
+  background: var(--fft-surface-lowest);
+  padding: 16px;
+  border-radius: var(--fft-radius-2xl);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.foodforthought .fft-card-lg {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.foodforthought .fft-card-bordered {
+  border: 1px solid rgba(194, 200, 192, 0.4);
+}
+
+.foodforthought .fft-hover-lift {
+  transition: box-shadow 0.2s;
+}
+
+.foodforthought .fft-hover-lift:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.foodforthought .fft-pill {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 9999px;
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.03em;
 }
-.savorweek .sw-pill-gray { background: var(--sw-surface-high); color: var(--sw-on-surface-variant); }
-.savorweek .sw-pill-green { background: var(--sw-primary-fixed); color: var(--sw-on-primary-fixed); }
-.savorweek .sw-pill-peach { background: var(--sw-secondary-fixed); color: var(--sw-on-secondary-fixed); }
-.savorweek .sw-pill-amber { background: var(--sw-tertiary-fixed); color: var(--sw-on-tertiary-fixed); }
+
+.foodforthought .fft-pill-gray {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface-variant);
+}
+
+.foodforthought .fft-pill-green {
+  background: var(--fft-primary-fixed);
+  color: var(--fft-on-primary-fixed);
+}
+
+.foodforthought .fft-pill-peach {
+  background: var(--fft-secondary-fixed);
+  color: var(--fft-on-secondary-fixed);
+}
+
+.foodforthought .fft-pill-amber {
+  background: var(--fft-tertiary-fixed);
+  color: var(--fft-on-tertiary-fixed);
+}
 
 /* ===== Day strip ===== */
-.savorweek .sw-day-strip { background: var(--sw-surface-low); padding: 4px; border-radius: var(--sw-radius-2xl); overflow-x: auto; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-.savorweek .sw-day-strip-inner { min-width: max-content; }
-.savorweek .sw-day {
-  display: flex; flex-direction: column; align-items: center;
+.foodforthought .fft-day-strip {
+  background: var(--fft-surface-low);
+  padding: 4px;
+  border-radius: var(--fft-radius-2xl);
+  overflow-x: auto;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.foodforthought .fft-day-strip-inner {
+  min-width: max-content;
+}
+
+.foodforthought .fft-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   border: 0;
   padding: 8px 16px;
-  border-radius: var(--sw-radius-xl);
+  border-radius: var(--fft-radius-xl);
   background: rgba(255, 255, 255, 0.7);
-  color: var(--sw-on-surface-variant);
+  color: var(--fft-on-surface-variant);
   transition: background-color 0.15s;
 }
-.savorweek .sw-day:hover { background: var(--sw-surface-lowest); }
-.savorweek .sw-day-count { font: 600 11px/14px 'Inter', sans-serif; padding: 1px 6px; border-radius: 4px; background: var(--sw-surface-container); color: var(--sw-outline); }
-.savorweek .sw-day-kcal { font: 400 12px/18px 'Inter', sans-serif; color: var(--sw-outline); margin-top: 2px; }
-.savorweek .sw-today-pill {
-  font: 600 11px/14px 'Inter', sans-serif;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 2px 6px; border-radius: 9999px;
-  background: var(--sw-primary-fixed); color: var(--sw-on-primary-fixed);
+
+.foodforthought .fft-day:hover {
+  background: var(--fft-surface-lowest);
 }
-.savorweek .sw-day.active { background: var(--sw-primary); color: var(--sw-on-primary); padding: 8px 24px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
-.savorweek .sw-day.active .sw-day-kcal { color: var(--sw-primary-fixed); font-weight: 500; }
-.savorweek .sw-day.active .sw-day-count { background: rgba(255, 255, 255, 0.2); color: var(--sw-on-primary); }
+
+.foodforthought .fft-day-count {
+  font: 600 11px/14px 'Inter', sans-serif;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--fft-surface-container);
+  color: var(--fft-outline);
+}
+
+.foodforthought .fft-day-kcal {
+  font: 400 12px/18px 'Inter', sans-serif;
+  color: var(--fft-outline);
+  margin-top: 2px;
+}
+
+.foodforthought .fft-today-pill {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: var(--fft-primary-fixed);
+  color: var(--fft-on-primary-fixed);
+}
+
+.foodforthought .fft-day.active {
+  background: var(--fft-primary);
+  color: var(--fft-on-primary);
+  padding: 8px 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.foodforthought .fft-day.active .fft-day-kcal {
+  color: var(--fft-primary-fixed);
+  font-weight: 500;
+}
+
+.foodforthought .fft-day.active .fft-day-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--fft-on-primary);
+}
 
 /* ===== Dinner highlight ===== */
-.savorweek .sw-dinner-img { width: 100%; height: 224px; overflow: hidden; }
-@media (min-width: 992px) {
-  .savorweek .sw-dinner-img { width: 320px; height: auto; min-height: 100%; }
+.foodforthought .fft-dinner-img {
+  width: 100%;
+  height: 224px;
+  overflow: hidden;
 }
-.savorweek .sw-overlay-badge {
-  position: absolute; top: 12px; left: 12px;
-  padding: 4px 12px; border-radius: 9999px;
-  background: var(--sw-primary); color: var(--sw-on-primary);
+
+@media (min-width: 992px) {
+  .foodforthought .fft-dinner-img {
+    width: 320px;
+    height: auto;
+    min-height: 100%;
+  }
+}
+
+.foodforthought .fft-overlay-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: var(--fft-primary);
+  color: var(--fft-on-primary);
   font: 600 11px/14px 'Inter', sans-serif;
 }
-.savorweek .sw-overlay-time {
-  position: absolute; bottom: 12px; left: 12px;
-  padding: 2px 8px; border-radius: 4px;
+
+.foodforthought .fft-overlay-time {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
   background: rgba(250, 250, 243, 0.9);
   font: 500 11px/14px 'Inter', sans-serif;
-}
-.savorweek .sw-steps { background: rgba(244, 244, 237, 0.7); padding: 8px; border-radius: var(--sw-radius-xl); display: flex; flex-direction: column; gap: 6px; }
-.savorweek .sw-step-text { font-size: 12px; line-height: 18px; }
-.savorweek .sw-step-num {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--sw-primary-fixed); color: var(--sw-on-primary-fixed);
-  display: flex; align-items: center; justify-content: center;
-  font: 700 11px/1 'Inter', sans-serif; flex-shrink: 0;
 }
 
 /* ===== Sidebar ===== */
 @media (min-width: 1200px) {
-  .savorweek .sw-sidebar { width: 320px; flex-shrink: 0; }
+  .foodforthought .fft-sidebar {
+    width: 320px;
+    flex-shrink: 0;
+  }
 }
 
-.savorweek .sw-ring { width: 64px; height: 64px; }
-.savorweek .sw-ring-svg { width: 64px; height: 64px; transform: rotate(-90deg); }
-.savorweek .sw-ring-track { stroke: var(--sw-surface-high); }
-.savorweek .sw-ring-primary { stroke: var(--sw-primary); }
-.savorweek .sw-ring-secondary { stroke: var(--sw-secondary); }
-.savorweek .sw-ring-tertiary { stroke: var(--sw-tertiary); }
+.foodforthought .fft-ring {
+  width: 64px;
+  height: 64px;
+}
 
-.savorweek .sw-draggable {
+.foodforthought .fft-ring-svg {
+  width: 64px;
+  height: 64px;
+  transform: rotate(-90deg);
+}
+
+.foodforthought .fft-ring-track {
+  stroke: var(--fft-surface-high);
+}
+
+.foodforthought .fft-ring-primary {
+  stroke: var(--fft-primary);
+}
+
+.foodforthought .fft-ring-secondary {
+  stroke: var(--fft-secondary);
+}
+
+.foodforthought .fft-ring-tertiary {
+  stroke: var(--fft-tertiary);
+}
+
+.foodforthought .fft-draggable {
   padding: 8px;
-  border-radius: var(--sw-radius-xl);
-  background: var(--sw-surface-low);
+  border-radius: var(--fft-radius-xl);
+  background: var(--fft-surface-low);
   cursor: grab;
   transition: background-color 0.15s;
 }
-.savorweek .sw-draggable:hover { background: var(--sw-surface-high); }
-.savorweek .sw-draggable:active { cursor: grabbing; }
-.savorweek .sw-drag-handle { opacity: 0; transition: opacity 0.15s; }
-.savorweek .sw-draggable:hover .sw-drag-handle { opacity: 1; }
-.savorweek .sw-thumb { width: 40px; height: 40px; border-radius: var(--sw-radius); overflow: hidden; background: var(--sw-surface-highest); }
 
-.savorweek .sw-cta {
-  background: var(--sw-primary);
-  color: var(--sw-on-primary);
+.foodforthought .fft-draggable:hover {
+  background: var(--fft-surface-high);
+}
+
+.foodforthought .fft-draggable:active {
+  cursor: grabbing;
+}
+
+.foodforthought .fft-drag-handle {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.foodforthought .fft-draggable:hover .fft-drag-handle {
+  opacity: 1;
+}
+
+.foodforthought .fft-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--fft-radius);
+  overflow: hidden;
+  background: var(--fft-surface-highest);
+}
+
+.foodforthought .fft-cta {
+  background: var(--fft-primary);
+  color: var(--fft-on-primary);
   padding: 16px;
-  border-radius: var(--sw-radius-2xl);
+  border-radius: var(--fft-radius-2xl);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
-.savorweek .sw-cta-sub { color: var(--sw-on-primary-container); }
-.savorweek .sw-cta-btn {
-  background: var(--sw-surface);
-  color: var(--sw-primary);
-  border-radius: var(--sw-radius-xl);
+
+.foodforthought .fft-cta-sub {
+  color: var(--fft-on-primary-container);
+}
+
+.foodforthought .fft-cta-btn {
+  background: var(--fft-surface);
+  color: var(--fft-primary);
+  border-radius: var(--fft-radius-xl);
   padding: 10px 16px;
 }
-.savorweek .sw-cta-btn:hover:not(:disabled) { background: var(--sw-surface-lowest); color: var(--sw-primary); }
-.savorweek .sw-cta-btn:disabled { background: var(--sw-surface); color: var(--sw-primary); opacity: 0.95; }
 
-.savorweek .sw-spin { animation: sw-spin 1s linear infinite; }
-@keyframes sw-spin { to { transform: rotate(360deg); } }
+.foodforthought .fft-cta-btn:hover:not(:disabled) {
+  background: var(--fft-surface-lowest);
+  color: var(--fft-primary);
+}
+
+.foodforthought .fft-cta-btn:disabled {
+  background: var(--fft-surface);
+  color: var(--fft-primary);
+  opacity: 0.95;
+}
+
+.foodforthought .fft-spin {
+  animation: fft-spin 1s linear infinite;
+}
+
+@keyframes fft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* ===== Footer ===== */
-.savorweek .sw-footer { background: var(--sw-surface-low); margin-top: 40px; box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.02); }
-.savorweek .sw-footer-link {
+.foodforthought .fft-footer {
+  background: var(--fft-surface-low);
+  margin-top: 40px;
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.02);
+}
+
+.foodforthought .fft-footer-link {
   font: 600 12px/16px 'Inter', sans-serif;
   letter-spacing: 0.02em;
-  color: var(--sw-on-surface-variant);
+  color: var(--fft-on-surface-variant);
   text-decoration: none;
   transition: color 0.15s;
 }
-.savorweek .sw-footer-link:hover { color: var(--sw-on-surface); }
+
+.foodforthought .fft-footer-link:hover {
+  color: var(--fft-on-surface);
+}
 </style>
