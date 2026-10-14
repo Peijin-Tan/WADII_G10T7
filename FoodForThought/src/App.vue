@@ -17,8 +17,14 @@ const menuOpen = ref(false)
         </RouterLink>
 
         <!-- Hamburger: visible below md (xs + sm) -->
-        <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
-          aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
+        <button
+          class="navbar-toggler app-toggler"
+          type="button"
+          aria-controls="mainNav"
+          :aria-expanded="menuOpen"
+          aria-label="Toggle navigation"
+          @click="menuOpen = !menuOpen"
+        >
           <span class="navbar-toggler-icon"></span>
         </button>
 
@@ -40,23 +46,61 @@ const menuOpen = ref(false)
           </ul>
 
           <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
-            <div class="d-flex align-items-center gap-3">
-              <img class="app-avatar" alt="Profile"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              <span class="d-none d-md-inline text-success">John Doe</span>
+            <!-- Search: in the hamburger on mobile, hidden on md–lg, shown on xl+ -->
+            <div class="app-search d-block d-md-none d-xl-block position-relative">
+              <span class="material-symbols-outlined app-search-icon">search</span>
+              <input
+                type="search"
+                class="form-control app-search-input"
+                placeholder="Search meals, pantry, ingredients..."
+              />
             </div>
+
             <div class="d-flex align-items-center gap-3">
-                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
-                </div>
+
+              <img
+                class="app-avatar"
+                alt="Profile"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30"
+              />
             </div>
           </div>
         </div>
-     
+      </div>
     </nav>
   </header>
 
   <RouterView />
+
+  <footer v-if="showMainNav" class="app-footer">
+    <div class="container-fluid px-3 px-md-4 py-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 text-center text-md-start">
+      <div class="d-flex flex-column flex-md-row align-items-center gap-1 gap-md-2">
+        <span class="app-footer-brand">🌱 FoodForThought</span>
+      </div>
+
+      <nav class="d-flex flex-wrap justify-content-center gap-3 gap-md-4">
+        <RouterLink to="/planner" class="app-footer-link">Weekly Plan</RouterLink>
+        <RouterLink to="/dashboard" class="app-footer-link">Dashboard</RouterLink>
+        <RouterLink to="/pantry" class="app-footer-link">Pantry</RouterLink>
+        <RouterLink to="/recipes" class="app-footer-link">Recipes</RouterLink>
+      </nav>
+
+      <div class="app-footer-copy">© {{ new Date().getFullYear() }} FoodForThought. All rights reserved.</div>
+    </div>
+  </footer>
 </template>
+
+<!--
+  In your existing <script>, add ONE ref next to showMainNav:
+
+  <script setup>
+  import { ref } from 'vue'
+  const menuOpen = ref(false)
+  ...your existing code (showMainNav etc.)
+  </script>
+
+  (Options API: add  data() { return { menuOpen: false } }  instead.)
+-->
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600&display=swap');
@@ -67,9 +111,10 @@ body {
   display: block !important;
   min-width: 0;
 }
-
 #app {
-  display: block !important;
+  display: flex !important;            /* column layout so the footer can stick to the bottom */
+  flex-direction: column;
+  min-height: 100vh;
   grid-template-columns: none !important;
   max-width: none !important;
   margin: 0 !important;
@@ -94,14 +139,9 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
-.app-navbar-bar {
-  min-height: 72px;
-}
-
+.app-navbar-bar { min-height: 72px; }
 @media (min-width: 768px) {
-  .app-navbar-bar {
-    min-height: 80px;
-  }
+  .app-navbar-bar { min-height: 80px; }
 }
 
 .app-brand {
@@ -110,20 +150,10 @@ body {
   color: var(--nav-primary);
   white-space: nowrap;
 }
+.app-brand:hover { color: var(--nav-primary-container); }
 
-.app-brand:hover {
-  color: var(--nav-primary-container);
-}
-
-.app-toggler {
-  border: 0;
-  background: var(--nav-surface-low);
-  border-radius: 0.5rem;
-}
-
-.app-toggler:focus {
-  box-shadow: 0 0 0 2px var(--nav-primary);
-}
+.app-toggler { border: 0; background: var(--nav-surface-low); border-radius: 0.5rem; }
+.app-toggler:focus { box-shadow: 0 0 0 2px var(--nav-primary); }
 
 /* Links: stacked list on mobile, pill group from md up */
 .app-nav {
@@ -132,13 +162,9 @@ body {
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
 }
-
 @media (min-width: 768px) {
-  .app-nav {
-    flex-direction: row;
-  }
+  .app-nav { flex-direction: row; }
 }
-
 .app-nav-link {
   padding: 8px 16px !important;
   border-radius: 0.5rem;
@@ -148,12 +174,10 @@ body {
   white-space: nowrap;
   transition: background-color 0.15s, color 0.15s;
 }
-
 .app-nav-link:hover {
   background: var(--nav-surface-high);
   color: var(--nav-on-surface) !important;
 }
-
 .app-nav-link.router-link-active {
   background: var(--nav-primary-container);
   color: var(--nav-on-primary-container) !important;
@@ -175,16 +199,10 @@ body {
 }
 
 /* Search */
-.app-search {
-  width: 100%;
-}
-
+.app-search { width: 100%; }
 @media (min-width: 1200px) {
-  .app-search {
-    width: 280px;
-  }
+  .app-search { width: 280px; }
 }
-
 .app-search-icon {
   position: absolute;
   left: 14px;
@@ -194,7 +212,6 @@ body {
   color: var(--nav-outline);
   pointer-events: none;
 }
-
 .app-search-input {
   padding: 8px 16px 8px 40px;
   background: #ffffff;
@@ -203,11 +220,7 @@ body {
   font: 400 13px/20px 'Inter', sans-serif;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
-
-.app-search-input:focus {
-  background: #ffffff;
-  box-shadow: 0 0 0 2px var(--nav-primary);
-}
+.app-search-input:focus { background: #ffffff; box-shadow: 0 0 0 2px var(--nav-primary); }
 
 /* Avatar + icon font */
 .app-navbar .material-symbols-outlined {
@@ -218,7 +231,6 @@ body {
   display: inline-block;
   user-select: none;
 }
-
 .app-avatar {
   width: 32px;
   height: 32px;
@@ -226,4 +238,23 @@ body {
   object-fit: cover;
   box-shadow: 0 0 0 2px var(--nav-primary-fixed);
 }
+/* Footer (margin-top: auto pushes it to the bottom on short pages) */
+.app-footer {
+  margin-top: auto;
+  background: #f4f4ed;
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.02);
+  font-family: 'Inter', sans-serif;
+}
+.app-footer-brand { font: 500 20px/28px 'Outfit', sans-serif; color: #32533c; white-space: nowrap; }
+.app-footer-tagline { font: 400 13px/20px 'Inter', sans-serif; color: #424842; }
+.app-footer-link {
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  color: #424842;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.app-footer-link:hover { color: #1a1c18; }
+.app-footer-link.router-link-active { color: #32533c; }
+.app-footer-copy { font: 600 11px/14px 'Inter', sans-serif; letter-spacing: 0.03em; color: #727972; }
 </style>

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
+import Planner from '../views/Planner.vue'
 import NotFound from '../components/Error/NotFound.vue'
 import Community from '../views/Community.vue'
 
@@ -33,6 +34,11 @@ const router = createRouter({
       path: '/recipes',
       name: 'recipes',
       component: Recipes
+    },
+    {
+      path: '/planner',
+      name: 'planner',
+      component: Planner
     },
     {
       path: '/login',
