@@ -1,5 +1,6 @@
 const express = require('express')
 const mongoose = require('mongoose')
+const cors = require('cors')
 const dotenv = require('dotenv').config({ path: './config.env' });
 require("node:dns").setServers(["8.8.8.8", "1.1.1.1"]);
 const helmet = require('helmet')
