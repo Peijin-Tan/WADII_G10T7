@@ -10,6 +10,7 @@ const authRouter = require('./src/router/auth')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 const recipeRouter = require('./src/router/recipe')
+const dashboardRouter = require('./src/router/analytics')
 
 const app = express()
 app.use(cors({
@@ -38,6 +39,7 @@ app.use(limiter)
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
 app.use('/recipes', recipeRouter)
+app.use('/analytics', dashboardRouter)
 
 // Mount admin
 //app.use('/admin', adminRouter)
