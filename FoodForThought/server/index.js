@@ -8,6 +8,10 @@ const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
 
 const authRouter = require('./src/router/auth')
+const requireAuth = require('./src/middleware/auth')
+const User = require('./models/User')
+const Recipe = require('./models/Recipe')
+const Post = require('./models/Post')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 
@@ -39,6 +43,40 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
+
+app.get('/admin/stats', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      message: 'Admin access required'
+    })
+  }
+
+  try {
+    const [totalUsers, totalRecipes, totalCommunityPosts, roleBreakdown] = await Promise.all([
+      User.countDocuments(),
+      Recipe.countDocuments(),
+      Post.countDocuments(),
+      User.aggregate([
+        { $group: { _id: '$role', count: { $sum: 1 } } }
+      ])
+    ])
+
+    const summary = {
+      totalUsers,
+      totalRecipes,
+      totalCommunityPosts,
+      totalAdmins: roleBreakdown.find(item => item._id === 'admin')?.count ?? 0,
+      totalRegularUsers: roleBreakdown.find(item => item._id === 'user')?.count ?? 0
+    }
+
+    return res.json(summary)
+  } catch (error) {
+    console.error('Admin stats error:', error)
+    return res.status(500).json({
+      message: 'Unable to load admin statistics'
+    })
+  }
+})
 
 // Mount admin
 //app.use('/admin', adminRouter)

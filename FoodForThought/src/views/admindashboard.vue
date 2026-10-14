@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
@@ -35,11 +36,15 @@ async function loadStats() {
     loading.value = true
     error.value = ''
 
-    const response = await axios.get('http://localhost:8000/admin/stats')
+    const response = await axios.get('http://localhost:8000/admin/stats', {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
     stats.value = response.data
   } catch (err) {
     console.error(err)
-    error.value = 'Unable to load dashboard statistics.'
+    error.value = err.response?.data?.message || 'Unable to load dashboard statistics.'
   } finally {
     loading.value = false
   }
