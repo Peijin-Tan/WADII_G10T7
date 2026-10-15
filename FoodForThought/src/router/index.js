@@ -57,7 +57,12 @@ const router = createRouter({
       path: '/community',
       name: 'community',
       component: () => import('../views/Community.vue')
-    }
+    },
+    {
+      path: '/community/post/:id',
+      name: 'community-recipe',
+      component: () => import('@/views/CommunityRecipe.vue')
+    },
   ],
 })
 

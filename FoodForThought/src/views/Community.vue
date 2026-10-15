@@ -1,15 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
-const route = useRoute()
 
 // Navigation and feed
 const activeTab = ref('community')
-const expandedPostIds = ref([])
 const posts = ref([])
 const loading = ref(true)
 const error = ref('')
@@ -41,11 +39,10 @@ const instructions = ref([
   { description: '' }
 ])
 
-// Messages and submission
+// Form messages
 const submitting = ref(false)
 const postError = ref('')
 const success = ref('')
-const linkedPostError = ref('')
 
 // Likes
 const likedPostIds = ref([])
@@ -80,16 +77,6 @@ const displayedPosts = computed(() => {
 
   return communityPosts.value
 })
-
-function toggleRecipe(postId) {
-  const index = expandedPostIds.value.indexOf(postId)
-
-  if (index === -1) {
-    expandedPostIds.value.push(postId)
-  } else {
-    expandedPostIds.value.splice(index, 1)
-  }
-}
 
 function addIngredient() {
   ingredients.value.push({
@@ -148,32 +135,6 @@ async function loadPosts() {
     error.value = 'Unable to load posts. Please try again.'
   } finally {
     loading.value = false
-  }
-}
-
-// Open a recipe selected from the dashboard.
-function openLinkedPost() {
-  linkedPostError.value = ''
-
-  const postId = route.query.postId
-
-  if (typeof postId !== 'string') return
-
-  const post = posts.value.find(post => post._id === postId)
-
-  if (!post) {
-    linkedPostError.value = 'This post is no longer available.'
-    return
-  }
-
-  if (post.userId?._id === auth.user?._id) {
-    activeTab.value = 'mine'
-  } else {
-    activeTab.value = 'community'
-  }
-
-  if (!expandedPostIds.value.includes(postId)) {
-    expandedPostIds.value.push(postId)
   }
 }
 
@@ -282,7 +243,6 @@ async function createPost() {
     })
 
     resetForm()
-    linkedPostError.value = ''
     success.value = 'Your recipe post was created!'
     activeTab.value = 'mine'
 
@@ -436,10 +396,6 @@ async function deletePost(post) {
       id => id !== post._id
     )
 
-    expandedPostIds.value = expandedPostIds.value.filter(
-      id => id !== post._id
-    )
-
     success.value = 'Your post was deleted.'
   } catch (err) {
     if (err.response?.status === 401) {
@@ -461,10 +417,6 @@ async function deletePost(post) {
 onMounted(async () => {
   await loadPosts()
   await loadMyLikes()
-
-  if (!error.value) {
-    openLinkedPost()
-  }
 })
 </script>
 
@@ -534,14 +486,6 @@ onMounted(async () => {
 
     <div v-if="deleteError" class="alert alert-danger" role="alert">
       {{ deleteError }}
-    </div>
-
-    <div
-      v-if="linkedPostError"
-      class="alert alert-warning"
-      role="alert"
-    >
-      {{ linkedPostError }}
     </div>
 
     <!-- Create post -->
@@ -932,7 +876,6 @@ onMounted(async () => {
         <div
           v-for="post in displayedPosts"
           :key="post._id"
-          :id="'post-' + post._id"
           class="col-12 col-lg-6"
         >
           <article
@@ -984,17 +927,13 @@ onMounted(async () => {
 
               <!-- Post actions -->
               <div class="d-flex flex-wrap gap-2">
-                <button
+                <RouterLink
                   v-if="post.recipeId"
-                  type="button"
+                  :to="'/community/post/' + post._id"
                   class="btn community-outline"
-                  :aria-expanded="expandedPostIds.includes(post._id)"
-                  @click="toggleRecipe(post._id)"
                 >
-                  {{ expandedPostIds.includes(post._id)
-                    ? 'Hide recipe'
-                    : 'View recipe' }}
-                </button>
+                  View Recipe
+                </RouterLink>
 
                 <button
                   v-if="auth.user"
@@ -1035,40 +974,6 @@ onMounted(async () => {
                     ? 'Deleting...'
                     : 'Delete Post' }}
                 </button>
-              </div>
-
-              <!-- Expanded recipe -->
-              <div
-                v-if="post.recipeId && expandedPostIds.includes(post._id)"
-                class="border-top mt-4 pt-3"
-              >
-                <p class="preserve-lines">
-                  {{ post.recipeId.summary }}
-                </p>
-
-                <h4 class="h6">Ingredients</h4>
-
-                <ul>
-                  <li
-                    v-for="(ingredient, index) in post.recipeId.ingredients"
-                    :key="index"
-                  >
-                    {{ ingredient.amount }} {{ ingredient.unit }}
-                    {{ ingredient.name }}
-                  </li>
-                </ul>
-
-                <h4 class="h6">Instructions</h4>
-
-                <ol>
-                  <li
-                    v-for="instruction in post.recipeId.instructions"
-                    :key="instruction.step"
-                    class="mb-2 preserve-lines"
-                  >
-                    {{ instruction.description }}
-                  </li>
-                </ol>
               </div>
             </div>
           </article>

@@ -420,4 +420,35 @@ router.delete('/:id/like', requireAuth, async (req, res) => {
   }
 })
 
+// Get one community post and its recipe.
+router.get('/:id', async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+      .populate('userId', 'name')
+      .populate('recipeId')
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'This post is no longer available'
+      })
+    }
+
+    return res.json(post)
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to retrieve recipe post'
+    })
+  }
+})
+
 module.exports = router

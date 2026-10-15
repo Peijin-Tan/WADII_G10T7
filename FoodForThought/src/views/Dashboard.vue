@@ -82,21 +82,21 @@ onUnmounted(() => {
 
 <template>
   <div class="container mt-5 mb-5 text-start">
-    <h1 class="welcome-message">
+    <h1 class="dashboard-heading">
       Welcome to FoodForThought
     </h1>
 
     <p class="text-muted">
-      Cook smarter. Live healthier. 
+      Cook smarter. Waste less. Live healthier.
     </p>
 
-    <h3 class="display">{{ currentMonth }}</h3>
+    <h3 class="text-muted">{{ currentMonth }}</h3>
 
     <div class="row g-4 mt-2">
 
-      <!-- LEFT: carousel and trending cuisines -->
+      <!-- LEFT: recipe carousel and trending cuisines -->
       <div class="col-12 col-lg-5">
-        <div class="card shadow-sm">
+        <section class="card shadow-sm">
           <div class="card-body">
             <h2 class="h5 fw-bold">Most Liked Recipes</h2>
 
@@ -115,24 +115,23 @@ onUnmounted(() => {
 
               <button
                 type="button"
-                class="btn btn-outline-success"
+                class="btn dashboard-button"
                 @click="loadTopRecipes"
               >
                 Try again
               </button>
             </div>
 
-            <p v-else-if="topRecipes.length === 0">
+            <p v-else-if="topRecipes.length === 0" class="text-muted">
               No liked recipes this month yet.
             </p>
 
             <div v-else aria-roledescription="carousel">
               <div aria-live="polite" aria-atomic="true">
+
+                <!-- Clickable recipe picture -->
                 <RouterLink
-                  :to="{
-                    path: '/community',
-                    query: { postId: currentRecipe.postId }
-                  }"
+                  :to="'/community/post/' + currentRecipe.postId"
                 >
                   <img
                     v-if="currentRecipe.image"
@@ -148,12 +147,10 @@ onUnmounted(() => {
                   </span>
                 </div>
 
-                <h3>
+                <!-- Clickable recipe title -->
+                <h3 class="h5">
                   <RouterLink
-                    :to="{
-                      path: '/community',
-                      query: { postId: currentRecipe.postId }
-                    }"
+                    :to="'/community/post/' + currentRecipe.postId"
                     class="recipe-title text-decoration-none"
                   >
                     {{ currentRecipe.title }}
@@ -181,13 +178,15 @@ onUnmounted(() => {
                 </p>
               </div>
 
+              <!-- Carousel controls -->
               <div
                 v-if="topRecipes.length > 1"
                 class="d-flex justify-content-between align-items-center"
               >
                 <button
                   type="button"
-                  class="btn btn-outline-success btn-sm"
+                  class="btn dashboard-button btn-sm"
+                  aria-label="Previous recipe"
                   @click="previousRecipe"
                 >
                   Previous
@@ -199,7 +198,8 @@ onUnmounted(() => {
 
                 <button
                   type="button"
-                  class="btn btn-outline-success btn-sm"
+                  class="btn dashboard-button btn-sm"
+                  aria-label="Next recipe"
                   @click="nextRecipe"
                 >
                   Next
@@ -207,9 +207,8 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Directly below carousel -->
         <div class="mt-4">
           <DashboardAnalytics section="cuisines" />
         </div>
@@ -217,7 +216,7 @@ onUnmounted(() => {
 
       <!-- RIGHT: meal progress and community activity -->
       <div class="col-12 col-lg-7">
-        <div class="card shadow-sm">
+        <section class="card shadow-sm">
           <div class="card-body">
             <h2 class="h5 fw-bold">Your Meal-Plan Progress</h2>
 
@@ -225,7 +224,7 @@ onUnmounted(() => {
               Track the meals you complete this month.
             </p>
 
-            <div class="bg-light rounded p-3 mt-3">
+            <div class="meal-progress-box rounded p-3 mt-3">
               <div class="d-flex justify-content-between mb-3">
                 <span class="fw-semibold">Monthly completion</span>
                 <span class="text-muted">— / — meals</span>
@@ -235,7 +234,7 @@ onUnmounted(() => {
                 class="progress"
                 aria-label="Meal-plan progress not available yet"
               >
-                <div class="progress-bar bg-success w-0"></div>
+                <div class="progress-bar bg-secondary w-0"></div>
               </div>
 
               <p class="text-muted small mt-3 mb-0">
@@ -243,9 +242,8 @@ onUnmounted(() => {
               </p>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Directly below meal progress -->
         <div class="mt-4">
           <DashboardAnalytics section="activity" />
         </div>
@@ -255,16 +253,20 @@ onUnmounted(() => {
 
     <!-- Bottom navigation cards -->
     <div class="row g-4 mt-4">
+
       <div class="col-12 col-md-4">
         <div class="card h-100">
-          <div class="card-body">
-            <h5 class="card-title">My Pantry</h5>
+          <div class="card-body d-flex flex-column">
+            <h2 class="h5">My Pantry</h2>
 
             <p class="card-text">
               Check the ingredients you have.
             </p>
 
-            <RouterLink to="/pantry" class="btn button-colour">
+            <RouterLink
+              to="/pantry"
+              class="btn dashboard-button mt-auto align-self-start"
+            >
               View Pantry
             </RouterLink>
           </div>
@@ -273,14 +275,17 @@ onUnmounted(() => {
 
       <div class="col-12 col-md-4">
         <div class="card h-100">
-          <div class="card-body">
-            <h5 class="card-title">Recipes</h5>
+          <div class="card-body d-flex flex-column">
+            <h2 class="h5">Recipes</h2>
 
             <p class="card-text">
               Find recipes based on your ingredients.
             </p>
 
-            <RouterLink to="/recipes" class="btn button-colour">
+            <RouterLink
+              to="/recipes"
+              class="btn dashboard-button mt-auto align-self-start"
+            >
               Browse Recipes
             </RouterLink>
           </div>
@@ -289,40 +294,49 @@ onUnmounted(() => {
 
       <div class="col-12 col-md-4">
         <div class="card h-100">
-          <div class="card-body">
-            <h5 class="card-title">Community</h5>
+          <div class="card-body d-flex flex-column">
+            <h2 class="h5">Community</h2>
 
             <p class="card-text">
               Discover meals shared by the community.
             </p>
 
-            <RouterLink to="/community" class="btn button-colour">
+            <RouterLink
+              to="/community"
+              class="btn dashboard-button mt-auto align-self-start"
+            >
               View Community
             </RouterLink>
           </div>
         </div>
       </div>
+
     </div>
   </div>
 </template>
 
 <style scoped>
-.welcome-message{
-  color: #3B6255;
+.dashboard-heading {
+  color: #426873;
 }
-.display{
-  color: #4B8A6C
-}
-.button-colour{
-  background-color: #4B8A6C;
-  color: white;
-}
+
 .recipe-image {
   display: block;
   width: 100%;
   height: 240px;
   object-fit: cover;
 }
+
+.recipe-title {
+  font-size: 20px;
+  font-weight: semi-bold;
+  color: #4B8A6C;
+}
+
+.recipe-title:hover {
+  color: #386850;
+}
+
 .rank-badge {
   background-color: #F6C7B3;
   color: #49372F;
@@ -332,13 +346,27 @@ onUnmounted(() => {
   background-color: #DCECE9;
   color: #304D52;
 }
-.recipe-title {
-  font-size: 20px;
-  font-weight: semi-bold;
-  color: #4B8A6C;
+
+.meal-progress-box {
+  background-color: #F5F5F5;
 }
 
-.recipe-title:hover {
-  color: #386850;
+.progress-bar {
+  background-color: #82B2C0;
+}
+
+.dashboard-button {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: #4B8A6C;
+  --bs-btn-border-color: #4B8A6C;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #386850;
+  --bs-btn-hover-border-color: #386850;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #386850;
+  --bs-btn-active-border-color: #386850;
+  --bs-btn-disabled-color: #ffffff;
+  --bs-btn-disabled-bg: #4B8A6C;
+  --bs-btn-disabled-border-color: #4B8A6C;
 }
 </style>
