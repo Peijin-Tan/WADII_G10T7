@@ -41,6 +41,12 @@ async function loadStats() {
   } catch (err) {
     console.error(err)
     error.value = 'Unable to load dashboard statistics.'
+    const response = await axios.get('http://localhost:8000/admin/stats', {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
+    stats.value = response.data
   } finally {
     loading.value = false
   }
