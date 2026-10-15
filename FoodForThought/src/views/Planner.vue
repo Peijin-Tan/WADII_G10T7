@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import axios from "axios";
+import viewRecipeModal from '../components/Mealplan/viewRecipe.vue';
+import swapRecipeModal from '../components/Mealplan/swapRecipe.vue';
+import addMealModal from '../components/Mealplan/addmeal.vue';
 
 /* Bootstrap must be loaded once in your app entry (main.js):
    import 'bootstrap/dist/css/bootstrap.min.css'
@@ -129,6 +132,52 @@ const ctaText = computed(() =>
 /* ---------- Meals ---------- */
 /* mealplan database --> recipeID (from recipe collection), get recipe info ()
 */
+const addTarget = ref()
+const selectedEntry = ref();
+const swapEntry = ref();
+
+const mockEntry = {
+  id: 'entry-001',
+  day: 'Monday',
+  mealSlot: 'Breakfast',
+  time: '08:00 AM',
+  status: 'Cooked', // 'Planned' | 'Cooked' | 'Skipped'
+  recipe: {
+    id: 'recipe-101',
+    title: 'Cinnamon Apple Steel-Cut Oatmeal',
+    description:
+      'Topped with warm caramelized gala apples, toasted pecans, and a delicate maple drizzle.',
+    servings: 4,
+    prepMinutes: 15,
+    tags: ['Fiber-Rich'],
+    nutrition: { calories: 360, protein: 12, carbs: 54, fat: 8, fiber: 7 },
+    ingredients: [
+      { name: 'Steel-cut oats', quantity: '1 cup', inPantry: true },
+      { name: 'Gala apple', quantity: '1 diced', inPantry: true },
+      { name: 'Ground cinnamon & nutmeg', quantity: '1 tsp', inPantry: true },
+      { name: 'Almond milk or oat milk', quantity: '2 cups', inPantry: true },
+      { name: 'Pure maple drizzle & toasted pecans', quantity: '2 tbsp', inPantry: true },
+    ],
+    steps: [
+      {
+        title: 'Toast oats',
+        text: 'Toast steel-cut oats lightly in 1 tsp butter or coconut oil until fragrant and nutty (approx 2 mins).',
+      },
+      {
+        title: 'Simmer',
+        text: 'Add almond milk, water, and diced gala apples with cinnamon. Bring to a gentle boil, then simmer on low for 12–15 minutes stirring occasionally.',
+      },
+      {
+        title: 'Rest & thicken',
+        text: 'Remove from heat, cover, and let steam for 3 minutes for an extra creamy texture.',
+      },
+      {
+        title: 'Garnish & serve',
+        text: 'Ladle into warm bowls, topping with toasted pecans and a swirl of pure maple drizzle.',
+      },
+    ],
+  },
+}
 
 const meals = [
   {
@@ -360,12 +409,14 @@ function sendToGrocery() {
                   <h3 class="fft-headline-sm m-0">Nothing planned for {{ activeDayLong }} yet</h3>
                   <p class="fft-body-sm text-fft-muted m-0">Drag a recipe from the Pantry Drawer or add a meal to get
                     started.</p>
-                  <button class="btn fft-btn-primary d-flex align-items-center gap-1 mt-2" type="button">
+                  <button class="btn fft-btn-primary d-flex align-items-center gap-1 mt-2" type="button" @click="addTarget = mockEntry">
                     <span class="material-symbols-outlined" style="font-size: 18px">add</span>
                     <span>Add Meal</span>
                   </button>
                 </div>
-
+                <!-- Add Meal Model -->
+                <addMealModal v-if="addTarget" :default-date="addTarget.date" :default-slot="addTarget.mealSlot"
+                  :recipes="allRecipes" @close="addTarget = null" @add="addMealToPlan" />
                 <div v-if="hasPlan" class="d-flex flex-column gap-3">
                   <!-- Breakfast / Lunch -->
                   <div v-for="meal in meals" :key="meal.title" class="fft-card fft-card-bordered fft-hover-lift">
@@ -410,10 +461,12 @@ function sendToGrocery() {
                           type="button">
                           <span class="material-symbols-outlined" style="font-size: 16px">done</span>Mark Prepped
                         </button>
-                        <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button">
+                        <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button"
+                          @click="selectedEntry = mockEntry">
                           <span class="material-symbols-outlined" style="font-size: 16px">menu_book</span>Recipe Steps
                         </button>
-                        <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
+                        <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button"
+                          @click="swapEntry = mockEntry">
                           <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>{{
                             meal.canPrep ? 'Swap' :
                               'Swap Meal' }}
@@ -421,6 +474,12 @@ function sendToGrocery() {
                       </div>
                     </div>
                   </div>
+                  <!-- View recipe (pop-up modal) -->
+                  <viewRecipeModal v-if="selectedEntry" :entry="selectedEntry" @close="selectedEntry = null"
+                    @update-status="onStatusChange" />
+                  <!-- Swap recipe -->
+                  <swapRecipeModal v-if="swapEntry" :entry="swapEntry" :recipes="swapOptions" @close="swapEntry = null"
+                    @swap="swapMeal" />
 
                   <!-- Dinner highlight -->
                   <div class="fft-card fft-card-bordered p-0 overflow-hidden fft-hover-lift">
