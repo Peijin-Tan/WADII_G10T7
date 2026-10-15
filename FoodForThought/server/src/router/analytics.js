@@ -53,6 +53,7 @@ router.get('/', requireAuth, async (req, res) => {
         existingRecipe.likeCount += likeCount
       } else {
         recipeRankings.push({
+          postId: post._id.toString(),
           recipeId: recipe._id.toString(),
           title: recipe.title,
           image: recipe.image,

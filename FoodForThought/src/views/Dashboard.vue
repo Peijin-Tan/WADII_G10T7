@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
@@ -56,7 +57,21 @@ function nextRecipe() {
   }
 }
 
-onMounted(loadTopRecipes)
+let carouselTimer
+
+onMounted(() => {
+  loadTopRecipes()
+
+  carouselTimer = setInterval(() => {
+    if (!loadingRecipes.value && topRecipes.value.length > 1) {
+      nextRecipe()
+    }
+  }, 5000)
+})
+
+onUnmounted(() => {
+  clearInterval(carouselTimer)
+})
 </script>
 <template>
   <div class="container mt-5">
@@ -74,7 +89,7 @@ onMounted(loadTopRecipes)
       <div class="col-12 col-lg-5">
         <div class="card h-100 shadow-sm">
           <div class="card-body">
-            <h2 class="h5 fw-bold">Top recipes this month</h2>
+            <h2 class="h5 fw-bold">Most liked recipes this month</h2>
 
             <p class="text-muted small">
               The community's most-liked recipes.
@@ -104,18 +119,35 @@ onMounted(loadTopRecipes)
 
             <div v-else aria-roledescription="carousel">
               <div aria-live="polite" aria-atomic="true">
-                <img
-                  v-if="currentRecipe.image"
-                  :src="currentRecipe.image"
-                  :alt="currentRecipe.title"
-                  class="recipe-image rounded mb-3"
+                <RouterLink
+                  :to="{
+                    path: '/community',
+                    query: { postId: currentRecipe.postId }
+                  }"
                 >
+                  <img
+                    v-if="currentRecipe.image"
+                    :src="currentRecipe.image"
+                    :alt="currentRecipe.title"
+                    class="recipe-image rounded mb-3"
+                  >
+                </RouterLink>
 
                 <span class="badge bg-success mb-2">
                   Rank #{{ currentIndex + 1 }}
                 </span>
 
-                <h3 class="h5">{{ currentRecipe.title }}</h3>
+                <h3 class="h5">
+                  <RouterLink
+                    :to="{
+                      path: '/community',
+                      query: { postId: currentRecipe.postId }
+                    }"
+                    class="text-success text-decoration-none"
+                  >
+                    {{ currentRecipe.title }}
+                  </RouterLink>
+                </h3>
 
                 <div class="mb-2">
                   <span

@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 
 const auth = useAuthStore()
+const route = useRoute()
 
 // Tabs and recipe expansion
 const activeTab = ref('community')
@@ -115,7 +117,7 @@ function resetForm() {
   servings.value = 1
   prepTime.value = 0
   cookingTime.value = 0
-  cuisine.value = ''
+  cuisine.value = []
 
   ingredients.value = [
     { name: '', amount: 1, unit: '' }
@@ -169,8 +171,8 @@ async function createPost() {
     return
   }
 
-  if (cuisine.value === '') {
-    postError.value = 'Please select a cuisine'
+  if (cuisine.value.length === 0) {
+    postError.value = 'Please select at least one cuisine'
     return
   }
 
@@ -226,7 +228,7 @@ async function createPost() {
       title: title.value,
       summary: summary.value,
       image: image.value,
-      cuisine: [cuisine.value],
+      cuisine: cuisine.value,
       servings: servings.value,
       prepTime: prepTime.value,
       cookingTime: cookingTime.value,
@@ -358,9 +360,44 @@ async function toggleLike(post) {
   }
 }
 
+async function openLinkedPost() {
+  const postId = route.query.postId
+
+  if (typeof postId !== 'string') return
+
+  const post = posts.value.find(post => post._id === postId)
+
+  if (!post) return
+
+  // Select the tab containing this post.
+  if (post.userId?._id === auth.user?._id) {
+    activeTab.value = 'mine'
+  } else {
+    activeTab.value = 'community'
+  }
+
+  // Show the full recipe.
+  if (!expandedPostIds.value.includes(postId)) {
+    expandedPostIds.value.push(postId)
+  }
+
+  // Wait for Vue to display it before scrolling.
+  await nextTick()
+
+  const postElement = document.getElementById('post-' + postId)
+
+  if (postElement) {
+    postElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    })
+  }
+}
+
 onMounted(async () => {
   await loadPosts()
   await loadMyLikes()
+  await openLinkedPost()
 })
 </script>
 
@@ -770,8 +807,10 @@ onMounted(async () => {
         <div
           v-for="post in displayedPosts"
           :key="post._id"
+          :id="'post-' + post._id"
           class="col-12 col-lg-6"
         >
+        
           <article
             class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden"
           >
