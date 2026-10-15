@@ -14,6 +14,8 @@ const Post = require('./models/Post')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 const recipeRouter = require('./src/router/recipe')
+const plannerRouter = require('./src/router/Planner')
+
 
 const app = express()
 app.use(cors({
@@ -104,6 +106,7 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
     })
   }
 })
+app.use('/planner', plannerRouter)
 
 // Mount admin
 //app.use('/admin', adminRouter)

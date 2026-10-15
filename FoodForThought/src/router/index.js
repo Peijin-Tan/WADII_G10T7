@@ -4,6 +4,7 @@ import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
 import AdminDashboard from '../views/admindashboard.vue'
+import NotFound from '../components/Error/NotFound.vue'
 import Community from '../views/Community.vue'
 
 const router = createRouter({
@@ -40,6 +41,11 @@ const router = createRouter({
     {
       path: '/recipes/create',
       component: () => import('../views/CreateRecipe.vue')
+    },
+    {
+      path: '/planner',
+      name: 'planner',
+      component: () => import('../views/Planner.vue')
     },
     {
       path: '/login',
