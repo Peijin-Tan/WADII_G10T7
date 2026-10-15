@@ -116,6 +116,25 @@ router.post('/register', async (req, res) => {
   }
 })
 
+
+// DELETE /api/posts/:id
+router.delete('/posts/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    // Find post by MongoDB _id and delete it
+    const deletedPost = await Post.findByIdAndDelete(id)
+
+    if (!deletedPost) {
+      return res.status(404).json({ message: 'Post not found' })
+    }
+
+    res.status(200).json({ message: 'Post deleted successfully', id })
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting post', error: error.message })
+  }
+})
+
 // GET /auth/me — verifies a token and returns the user
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user })

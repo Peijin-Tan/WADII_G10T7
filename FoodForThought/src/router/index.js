@@ -1,7 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
+import AdminDashboard from '../views/admindashboard.vue'
 import NotFound from '../components/Error/NotFound.vue'
 import Community from '../views/Community.vue'
 
@@ -21,6 +23,12 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: Dashboard
+    },
+    {
+      path: '/admindashboard',
+      name: 'admindashboard',
+      component: AdminDashboard,
+      meta: { requiresAdmin: true }
     },
 
     {
@@ -59,6 +67,22 @@ const router = createRouter({
       component: () => import('../views/Community.vue')
     }
   ],
+})
+
+router.beforeEach((to, from, next) => {
+  const auth = useAuthStore()
+
+  if (to.meta.requiresAdmin) {
+    if (!auth.user) {
+      return next('/login')
+    }
+
+    if (auth.user.role !== 'admin') {
+      return next('/home')
+    }
+  }
+
+  next()
 })
 
 export default router
