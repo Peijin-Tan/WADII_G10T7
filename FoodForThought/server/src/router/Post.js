@@ -259,6 +259,57 @@ router.post('/', requireAuth, async (req, res) => {
     })
   }
 })
+router.delete('/:id', requireAuth, async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'This post is no longer available'
+      })
+    }
+
+    if (post.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        message: 'You can only delete your own posts'
+      })
+    }
+
+    // Delete the post and its likes together.
+    await mongoose.connection.transaction(async (session) => {
+      await Post.deleteOne(
+        {
+          _id: postId,
+          userId: req.user._id
+        },
+        { session }
+      )
+
+      await Like.deleteMany(
+        { postId: postId },
+        { session }
+      )
+    })
+
+    return res.json({
+      message: 'Post deleted successfully'
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to delete post'
+    })
+  }
+})
 
 // GET /posts/liked — posts the logged-in user has liked
 router.get('/liked', requireAuth, async (req, res) => {

@@ -1,26 +1,24 @@
 <script setup>
+import { ref, computed, onMounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
 
 const auth = useAuthStore()
 const route = useRoute()
 
-// Tabs and recipe expansion
+// Navigation and feed
 const activeTab = ref('community')
 const expandedPostIds = ref([])
-
-// Community feed
 const posts = ref([])
 const loading = ref(true)
 const error = ref('')
 
-// Post details
+// Post form
 const content = ref('')
 const tagsText = ref('')
 
-// Recipe details
+// Recipe form
 const title = ref('')
 const summary = ref('')
 const image = ref('')
@@ -28,6 +26,12 @@ const servings = ref(1)
 const prepTime = ref(0)
 const cookingTime = ref(0)
 const cuisine = ref([])
+
+const cuisineOptions = [
+  'Chinese', 'Malay', 'Indian', 'Japanese',
+  'Korean', 'Thai', 'Vietnamese', 'Italian',
+  'Western', 'Other'
+]
 
 const ingredients = ref([
   { name: '', amount: 1, unit: '' }
@@ -37,16 +41,21 @@ const instructions = ref([
   { description: '' }
 ])
 
-// Form status
+// Messages and submission
 const submitting = ref(false)
 const postError = ref('')
 const success = ref('')
+const linkedPostError = ref('')
 
 // Likes
 const likedPostIds = ref([])
 const likingPostIds = ref([])
-const loadingLikes = ref(false)
+const loadingLikes = ref(true)
 const likeError = ref('')
+
+// Deletion
+const deletingPostIds = ref([])
+const deleteError = ref('')
 
 // Other users' recipe posts
 const communityPosts = computed(() => {
@@ -56,7 +65,7 @@ const communityPosts = computed(() => {
   })
 })
 
-// Logged-in user's posts
+// Your own posts
 const myPosts = computed(() => {
   return posts.value.filter(post => {
     return auth.user &&
@@ -142,6 +151,32 @@ async function loadPosts() {
   }
 }
 
+// Open a recipe selected from the dashboard.
+function openLinkedPost() {
+  linkedPostError.value = ''
+
+  const postId = route.query.postId
+
+  if (typeof postId !== 'string') return
+
+  const post = posts.value.find(post => post._id === postId)
+
+  if (!post) {
+    linkedPostError.value = 'This post is no longer available.'
+    return
+  }
+
+  if (post.userId?._id === auth.user?._id) {
+    activeTab.value = 'mine'
+  } else {
+    activeTab.value = 'community'
+  }
+
+  if (!expandedPostIds.value.includes(postId)) {
+    expandedPostIds.value.push(postId)
+  }
+}
+
 async function createPost() {
   if (submitting.value) return
 
@@ -172,7 +207,7 @@ async function createPost() {
   }
 
   if (cuisine.value.length === 0) {
-    postError.value = 'Please select at least one cuisine'
+    postError.value = 'Please select at least one cuisine.'
     return
   }
 
@@ -246,10 +281,12 @@ async function createPost() {
       }
     })
 
-    resetForm() 
+    resetForm()
+    linkedPostError.value = ''
     success.value = 'Your recipe post was created!'
-    await loadPosts()
     activeTab.value = 'mine'
+
+    await loadPosts()
   } catch (err) {
     if (err.response?.status === 401) {
       auth.logout()
@@ -257,7 +294,8 @@ async function createPost() {
       postError.value = 'Your login has expired. Please log in again.'
     } else {
       postError.value =
-        err.response?.data?.message || 'Unable to create your recipe post.'
+        err.response?.data?.message ||
+        'Unable to create your recipe post.'
     }
   } finally {
     submitting.value = false
@@ -267,12 +305,11 @@ async function createPost() {
 async function loadMyLikes() {
   likedPostIds.value = []
   likeError.value = ''
-
-  if (!auth.token) return
-
   loadingLikes.value = true
 
   try {
+    if (!auth.token) return
+
     const response = await axios.get('/posts/liked', {
       headers: {
         Authorization: `Bearer ${auth.token}`
@@ -302,7 +339,8 @@ async function toggleLike(post) {
 
   if (
     loadingLikes.value ||
-    likingPostIds.value.includes(post._id)
+    likingPostIds.value.includes(post._id) ||
+    deletingPostIds.value.includes(post._id)
   ) {
     return
   }
@@ -349,76 +387,107 @@ async function toggleLike(post) {
       likeError.value = 'Please log in again to like posts.'
     } else {
       likeError.value =
-        err.response?.data?.message || 'Unable to update your like.'
+        err.response?.data?.message ||
+        'Unable to update your like.'
     }
   } finally {
-    const index = likingPostIds.value.indexOf(post._id)
-
-    if (index !== -1) {
-      likingPostIds.value.splice(index, 1)
-    }
+    likingPostIds.value = likingPostIds.value.filter(
+      id => id !== post._id
+    )
   }
 }
 
-async function openLinkedPost() {
-  const postId = route.query.postId
-
-  if (typeof postId !== 'string') return
-
-  const post = posts.value.find(post => post._id === postId)
-
-  if (!post) return
-
-  // Select the tab containing this post.
-  if (post.userId?._id === auth.user?._id) {
-    activeTab.value = 'mine'
-  } else {
-    activeTab.value = 'community'
+async function deletePost(post) {
+  if (
+    deletingPostIds.value.includes(post._id) ||
+    likingPostIds.value.includes(post._id)
+  ) {
+    return
   }
 
-  // Show the full recipe.
-  if (!expandedPostIds.value.includes(postId)) {
-    expandedPostIds.value.push(postId)
+  deleteError.value = ''
+  success.value = ''
+
+  if (!auth.token) {
+    deleteError.value = 'Please log in before deleting a post.'
+    return
   }
 
-  // Wait for Vue to display it before scrolling.
-  await nextTick()
+  const confirmed = window.confirm(
+    'Delete this post? This cannot be undone.'
+  )
 
-  const postElement = document.getElementById('post-' + postId)
+  if (!confirmed) return
 
-  if (postElement) {
-    postElement.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
+  deletingPostIds.value.push(post._id)
+
+  try {
+    await axios.delete(`/posts/${post._id}`, {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
     })
+
+    posts.value = posts.value.filter(
+      item => item._id !== post._id
+    )
+
+    likedPostIds.value = likedPostIds.value.filter(
+      id => id !== post._id
+    )
+
+    expandedPostIds.value = expandedPostIds.value.filter(
+      id => id !== post._id
+    )
+
+    success.value = 'Your post was deleted.'
+  } catch (err) {
+    if (err.response?.status === 401) {
+      auth.logout()
+      likedPostIds.value = []
+      deleteError.value = 'Your login has expired. Please log in again.'
+    } else {
+      deleteError.value =
+        err.response?.data?.message ||
+        'Unable to delete your post.'
+    }
+  } finally {
+    deletingPostIds.value = deletingPostIds.value.filter(
+      id => id !== post._id
+    )
   }
 }
 
 onMounted(async () => {
   await loadPosts()
   await loadMyLikes()
-  await openLinkedPost()
+
+  if (!error.value) {
+    openLinkedPost()
+  }
 })
 </script>
 
 <template>
-  <div class="container py-4">
-    <!-- Heading -->
+  <div class="container py-4 text-start">
     <div class="mb-4">
-      <h1 class="fw-bold">Our cooking community</h1>
+      <h1 class="community-heading fw-bold">
+        Our Cooking Community
+      </h1>
+
       <p class="text-muted">
         Discover homemade recipes, share your favourites, and inspire others.
       </p>
     </div>
 
-    <!-- Navigation -->
+    <!-- Tabs -->
     <div class="d-flex flex-wrap gap-2 mb-4">
       <button
         type="button"
         class="btn"
         :class="activeTab === 'community'
-          ? 'btn-success'
-          : 'btn-outline-success'"
+          ? 'community-button'
+          : 'community-outline'"
         :aria-pressed="activeTab === 'community'"
         @click="activeTab = 'community'"
       >
@@ -429,8 +498,8 @@ onMounted(async () => {
         type="button"
         class="btn"
         :class="activeTab === 'mine'
-          ? 'btn-success'
-          : 'btn-outline-success'"
+          ? 'community-button'
+          : 'community-outline'"
         :aria-pressed="activeTab === 'mine'"
         @click="activeTab = 'mine'"
       >
@@ -441,8 +510,8 @@ onMounted(async () => {
         type="button"
         class="btn"
         :class="activeTab === 'create'
-          ? 'btn-success'
-          : 'btn-outline-success'"
+          ? 'community-button'
+          : 'community-outline'"
         :aria-pressed="activeTab === 'create'"
         @click="activeTab = 'create'"
       >
@@ -463,12 +532,28 @@ onMounted(async () => {
       {{ likeError }}
     </div>
 
-    <!-- Create Post -->
+    <div v-if="deleteError" class="alert alert-danger" role="alert">
+      {{ deleteError }}
+    </div>
+
+    <div
+      v-if="linkedPostError"
+      class="alert alert-warning"
+      role="alert"
+    >
+      {{ linkedPostError }}
+    </div>
+
+    <!-- Create post -->
     <div v-if="activeTab === 'create'">
-      <div v-if="!auth.user" class="bg-light rounded-4 p-5 text-center">
-        <h5>Share your homemade recipe</h5>
+      <div
+        v-if="!auth.user"
+        class="bg-light rounded-4 p-5 text-center"
+      >
+        <h2 class="h5">Share your homemade recipe</h2>
         <p class="text-muted">Log in to create a post.</p>
-        <RouterLink to="/login" class="btn btn-success">
+
+        <RouterLink to="/login" class="btn community-button">
           Log in
         </RouterLink>
       </div>
@@ -486,6 +571,7 @@ onMounted(async () => {
                 <label for="postContent" class="form-label">
                   Your message
                 </label>
+
                 <textarea
                   id="postContent"
                   v-model="content"
@@ -501,22 +587,28 @@ onMounted(async () => {
                 <label for="postTags" class="form-label">
                   Tags (optional)
                 </label>
+
                 <input
                   id="postTags"
                   v-model="tagsText"
                   class="form-control"
                   placeholder="home-cooked, meal-prep"
                 >
-                <div class="form-text">Separate tags with commas.</div>
+
+                <div class="form-text">
+                  Separate tags with commas.
+                </div>
               </div>
 
               <hr>
+
               <h3 class="h6 mt-4">Recipe overview</h3>
 
               <div class="mb-3">
                 <label for="recipeTitle" class="form-label">
                   Recipe title
                 </label>
+
                 <input
                   id="recipeTitle"
                   v-model="title"
@@ -530,6 +622,7 @@ onMounted(async () => {
                 <label for="recipeSummary" class="form-label">
                   Description
                 </label>
+
                 <textarea
                   id="recipeSummary"
                   v-model="summary"
@@ -538,16 +631,15 @@ onMounted(async () => {
                   required
                 ></textarea>
               </div>
-              <div class="mb-3">
-                <p class="form-label">Cuisine — select at least one</p>
+
+              <fieldset class="mb-3">
+                <legend class="form-label fs-6">
+                  Cuisine — select at least one
+                </legend>
 
                 <div class="d-flex flex-wrap gap-3">
                   <div
-                    v-for="option in [
-                      'Chinese', 'Malay', 'Indian', 'Japanese',
-                      'Korean', 'Thai', 'Vietnamese', 'Italian',
-                      'Western', 'Other'
-                    ]"
+                    v-for="option in cuisineOptions"
                     :key="option"
                     class="form-check"
                   >
@@ -567,12 +659,13 @@ onMounted(async () => {
                     </label>
                   </div>
                 </div>
-              </div>
+              </fieldset>
 
               <div class="mb-3">
                 <label for="recipeImage" class="form-label">
                   Picture URL or path
                 </label>
+
                 <input
                   id="recipeImage"
                   v-model="image"
@@ -580,6 +673,7 @@ onMounted(async () => {
                   placeholder="/img/chicken_rice.jpg"
                   required
                 >
+
                 <div class="form-text">
                   Enter a link or path to an existing image.
                 </div>
@@ -590,6 +684,7 @@ onMounted(async () => {
                   <label for="recipeServings" class="form-label">
                     Servings
                   </label>
+
                   <input
                     id="recipeServings"
                     v-model.number="servings"
@@ -605,6 +700,7 @@ onMounted(async () => {
                   <label for="recipePrepTime" class="form-label">
                     Prep time (minutes)
                   </label>
+
                   <input
                     id="recipePrepTime"
                     v-model.number="prepTime"
@@ -620,6 +716,7 @@ onMounted(async () => {
                   <label for="recipeCookingTime" class="form-label">
                     Cooking time (minutes)
                   </label>
+
                   <input
                     id="recipeCookingTime"
                     v-model.number="cookingTime"
@@ -633,6 +730,7 @@ onMounted(async () => {
               </div>
 
               <hr>
+
               <h3 class="h6 mt-4">Ingredients</h3>
 
               <div
@@ -641,9 +739,13 @@ onMounted(async () => {
                 class="row g-2 mb-3"
               >
                 <div class="col-md-5">
-                  <label :for="'ingredientName' + index" class="form-label">
+                  <label
+                    :for="'ingredientName' + index"
+                    class="form-label"
+                  >
                     Ingredient {{ index + 1 }}
                   </label>
+
                   <input
                     :id="'ingredientName' + index"
                     v-model="ingredient.name"
@@ -654,9 +756,13 @@ onMounted(async () => {
                 </div>
 
                 <div class="col-md-2">
-                  <label :for="'ingredientAmount' + index" class="form-label">
+                  <label
+                    :for="'ingredientAmount' + index"
+                    class="form-label"
+                  >
                     Amount
                   </label>
+
                   <input
                     :id="'ingredientAmount' + index"
                     v-model.number="ingredient.amount"
@@ -669,9 +775,13 @@ onMounted(async () => {
                 </div>
 
                 <div class="col-md-3">
-                  <label :for="'ingredientUnit' + index" class="form-label">
+                  <label
+                    :for="'ingredientUnit' + index"
+                    class="form-label"
+                  >
                     Unit
                   </label>
+
                   <input
                     :id="'ingredientUnit' + index"
                     v-model="ingredient.unit"
@@ -695,13 +805,14 @@ onMounted(async () => {
 
               <button
                 type="button"
-                class="btn btn-outline-success mb-4"
+                class="btn community-outline mb-4"
                 @click="addIngredient"
               >
                 + Add ingredient
               </button>
 
               <hr>
+
               <h3 class="h6 mt-4">Instructions</h3>
 
               <div
@@ -709,9 +820,13 @@ onMounted(async () => {
                 :key="index"
                 class="mb-3"
               >
-                <label :for="'recipeStep' + index" class="form-label">
+                <label
+                  :for="'recipeStep' + index"
+                  class="form-label"
+                >
                   Step {{ index + 1 }}
                 </label>
+
                 <textarea
                   :id="'recipeStep' + index"
                   v-model="instruction.description"
@@ -732,14 +847,14 @@ onMounted(async () => {
 
               <button
                 type="button"
-                class="btn btn-outline-success mb-4"
+                class="btn community-outline mb-4"
                 @click="addStep"
               >
                 + Add step
               </button>
 
               <div class="border-top pt-3">
-                <button type="submit" class="btn btn-success">
+                <button type="submit" class="btn community-button">
                   {{ submitting ? 'Sharing...' : 'Share Recipe' }}
                 </button>
               </div>
@@ -749,15 +864,16 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Community Recipes / My Posts -->
+    <!-- Community recipes / My posts -->
     <div v-else>
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="h4 mb-0">
-          {{ activeTab === 'mine' ? 'My posts' : 'Community recipes' }}
+          {{ activeTab === 'mine' ? 'My Posts' : 'Community Recipes' }}
         </h2>
 
         <span v-if="!loading && !error" class="text-muted small">
-          {{ displayedPosts.length }} posts
+          {{ displayedPosts.length }}
+          {{ displayedPosts.length === 1 ? 'post' : 'posts' }}
         </span>
       </div>
 
@@ -765,20 +881,26 @@ onMounted(async () => {
         v-if="activeTab === 'mine' && !auth.user"
         class="bg-light rounded-4 p-5 text-center"
       >
-        <h5>Your recipes belong here</h5>
+        <h3 class="h5">Your recipes belong here</h3>
         <p class="text-muted">Log in to see your posts.</p>
-        <RouterLink to="/login" class="btn btn-success">
+
+        <RouterLink to="/login" class="btn community-button">
           Log in
         </RouterLink>
       </div>
 
-      <p v-else-if="loading" class="text-muted">
+      <p v-else-if="loading" class="text-muted" role="status">
         Loading posts...
       </p>
 
       <div v-else-if="error" class="alert alert-danger" role="alert">
         <p>{{ error }}</p>
-        <button class="btn btn-outline-danger" @click="loadPosts">
+
+        <button
+          type="button"
+          class="btn btn-outline-danger"
+          @click="loadPosts"
+        >
           Try again
         </button>
       </div>
@@ -787,16 +909,19 @@ onMounted(async () => {
         v-else-if="displayedPosts.length === 0"
         class="bg-light rounded-4 p-5 text-center"
       >
-        <h5>
+        <h3 class="h5">
           {{ activeTab === 'mine'
             ? "You haven't shared a post yet"
             : 'No community recipes yet' }}
-        </h5>
+        </h3>
+
         <p class="text-muted">
           Share something delicious to get started.
         </p>
+
         <button
-          class="btn btn-success"
+          type="button"
+          class="btn community-button"
           @click="activeTab = 'create'"
         >
           Create a post
@@ -810,7 +935,6 @@ onMounted(async () => {
           :id="'post-' + post._id"
           class="col-12 col-lg-6"
         >
-        
           <article
             class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden"
           >
@@ -818,8 +942,7 @@ onMounted(async () => {
               v-if="post.recipeId?.image || post.image"
               :src="post.recipeId?.image || post.image"
               :alt="post.recipeId?.title || 'Shared meal'"
-              class="card-img-top object-fit-cover"
-              style="height: 240px;"
+              class="post-image card-img-top"
             >
 
             <div class="card-body p-4">
@@ -828,20 +951,21 @@ onMounted(async () => {
                 · {{ new Date(post.createdAt).toLocaleDateString() }}
               </p>
 
-              <h3 class="h5 fw-bold">
+              <h3 class="h5 fw-bold recipe-title">
                 {{ post.recipeId?.title || 'Community post' }}
               </h3>
+
               <div v-if="post.recipeId?.cuisine?.length" class="mb-2">
                 <span
                   v-for="cuisineName in post.recipeId.cuisine"
                   :key="cuisineName"
-                  class="badge bg-success me-2"
+                  class="badge cuisine-badge me-2 mb-1"
                 >
                   {{ cuisineName }}
                 </span>
               </div>
 
-              <p style="white-space: pre-wrap;">{{ post.content }}</p>
+              <p class="preserve-lines">{{ post.content }}</p>
 
               <p v-if="post.recipeId" class="text-muted small">
                 {{ post.recipeId.servings }} servings
@@ -858,11 +982,12 @@ onMounted(async () => {
                 </span>
               </div>
 
+              <!-- Post actions -->
               <div class="d-flex flex-wrap gap-2">
                 <button
                   v-if="post.recipeId"
                   type="button"
-                  class="btn btn-outline-success"
+                  class="btn community-outline"
                   :aria-expanded="expandedPostIds.includes(post._id)"
                   @click="toggleRecipe(post._id)"
                 >
@@ -876,9 +1001,13 @@ onMounted(async () => {
                   type="button"
                   class="btn"
                   :class="likedPostIds.includes(post._id)
-                    ? 'btn-success'
-                    : 'btn-outline-secondary'"
-                  :disabled="loadingLikes || likingPostIds.includes(post._id)"
+                    ? 'community-button'
+                    : 'community-outline'"
+                  :disabled="
+                    loadingLikes ||
+                    likingPostIds.includes(post._id) ||
+                    deletingPostIds.includes(post._id)
+                  "
                   @click="toggleLike(post)"
                 >
                   {{ likedPostIds.includes(post._id) ? 'Unlike' : 'Like' }}
@@ -886,9 +1015,26 @@ onMounted(async () => {
                 </button>
 
                 <span v-else class="align-self-center text-muted small">
-                  {{ post.likeCount ?? 0 }} likes ·
+                  {{ post.likeCount ?? 0 }}
+                  {{ post.likeCount === 1 ? 'like' : 'likes' }}
+                  ·
                   <RouterLink to="/login">Log in to like</RouterLink>
                 </span>
+
+                <button
+                  v-if="auth.user && post.userId?._id === auth.user._id"
+                  type="button"
+                  class="btn btn-outline-danger"
+                  :disabled="
+                    deletingPostIds.includes(post._id) ||
+                    likingPostIds.includes(post._id)
+                  "
+                  @click="deletePost(post)"
+                >
+                  {{ deletingPostIds.includes(post._id)
+                    ? 'Deleting...'
+                    : 'Delete Post' }}
+                </button>
               </div>
 
               <!-- Expanded recipe -->
@@ -896,11 +1042,12 @@ onMounted(async () => {
                 v-if="post.recipeId && expandedPostIds.includes(post._id)"
                 class="border-top mt-4 pt-3"
               >
-                <p style="white-space: pre-wrap;">
+                <p class="preserve-lines">
                   {{ post.recipeId.summary }}
                 </p>
 
                 <h4 class="h6">Ingredients</h4>
+
                 <ul>
                   <li
                     v-for="(ingredient, index) in post.recipeId.ingredients"
@@ -912,12 +1059,12 @@ onMounted(async () => {
                 </ul>
 
                 <h4 class="h6">Instructions</h4>
+
                 <ol>
                   <li
                     v-for="instruction in post.recipeId.instructions"
                     :key="instruction.step"
-                    class="mb-2"
-                    style="white-space: pre-wrap;"
+                    class="mb-2 preserve-lines"
                   >
                     {{ instruction.description }}
                   </li>
@@ -930,3 +1077,57 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.community-heading {
+  color: #426873;
+}
+
+.recipe-title {
+  color: #4B8A6C;
+}
+
+.cuisine-badge {
+  background-color: #DCECE9;
+  color: #304D52;
+}
+
+.post-image {
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+}
+
+.preserve-lines {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.community-button {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: #4B8A6C;
+  --bs-btn-border-color: #4B8A6C;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #386850;
+  --bs-btn-hover-border-color: #386850;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #386850;
+  --bs-btn-active-border-color: #386850;
+  --bs-btn-disabled-color: #ffffff;
+  --bs-btn-disabled-bg: #4B8A6C;
+  --bs-btn-disabled-border-color: #4B8A6C;
+}
+
+.community-outline {
+  --bs-btn-color: #4B8A6C;
+  --bs-btn-border-color: #4B8A6C;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #4B8A6C;
+  --bs-btn-hover-border-color: #4B8A6C;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #386850;
+  --bs-btn-active-border-color: #386850;
+  --bs-btn-disabled-color: #4B8A6C;
+  --bs-btn-disabled-border-color: #4B8A6C;
+}
+</style>
