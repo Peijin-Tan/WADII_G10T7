@@ -11,7 +11,6 @@ const requireAuth = require('./src/middleware/auth')
 const User = require('./models/User')
 const Recipe = require('./models/Recipe')
 const Post = require('./models/Post')
-//const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 const usersRouter = require('./src/router/users')
 
@@ -80,10 +79,6 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
     })
   }
 })
-app.use('/planner', plannerRouter)
-
-// Mount admin
-//app.use('/admin', adminRouter)
 
 // Expose a simple CSRF token endpoint (uses csurf internally)
 // This endpoint will set a CSRF cookie when called by the client.

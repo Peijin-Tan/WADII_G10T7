@@ -37,21 +37,26 @@ const adminShare = computed(() => {
 })
 
 async function loadStats() {
+  if (!auth.token) {
+    error.value = 'Admin login required to view dashboard statistics.'
+    loading.value = false
+    return
+  }
+
   try {
     loading.value = true
     error.value = ''
 
-    const response = await axios.get('http://localhost:8000/admin/stats')
-    stats.value = response.data
-  } catch (err) {
-    console.error(err)
-    error.value = 'Unable to load dashboard statistics.'
     const response = await axios.get('http://localhost:8000/admin/stats', {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
     })
+
     stats.value = response.data
+  } catch (err) {
+    console.error(err)
+    error.value = err.response?.data?.message || 'Unable to load dashboard statistics.'
   } finally {
     loading.value = false
   }

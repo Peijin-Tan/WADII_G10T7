@@ -4,12 +4,6 @@ const User = require('../../models/User')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
-function verifyAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Access denied. Admins only.' })
-  }
-  next()
-}
 
 // POST /auth/login
 router.post('/login', async (req, res) => {
@@ -128,5 +122,3 @@ router.get('/me', requireAuth, (req, res) => {
 })
 
 module.exports = router;
-
-

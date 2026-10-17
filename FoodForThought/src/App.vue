@@ -1,11 +1,20 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
 const isAdminDashboard = computed(() => route.path === '/admindashboard')
+const isAdminUser = computed(() => auth.user?.role === 'admin')
 const menuOpen = ref(false)
+
+function handleLogout() {
+  auth.logout()
+  router.push('/home')
+}
 </script>
 
 <template>
@@ -38,9 +47,6 @@ const menuOpen = ref(false)
               <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
             </li>
             <li class="nav-item">
-              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
               <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
             </li>
             <li class="nav-item">
@@ -57,9 +63,17 @@ const menuOpen = ref(false)
             </div>
 
             <div class="d-flex align-items-center gap-3">
-
               <img class="app-avatar" alt="Profile"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
+
+              <button
+                v-if="isAdminUser"
+                type="button"
+                class="btn btn-outline-danger btn-sm rounded-pill px-3"
+                @click="handleLogout"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
@@ -140,7 +154,7 @@ body {
 }
 
 .app-brand {
-  font: 500 24px/32px 'Outfit', sans-serif;
+  font: 500 clamp(1.2rem, 2vw, 2rem)/1.2 'Outfit', sans-serif;
   letter-spacing: -0.01em;
   color: var(--nav-primary);
   white-space: nowrap;
@@ -154,6 +168,7 @@ body {
   border: 0;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
+  flex-shrink: 0;
 }
 
 .app-toggler:focus {
@@ -175,18 +190,19 @@ body {
 }
 
 .app-nav-link {
-  padding: 8px 16px !important;
-  border-radius: 0.5rem;
-  font: 600 14px/20px 'Inter', sans-serif;
+  padding: clamp(0.55rem, 0.8vw, 0.8rem) clamp(0.9rem, 1.8vw, 1.2rem) !important;
+  border-radius: 0.75rem;
+  font: 600 clamp(0.78rem, 1.2vw, 0.92rem)/1.35 'Inter', sans-serif;
   letter-spacing: 0.01em;
   color: var(--nav-on-surface-variant) !important;
   white-space: nowrap;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
 .app-nav-link:hover {
   background: var(--nav-surface-high);
   color: var(--nav-on-surface) !important;
+  transform: translateY(-1px);
 }
 
 .app-nav-link.router-link-active {
@@ -211,12 +227,13 @@ body {
 
 /* Search */
 .app-search {
-  width: 100%;
+  width: min(100%, 22rem);
+  min-width: 0;
 }
 
 @media (min-width: 1200px) {
   .app-search {
-    width: 280px;
+    width: 18rem;
   }
 }
 
@@ -271,7 +288,7 @@ body {
 }
 
 .app-footer-brand {
-  font: 500 20px/28px 'Outfit', sans-serif;
+  font: 500 clamp(1.1rem, 1.8vw, 1.6rem)/1.3 'Outfit', sans-serif;
   color: #32533c;
   white-space: nowrap;
 }
