@@ -13,6 +13,7 @@ const Recipe = require('./models/Recipe')
 const Post = require('./models/Post')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
+const usersRouter = require('./src/router/users')
 
 const app = express()
 app.use(cors({
@@ -40,6 +41,7 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
+app.use('/users', usersRouter)
 
 app.get('/admin/stats', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
@@ -49,21 +51,25 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
   }
 
   try {
-    const [totalUsers, totalRecipes, totalCommunityPosts, roleBreakdown] = await Promise.all([
-      User.countDocuments(),
+    const [totalRecipes, totalCommunityPosts, roleBreakdown] = await Promise.all([
       Recipe.countDocuments(),
       Post.countDocuments(),
       User.aggregate([
+        { $match: { role: { $in: ['user', 'admin'] } } },
         { $group: { _id: '$role', count: { $sum: 1 } } }
       ])
     ])
+
+    const totalAdmins = roleBreakdown.find(item => item._id === 'admin')?.count ?? 0
+    const totalRegularUsers = roleBreakdown.find(item => item._id === 'user')?.count ?? 0
+    const totalUsers = totalAdmins + totalRegularUsers
 
     const summary = {
       totalUsers,
       totalRecipes,
       totalCommunityPosts,
-      totalAdmins: roleBreakdown.find(item => item._id === 'admin')?.count ?? 0,
-      totalRegularUsers: roleBreakdown.find(item => item._id === 'user')?.count ?? 0
+      totalAdmins,
+      totalRegularUsers
     }
 
     return res.json(summary)
