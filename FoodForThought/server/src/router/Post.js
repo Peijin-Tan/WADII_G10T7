@@ -1,7 +1,9 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const Post = require('../../models/Post')
 const Like = require('../../models/Like')
 const User = require('../../models/User')
+const Recipe = require('../../models/Recipe')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
@@ -114,6 +116,30 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(500).json({
       message: 'Failed to create post'
     })
+  }
+})
+
+router.delete('/:id', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required to delete posts.' })
+  }
+
+  try {
+    const { id } = req.params
+
+    const deletedPost = await Post.findByIdAndDelete(id)
+
+    if (!deletedPost) {
+      return res.status(404).json({ message: 'Post not found.' })
+    }
+
+    return res.status(200).json({
+      message: 'Post deleted successfully.',
+      deletedPost
+    })
+  } catch (err) {
+    console.error('Delete post error:', err)
+    return res.status(500).json({ message: 'Server error while deleting post.' })
   }
 })
 

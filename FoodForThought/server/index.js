@@ -6,7 +6,6 @@ require("node:dns").setServers(["8.8.8.8", "1.1.1.1"]);
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 const cookieParser = require('cookie-parser')
-
 const authRouter = require('./src/router/auth')
 const requireAuth = require('./src/middleware/auth')
 const User = require('./models/User')
@@ -16,10 +15,8 @@ const Post = require('./models/Post')
 const postsRouter = require('./src/router/Post')
 
 const app = express()
-
 app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true,
+  origin: 'http://localhost:5173'
 }))
 
 // Basic security middlewares
@@ -119,3 +116,5 @@ async function connectDb() {
     console.log(`Server running at http://${hostname}:${port}/`);
   });
 })();
+
+

@@ -71,6 +71,8 @@ async function deletePost(postId) {
     return
   }
 
+  if (!confirm('Are you sure you want to delete this post?')) return
+
   deletingPostId.value = postId
 
   try {
@@ -80,8 +82,12 @@ async function deletePost(postId) {
       }
     })
 
+    // Filter post out of local array to reflect deletion instantly
     posts.value = posts.value.filter(post => post._id !== postId)
-    stats.value.totalCommunityPosts = Math.max(stats.value.totalCommunityPosts - 1, 0)
+    
+    if (stats.value?.totalCommunityPosts) {
+      stats.value.totalCommunityPosts = Math.max(stats.value.totalCommunityPosts - 1, 0)
+    }
   } catch (err) {
     console.error(err)
     postsError.value = err.response?.data?.message || 'Unable to delete post.'

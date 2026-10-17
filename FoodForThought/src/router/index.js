@@ -15,14 +15,13 @@ const router = createRouter({
       redirect: '/home'
     },
     {
-      path: '/NotFound',
-      name: 'NotFound',
-      component: () => import('../components/Error/NotFound.vue')
-    },
-    {
       path: '/dashboard',
       name: 'dashboard',
       component: Dashboard
+    },
+    {
+      path: '/admin',
+      redirect: '/admindashboard'
     },
     {
       path: '/admindashboard',

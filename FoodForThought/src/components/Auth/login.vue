@@ -26,7 +26,9 @@ async function handleSubmit() {
 
     auth.setLogin(response.data)
     password.value = ''
-    await router.push('/dashboard')
+
+    const isAdmin = auth.user?.role === 'admin'
+    await router.push(isAdmin ? '/admindashboard' : '/dashboard')
   } catch (err) {
     error.value =
       err.response?.data?.message || 'Unable to log in. Please try again.'
