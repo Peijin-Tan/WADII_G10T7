@@ -24,7 +24,10 @@ const menuOpen = ref(false)
         </button>
 
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <ul class="navbar-nav app-nav me-lg-auto ms-lg-4 my-3 my-lg-0">
+          <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
+            <li class="nav-item">
+              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+            </li>
             <li class="nav-item">
               <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
             </li>
