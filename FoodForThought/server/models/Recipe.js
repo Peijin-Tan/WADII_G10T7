@@ -108,6 +108,14 @@ const recipeSchema = new mongoose.Schema(
       default: 'user'
     },
 
+    createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function () {
+      return this.source === 'user'
+    }
+  },
+
     sourceUrl: {
       type: String
     }

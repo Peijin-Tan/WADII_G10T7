@@ -2,6 +2,7 @@
 const express = require('express')
 const mongoose = require('mongoose')
 const Recipe = require('../../models/Recipe')
+const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
 
@@ -54,6 +55,7 @@ router.get('/', async (req, res) => {
     }
 
     const recipes = await Recipe.find(filter)
+      .populate('createdBy', 'name')
 
     res.status(200).json({
       count: recipes.length,
@@ -160,6 +162,7 @@ router.get('/:id', async (req, res) => {
     }
 
     const recipe = await Recipe.findById(id)
+      .populate('createdBy', 'name')
 
     if (!recipe) {
       return res.status(404).json({
@@ -179,15 +182,21 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /recipes
-// Create a recipe (useful for development and testing)
-router.post('/', async (req, res) => {
+// Create a recipe for the logged-in user
+router.post('/', requireAuth, async (req, res) => {
   try {
     const recipeData = {
-  ...req.body,
-  source: 'user'
-}
+      ...req.body,
+      source: 'user',
+      createdBy: req.user._id
+    }
 
-const recipe = await Recipe.create(recipeData)
+    // Never trust a creator ID supplied by the frontend.
+    // The authenticated user's ID is assigned above.
+    const recipe = await Recipe.create(recipeData)
+
+    // Return the creator's name as well as the recipe.
+    await recipe.populate('createdBy', 'name')
 
     res.status(201).json({
       message: 'Recipe created successfully',
@@ -207,9 +216,10 @@ const recipe = await Recipe.create(recipeData)
       })
     }
 
+    console.error('Create recipe error:', error)
+
     res.status(500).json({
-      message: 'Failed to create recipe',
-      error: error.message
+      message: 'Failed to create recipe'
     })
   }
 })
