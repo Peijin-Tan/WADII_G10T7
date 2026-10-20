@@ -7,14 +7,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
-const isAdminDashboard = computed(() => route.path === '/admindashboard')
-const isAdminUser = computed(() => auth.user?.role === 'admin')
 const menuOpen = ref(false)
-
-function handleLogout() {
-  auth.logout()
-  router.push('/home')
-}
 </script>
 
 <template>
@@ -32,6 +25,7 @@ function handleLogout() {
           <span class="navbar-toggler-icon"></span>
         </button>
 
+        <!-- Collapsible area -->
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
           <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
             <li class="nav-item">
@@ -39,9 +33,6 @@ function handleLogout() {
             </li>
             <li class="nav-item">
               <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/shoppinglist" class="nav-link app-nav-link" @click="menuOpen = false">Shopping List</RouterLink>
             </li>
             <li class="nav-item">
               <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
@@ -54,26 +45,15 @@ function handleLogout() {
             </li>
           </ul>
 
-          <div class="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3 pb-3 pb-lg-0">
-            <!-- Search: in the hamburger on mobile, hidden on lg–lg, shown on xl+ -->
-            <div class="app-search d-block d-lg-none d-xl-block position-relative">
-              <span class="material-symbols-outlined app-search-icon">search</span>
-              <input type="search" class="form-control app-search-input"
-                placeholder="Search meals, pantry, ingredients..." />
-            </div>
-
+          <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
             <div class="d-flex align-items-center gap-3">
               <img class="app-avatar" alt="Profile"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-
-              <button
-                v-if="isAdminUser"
-                type="button"
-                class="btn btn-outline-danger btn-sm rounded-pill px-3"
-                @click="handleLogout"
-              >
-                Logout
-              </button>
+              <span class="d-none d-md-inline text-success">John Doe</span>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
+                </div>
             </div>
           </div>
         </div>
@@ -176,17 +156,51 @@ body {
 }
 
 /* Links: stacked list on mobile, pill group from md up */
+.app-nav-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+
 .app-nav {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   padding: 4px;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
+  min-width: 0;
 }
 
 @media (min-width: 768px) {
   .app-nav {
     flex-direction: row;
   }
+}
+
+.app-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.app-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .app-nav-link {
@@ -222,6 +236,17 @@ body {
     background: #fafaf3;
     border-radius: 0 0 1rem 1rem;
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  .app-nav-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-user-actions {
+    justify-content: flex-start;
+    width: 100%;
+    padding-top: 0.25rem;
   }
 }
 
@@ -277,46 +302,5 @@ body {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 0 0 2px var(--nav-primary-fixed);
-}
-
-/* Footer (margin-top: auto pushes it to the bottom on short pages) */
-.app-footer {
-  margin-top: auto;
-  background: #f4f4ed;
-  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.02);
-  font-family: 'Inter', sans-serif;
-}
-
-.app-footer-brand {
-  font: 500 clamp(1.1rem, 1.8vw, 1.6rem)/1.3 'Outfit', sans-serif;
-  color: #32533c;
-  white-space: nowrap;
-}
-
-.app-footer-tagline {
-  font: 400 13px/20px 'Inter', sans-serif;
-  color: #424842;
-}
-
-.app-footer-link {
-  font: 600 12px/16px 'Inter', sans-serif;
-  letter-spacing: 0.02em;
-  color: #424842;
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.app-footer-link:hover {
-  color: #1a1c18;
-}
-
-.app-footer-link.router-link-active {
-  color: #32533c;
-}
-
-.app-footer-copy {
-  font: 600 11px/14px 'Inter', sans-serif;
-  letter-spacing: 0.03em;
-  color: #727972;
 }
 </style>
