@@ -5,8 +5,6 @@ const Like = require('../../models/Like')
 const User = require('../../models/User')
 const Recipe = require('../../models/Recipe')
 const requireAuth = require('../middleware/auth')
-const mongoose = require('mongoose')
-const Recipe = require('../../models/Recipe')
 
 const router = express.Router()
 router.get('/', async (req, res) => {

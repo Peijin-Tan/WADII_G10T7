@@ -13,7 +13,10 @@ const requireAuth = require('./src/middleware/auth')
 const User = require('./models/User')
 const Recipe = require('./models/Recipe')
 const Post = require('./models/Post')
+//const adminRouter = require('./src/router/admin')
+const postsRouter = require('./src/router/Post')
 const usersRouter = require('./src/router/users')
+const plannerRouter = require('./src/router/Planner')
 
 const app = express()
 app.use(cors({
@@ -41,6 +44,7 @@ app.use(limiter)
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
 app.use('/users', usersRouter)
+app.use('/planner', plannerRouter)
 
 app.get('/admin/stats', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
