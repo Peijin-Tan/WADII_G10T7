@@ -41,8 +41,41 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
+<<<<<<< Updated upstream
 app.use('/users', usersRouter)
 app.use('/planner', plannerRouter)
+=======
+app.use('/recipes', recipeRouter)
+app.use('/planner', plannerRouter)
+
+app.get('/admin/stats', async (req, res) => {
+  try {
+    const [totalUsers, totalRecipes, totalCommunityPosts, roleBreakdown] = await Promise.all([
+      User.countDocuments(),
+      Recipe.countDocuments(),
+      Post.countDocuments(),
+      User.aggregate([
+        { $group: { _id: '$role', count: { $sum: 1 } } }
+      ])
+    ])
+
+    const summary = {
+      totalUsers,
+      totalRecipes,
+      totalCommunityPosts,
+      totalAdmins: roleBreakdown.find(item => item._id === 'admin')?.count ?? 0,
+      totalRegularUsers: roleBreakdown.find(item => item._id === 'user')?.count ?? 0
+    }
+
+    res.json(summary)
+  } catch (error) {
+    console.error('Admin stats error:', error)
+    res.status(500).json({
+      message: 'Unable to load admin statistics'
+    })
+  }
+})
+>>>>>>> Stashed changes
 
 app.get('/admin/stats', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
