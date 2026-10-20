@@ -1,4 +1,3 @@
-
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
@@ -13,7 +12,8 @@ const searchMode = ref(false)
 const auth = useAuthStore()
 const likedRecipeIds = ref([])
 const likeMessage = ref('')
-
+const likingRecipeIds = ref([])
+const loadingLikes = ref(true)
 
 async function fetchRecipes() {
   loading.value = true
@@ -85,21 +85,88 @@ function isLiked(recipe) {
   return likedRecipeIds.value.includes(getRecipeKey(recipe))
 }
 
-function toggleLike(recipe) {
+async function toggleLike(recipe) {
   likeMessage.value = ''
 
-  if (!auth.user) {
+  if (!auth.token) {
     likeMessage.value = 'Please log in to like recipes.'
     return
   }
 
   const recipeKey = getRecipeKey(recipe)
-  const index = likedRecipeIds.value.indexOf(recipeKey)
 
-  if (index === -1) {
-    likedRecipeIds.value.push(recipeKey)
-  } else {
-    likedRecipeIds.value.splice(index, 1)
+  if (
+    loadingLikes.value ||
+    likingRecipeIds.value.includes(recipeKey)
+  ) {
+    return
+  }
+
+  likingRecipeIds.value.push(recipeKey)
+
+  const config = {
+    headers: {
+      Authorization: `Bearer ${auth.token}`
+    }
+  }
+
+  try {
+    let response
+
+    if (isLiked(recipe)) {
+      response = await axios.delete(
+        `/api/recipes/${recipeKey}/like`,
+        config
+      )
+    } else {
+      response = await axios.post(
+        `/api/recipes/${recipeKey}/like`,
+        {},
+        config
+      )
+    }
+
+    const index = likedRecipeIds.value.indexOf(recipeKey)
+
+    if (response.data.liked) {
+      if (index === -1) {
+        likedRecipeIds.value.push(recipeKey)
+      }
+    } else if (index !== -1) {
+      likedRecipeIds.value.splice(index, 1)
+    }
+  } catch (err) {
+    likeMessage.value =
+      err.response?.data?.message ||
+      'Unable to update your like.'
+  } finally {
+    likingRecipeIds.value = likingRecipeIds.value.filter(
+      key => key !== recipeKey
+    )
+  }
+}
+
+async function loadMyLikes() {
+  loadingLikes.value = true
+  likedRecipeIds.value = []
+  likeMessage.value = ''
+
+  try {
+    if (!auth.token) return
+
+    const response = await axios.get('/api/recipes/liked', {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
+
+    likedRecipeIds.value = response.data
+  } catch (err) {
+    likeMessage.value =
+      err.response?.data?.message ||
+      'Unable to load your likes.'
+  } finally {
+    loadingLikes.value = false
   }
 }
 
@@ -111,10 +178,11 @@ function getRecipeLink(recipe) {
   return '/recipes/external/' + recipe.externalId
 }
 
-onMounted(fetchRecipes)
+onMounted(() => {
+  fetchRecipes()
+  loadMyLikes()
+})
 </script>
-
-
 
 <template>
   <div class="container mt-5 mb-5">
@@ -157,6 +225,10 @@ onMounted(fetchRecipes)
         Clear
       </button>
     </form>
+
+    <div v-if="likeMessage" class="alert alert-info" role="alert">
+      {{ likeMessage }}
+    </div>
 
     <div v-if="loading" class="text-center my-4">
       Loading recipes...
@@ -244,6 +316,10 @@ onMounted(fetchRecipes)
                 :class="isLiked(recipe)
                   ? 'btn-success'
                   : 'btn-outline-success'"
+                :disabled="
+                  loadingLikes ||
+                  likingRecipeIds.includes(getRecipeKey(recipe))
+                "
                 @click="toggleLike(recipe)"
               >
                 {{ isLiked(recipe) ? 'Unlike' : 'Like' }}
