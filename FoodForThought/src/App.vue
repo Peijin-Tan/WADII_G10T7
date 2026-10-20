@@ -60,7 +60,6 @@ const menuOpen = ref(false)
             </div>
           </div>
         </div>
-      </div>
     </nav>
   </header>
 
