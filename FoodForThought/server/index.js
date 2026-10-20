@@ -40,7 +40,6 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
-<<<<<<< Updated upstream
 app.use('/users', usersRouter)
 
 app.get('/admin/stats', requireAuth, async (req, res) => {
