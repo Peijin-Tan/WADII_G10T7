@@ -1,10 +1,19 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
 const menuOpen = ref(false)
+
+function handleLogout() {
+  auth.logout()
+  menuOpen.value = false
+  router.push('/home')
+}
 </script>
 
 <template>
@@ -49,12 +58,18 @@ const menuOpen = ref(false)
               <span class="d-none d-md-inline text-success">John Doe</span>
             </div>
             <div class="d-flex align-items-center gap-3">
-                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
-                </div>
+              <button
+                v-if="auth.user"
+                type="button"
+                class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm app-logout-btn"
+                @click="handleLogout"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
-     
+      </div>
     </nav>
   </header>
 
@@ -228,5 +243,19 @@ body {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 0 0 2px var(--nav-primary-fixed);
+}
+
+.app-logout-btn {
+  font: 600 12px/1 'Inter', sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.app-logout-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 8px 18px rgba(220, 53, 69, 0.22);
 }
 </style>
