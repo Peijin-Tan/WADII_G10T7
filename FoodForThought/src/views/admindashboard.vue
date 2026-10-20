@@ -15,9 +15,14 @@ const stats = ref({
 })
 
 const posts = ref([])
+const users = ref([])
 const postsLoading = ref(true)
 const postsError = ref('')
+const usersLoading = ref(false)
+const usersError = ref('')
+const showUsers = ref(false)
 const deletingPostId = ref(null)
+const deletingUserId = ref(null)
 const loading = ref(true)
 const error = ref('')
 
@@ -67,11 +72,85 @@ async function loadPosts() {
   }
 }
 
+async function loadUsers() {
+  if (!auth.token) {
+    usersError.value = 'Admin login required to view users.'
+    return
+  }
+
+  usersLoading.value = true
+  usersError.value = ''
+  showUsers.value = true
+
+  try {
+    const response = await axios.get('http://localhost:8000/users', {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
+
+    users.value = response.data
+  } catch (err) {
+    console.error(err)
+    usersError.value = err.response?.data?.message || 'Unable to load users.'
+  } finally {
+    usersLoading.value = false
+  }
+}
+
+async function deleteUser(userId) {
+  if (!auth.token) {
+    usersError.value = 'Admin login required to delete users.'
+    return
+  }
+
+  const userToDelete = users.value.find(user => user._id === userId)
+  if (!userToDelete) return
+
+  if (userToDelete._id === auth.user?._id) {
+    usersError.value = 'You cannot delete your own admin account.'
+    return
+  }
+
+  if (!confirm(`Delete ${userToDelete.name || userToDelete.email}?`)) return
+
+  deletingUserId.value = userId
+
+  try {
+    await axios.delete(`http://localhost:8000/users/${userId}`, {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
+
+    users.value = users.value.filter(user => user._id !== userId)
+
+    if (stats.value?.totalUsers) {
+      stats.value.totalUsers = Math.max(stats.value.totalUsers - 1, 0)
+    }
+
+    if (stats.value?.totalRegularUsers && userToDelete.role === 'user') {
+      stats.value.totalRegularUsers = Math.max(stats.value.totalRegularUsers - 1, 0)
+    }
+
+    if (stats.value?.totalAdmins && userToDelete.role === 'admin') {
+      stats.value.totalAdmins = Math.max(stats.value.totalAdmins - 1, 0)
+    }
+  } catch (err) {
+    console.error(err)
+    usersError.value = err.response?.data?.message || 'Unable to delete user.'
+  } finally {
+    deletingUserId.value = null
+  }
+}
+
 async function deletePost(postId) {
   if (!auth.token) {
     postsError.value = 'Admin login required to delete posts.'
     return
   }
+
+  if (!confirm('Are you sure you want to delete this post?')) return
 
   deletingPostId.value = postId
 
@@ -82,8 +161,12 @@ async function deletePost(postId) {
       }
     })
 
+    // Filter post out of local array to reflect deletion instantly
     posts.value = posts.value.filter(post => post._id !== postId)
-    stats.value.totalCommunityPosts = Math.max(stats.value.totalCommunityPosts - 1, 0)
+    
+    if (stats.value?.totalCommunityPosts) {
+      stats.value.totalCommunityPosts = Math.max(stats.value.totalCommunityPosts - 1, 0)
+    }
   } catch (err) {
     console.error(err)
     postsError.value = err.response?.data?.message || 'Unable to delete post.'
@@ -119,7 +202,7 @@ onMounted(() => {
 
     <div v-else class="row g-4">
       <div class="col-12 col-md-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100">
+        <div class="card border-0 shadow-sm h-100 cursor-pointer" @click="loadUsers()" role="button" tabindex="0" @keydown.enter.prevent="loadUsers()" @keydown.space.prevent="loadUsers()" style="cursor: pointer;">
           <div class="card-body">
             <p class="text-muted mb-2">Total Users</p>
             <h3 class="fw-bold mb-0">{{ stats.totalUsers }}</h3>
@@ -150,6 +233,47 @@ onMounted(() => {
           <div class="card-body">
             <p class="text-muted mb-2">Admin Accounts</p>
             <h3 class="fw-bold mb-0">{{ stats.totalAdmins }}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showUsers" class="card border-0 shadow-sm mt-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <h5 class="card-title mb-0">User List</h5>
+          <button class="btn btn-sm btn-outline-secondary" @click="showUsers = false">Hide list</button>
+        </div>
+
+        <p v-if="usersError" class="text-danger mb-3">{{ usersError }}</p>
+
+        <div v-if="usersLoading" class="text-center py-3">
+          <div class="spinner-border spinner-border-sm text-success" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+
+        <div v-else-if="users.length === 0" class="text-muted">No users found.</div>
+
+        <div v-else class="list-group list-group-flush">
+          <div v-for="user in users" :key="user._id" class="list-group-item px-0">
+            <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+              <div>
+                <div class="fw-semibold">{{ user.name }}</div>
+                <div class="text-muted small">{{ user.email }}</div>
+                <span class="badge mt-2" :class="user.role === 'admin' ? 'bg-primary' : 'bg-success-subtle text-success-emphasis'">
+                  {{ user.role === 'admin' ? 'Admin' : 'User' }}
+                </span>
+              </div>
+
+              <button
+                class="btn btn-outline-danger btn-sm"
+                :disabled="deletingUserId === user._id || user._id === auth.user?._id"
+                @click="deleteUser(user._id)"
+              >
+                {{ deletingUserId === user._id ? 'Deleting...' : user._id === auth.user?._id ? 'Current Admin' : 'Delete User' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

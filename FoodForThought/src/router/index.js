@@ -20,6 +20,10 @@ const router = createRouter({
       component: Dashboard
     },
     {
+      path: '/admin',
+      redirect: '/admindashboard'
+    },
+    {
       path: '/admindashboard',
       name: 'admindashboard',
       component: () => import('../views/admindashboard.vue')
