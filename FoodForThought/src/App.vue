@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
 const menuOpen = ref(false)
 </script>
@@ -10,13 +13,13 @@ const menuOpen = ref(false)
 <template>
   <header v-if="showMainNav" class="app-navbar sticky-top">
     <!-- container-fluid = spans all 12 columns edge to edge -->
-    <nav class="navbar navbar-expand-md app-navbar-bar">
-      <div class="container-fluid px-3 px-md-4">
+    <nav class="navbar navbar-expand-lg app-navbar-bar">
+      <div class="container-fluid px-3 px-lg-4">
         <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
           🌱 FoodForThought
         </RouterLink>
 
-        <!-- Hamburger: visible below md (xs + sm) -->
+        <!-- Hamburger: visible below lg (xs + sm) -->
         <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
           aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
           <span class="navbar-toggler-icon"></span>
@@ -24,7 +27,10 @@ const menuOpen = ref(false)
 
         <!-- Collapsible area -->
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <ul class="navbar-nav app-nav me-md-auto ms-md-4 my-3 my-md-0">
+          <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
+            <li class="nav-item">
+              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+            </li>
             <li class="nav-item">
               <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
             </li>
@@ -36,6 +42,9 @@ const menuOpen = ref(false)
             </li>
             <li class="nav-item">
               <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
+            </li>
+            <li class="nav-item">
+              <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
             </li>
           </ul>
 
@@ -51,11 +60,29 @@ const menuOpen = ref(false)
             </div>
           </div>
         </div>
-     
     </nav>
   </header>
 
   <RouterView />
+
+  <footer v-if="showMainNav" class="app-footer">
+    <div
+      class="container-fluid px-3 px-md-4 py-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 text-center text-md-start">
+      <div class="d-flex flex-column flex-md-row align-items-center gap-1 gap-md-2">
+        <span class="app-footer-brand">🌱 FoodForThought</span>
+      </div>
+
+      <nav class="d-flex flex-wrap justify-content-center gap-3 gap-md-4">
+        <RouterLink to="/planner" class="app-footer-link">Weekly Plan</RouterLink>
+        <RouterLink to="/shoppinglist" class="app-footer-link">Shopping List</RouterLink>
+        <RouterLink to="/dashboard" class="app-footer-link">Dashboard</RouterLink>
+        <RouterLink to="/pantry" class="app-footer-link">Pantry</RouterLink>
+        <RouterLink to="/recipes" class="app-footer-link">Recipes</RouterLink>
+      </nav>
+
+      <div class="app-footer-copy">© {{ new Date().getFullYear() }} FoodForThought. All rights reserved.</div>
+    </div>
+  </footer>
 </template>
 
 <style>
@@ -65,11 +92,15 @@ const menuOpen = ref(false)
 /* Undo the Vue starter layout (main.css turns #app into a 2-column grid at >=1024px) */
 body {
   display: block !important;
+  max-width: none !important;
   min-width: 0;
 }
 
 #app {
-  display: block !important;
+  display: flex !important;
+  /* column layout so the footer can stick to the bottom */
+  flex-direction: column;
+  min-height: 100vh;
   grid-template-columns: none !important;
   max-width: none !important;
   margin: 0 !important;
@@ -105,7 +136,7 @@ body {
 }
 
 .app-brand {
-  font: 500 24px/32px 'Outfit', sans-serif;
+  font: 500 clamp(1.2rem, 2vw, 2rem)/1.2 'Outfit', sans-serif;
   letter-spacing: -0.01em;
   color: var(--nav-primary);
   white-space: nowrap;
@@ -119,6 +150,7 @@ body {
   border: 0;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
+  flex-shrink: 0;
 }
 
 .app-toggler:focus {
@@ -126,11 +158,29 @@ body {
 }
 
 /* Links: stacked list on mobile, pill group from md up */
+.app-nav-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+
 .app-nav {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   padding: 4px;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
+  min-width: 0;
 }
 
 @media (min-width: 768px) {
@@ -139,19 +189,36 @@ body {
   }
 }
 
+.app-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.app-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .app-nav-link {
-  padding: 8px 16px !important;
-  border-radius: 0.5rem;
-  font: 600 14px/20px 'Inter', sans-serif;
+  padding: clamp(0.55rem, 0.8vw, 0.8rem) clamp(0.9rem, 1.8vw, 1.2rem) !important;
+  border-radius: 0.75rem;
+  font: 600 clamp(0.78rem, 1.2vw, 0.92rem)/1.35 'Inter', sans-serif;
   letter-spacing: 0.01em;
   color: var(--nav-on-surface-variant) !important;
   white-space: nowrap;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
 .app-nav-link:hover {
   background: var(--nav-surface-high);
   color: var(--nav-on-surface) !important;
+  transform: translateY(-1px);
 }
 
 .app-nav-link.router-link-active {
@@ -172,16 +239,28 @@ body {
     border-radius: 0 0 1rem 1rem;
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
   }
+
+  .app-nav-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-user-actions {
+    justify-content: flex-start;
+    width: 100%;
+    padding-top: 0.25rem;
+  }
 }
 
 /* Search */
 .app-search {
-  width: 100%;
+  width: min(100%, 22rem);
+  min-width: 0;
 }
 
 @media (min-width: 1200px) {
   .app-search {
-    width: 280px;
+    width: 18rem;
   }
 }
 
