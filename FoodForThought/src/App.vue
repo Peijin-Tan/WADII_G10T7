@@ -43,6 +43,9 @@ const menuOpen = ref(false)
             <li class="nav-item">
               <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
             </li>
+            <li class="nav-item">
+              <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
+            </li>
           </ul>
 
           <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
