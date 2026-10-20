@@ -13,7 +13,8 @@ const Recipe = require('./models/Recipe')
 const Post = require('./models/Post')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
-const usersRouter = require('./src/router/users')
+const recipeRouter = require('./src/router/recipe')
+const dashboardRouter = require('./src/router/analytics')
 
 const app = express()
 app.use(cors({
@@ -81,6 +82,8 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
   }
 })
 app.use('/planner', plannerRouter)
+app.use('/recipes', recipeRouter)
+app.use('/analytics', dashboardRouter)
 
 // Mount admin
 //app.use('/admin', adminRouter)
