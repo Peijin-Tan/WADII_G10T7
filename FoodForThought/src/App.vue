@@ -38,9 +38,6 @@ const menuOpen = ref(false)
               <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
             </li>
             <li class="nav-item">
-              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
               <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
             </li>
             <li class="nav-item">
