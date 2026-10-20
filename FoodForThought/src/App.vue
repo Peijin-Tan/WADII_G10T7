@@ -7,6 +7,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
+const isAdmin = computed(() => auth.user?.role === 'admin')
 const menuOpen = ref(false)
 
 function handleLogout() {
@@ -32,32 +33,33 @@ function handleLogout() {
         </button>
 
         <!-- Collapsible area -->
-        <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
-            <li class="nav-item">
-              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
-            </li>
-          </ul>
+        <div id="mainNav" class="collapse navbar-collapse app-nav-shell" :class="{ show: menuOpen }">
+          <div class="app-nav-row">
+            <ul class="navbar-nav app-nav">
+              <li v-if="isAdmin" class="nav-item">
+                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
+              </li>
+            </ul>
 
-          <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
-            <div class="d-flex align-items-center gap-3">
-              <img class="app-avatar" alt="Profile"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              <span class="d-none d-md-inline text-success">John Doe</span>
-            </div>
-            <div class="d-flex align-items-center gap-3">
+            <div class="app-user-actions">
+              <div v-if="auth.user" class="app-user-badge">
+                <img class="app-avatar" alt="Profile"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
+                <span class="d-none d-md-inline text-success">{{ auth.user.name || 'User' }}</span>
+              </div>
+
               <button
                 v-if="auth.user"
                 type="button"
@@ -144,17 +146,51 @@ body {
 }
 
 /* Links: stacked list on mobile, pill group from md up */
+.app-nav-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+
 .app-nav {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   padding: 4px;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
+  min-width: 0;
 }
 
 @media (min-width: 768px) {
   .app-nav {
     flex-direction: row;
   }
+}
+
+.app-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.app-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .app-nav-link {
@@ -189,6 +225,17 @@ body {
     background: #fafaf3;
     border-radius: 0 0 1rem 1rem;
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  .app-nav-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-user-actions {
+    justify-content: flex-start;
+    width: 100%;
+    padding-top: 0.25rem;
   }
 }
 
