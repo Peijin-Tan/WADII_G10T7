@@ -227,7 +227,10 @@ onMounted(fetchRecipes)
               Saved Recipe
             </button>
 
-            <div class="d-flex gap-2 mt-3">
+            <div
+              v-if="recipe.source !== 'spoonacular'"
+              class="d-flex gap-2 mt-3"
+            >
               <RouterLink
                 :to="getRecipeLink(recipe)"
                 class="btn btn-outline-success"
