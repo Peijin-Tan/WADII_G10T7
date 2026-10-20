@@ -155,7 +155,7 @@ onUnmounted(() => {
 
             <div v-else aria-roledescription="carousel">
               <RouterLink
-                :to="'/community/post/' + currentRecipe.postId"
+                :to="'/recipes/' + currentRecipe.recipeId"
               >
                 <img
                   v-if="currentRecipe.image"
@@ -173,7 +173,7 @@ onUnmounted(() => {
 
               <h3 class="h5 mb-2">
                 <RouterLink
-                  :to="'/community/post/' + currentRecipe.postId"
+                  :to="'/recipes/' + currentRecipe.recipeId"
                   class="recipe-title"
                 >
                   {{ currentRecipe.title }}

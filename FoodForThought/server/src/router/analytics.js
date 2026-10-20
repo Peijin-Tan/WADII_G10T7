@@ -6,9 +6,19 @@ const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
 
+// Match the keys used by the recipe-like routes.
+function getRecipeKey(recipe) {
+  if (recipe.externalId != null) {
+    return 'spoonacular-' + recipe.externalId
+  }
+
+  return 'recipe-' + recipe._id.toString()
+}
+
+// GET /analytics
+// Top five recipes by likes received this month.
 router.get('/', requireAuth, async (req, res) => {
   try {
-    // Start of the current month
     const now = new Date()
 
     const monthStart = new Date(
@@ -17,24 +27,21 @@ router.get('/', requireAuth, async (req, res) => {
       1
     )
 
-    const posts = await Post.find()
-      .populate('recipeId')
-      .lean()
+    // Spoonacular cards do not have Like buttons.
+    const recipes = await Recipe.find({
+      source: 'user'
+    }).lean()
 
     const recipeRankings = []
 
-    for (const post of posts) {
-      // Skip posts without a recipe.
-      if (!post.recipeId) {
-        continue
-      }
+    for (const recipe of recipes) {
+      const recipeKey = getRecipeKey(recipe)
 
-      // Count likes received by this post this month.
       const likeCount = await Like.countDocuments({
-        postId: post._id,
+        recipeKey: recipeKey,
         createdAt: {
-          $gte: monthStart, //greater than or equal to (start of the month)
-          $lte: now //lesser than or equal to
+          $gte: monthStart,
+          $lte: now
         }
       })
 
@@ -42,36 +49,23 @@ router.get('/', requireAuth, async (req, res) => {
         continue
       }
 
-      const recipe = post.recipeId
-
-      // Check whether this recipe is already in the rankings.
-      const existingRecipe = recipeRankings.find(
-        item => item.recipeId === recipe._id.toString()
-      )
-
-      if (existingRecipe) {
-        existingRecipe.likeCount += likeCount
-      } else {
-        recipeRankings.push({
-          postId: post._id.toString(),
-          recipeId: recipe._id.toString(),
-          title: recipe.title,
-          image: recipe.image,
-          cuisine: recipe.cuisine,
-          totalTime: recipe.totalTime,
-          likeCount: likeCount
-        })
-      }
+      recipeRankings.push({
+        recipeId: recipe._id.toString(),
+        title: recipe.title,
+        image: recipe.image,
+        cuisine: recipe.cuisine,
+        totalTime: recipe.totalTime,
+        likeCount: likeCount
+      })
     }
 
-    // Sort by likes, then alphabetically if likes are equal.
+    // Most likes first; alphabetical order breaks ties.
     recipeRankings.sort(
       (a, b) =>
         b.likeCount - a.likeCount ||
         a.title.localeCompare(b.title)
     )
 
-    // Return the top five recipes.
     return res.json(recipeRankings.slice(0, 5))
   } catch (err) {
     console.error(err)
@@ -83,6 +77,7 @@ router.get('/', requireAuth, async (req, res) => {
 })
 
 // GET /analytics/cuisines
+// Top five cuisines by recipe likes received this month.
 router.get('/cuisines', requireAuth, async (req, res) => {
   try {
     const now = new Date()
@@ -93,29 +88,31 @@ router.get('/cuisines', requireAuth, async (req, res) => {
       1
     )
 
-    const posts = await Post.find()
-      .populate('recipeId')
-      .lean()
+    const recipes = await Recipe.find({
+      source: 'user'
+    }).lean()
 
     const cuisineRankings = []
 
-    for (const post of posts) {
-      if (!post.recipeId) continue
+    for (const recipe of recipes) {
+      const recipeKey = getRecipeKey(recipe)
 
       const likeCount = await Like.countDocuments({
-        postId: post._id,
+        recipeKey: recipeKey,
         createdAt: {
           $gte: monthStart,
           $lte: now
         }
       })
 
-      if (likeCount === 0) continue
+      if (likeCount === 0) {
+        continue
+      }
 
-      // Prevent duplicate cuisine labels within the same recipe.
+      // Count each cuisine label only once per recipe.
       const countedCuisines = []
 
-      for (const value of post.recipeId.cuisine || []) {
+      for (const value of recipe.cuisine || []) {
         const cuisineName = value.trim().toLowerCase()
 
         if (
@@ -159,11 +156,12 @@ router.get('/cuisines', requireAuth, async (req, res) => {
 })
 
 // GET /analytics/activity
+// Temporarily keeps the existing post activity calculation.
+// Change this to comment activity once Comment is implemented.
 router.get('/activity', requireAuth, async (req, res) => {
   try {
     const now = new Date()
 
-    // Start at midnight six days ago, including today.
     const firstDay = new Date(
       now.getFullYear(),
       now.getMonth(),
@@ -204,4 +202,5 @@ router.get('/activity', requireAuth, async (req, res) => {
     })
   }
 })
+
 module.exports = router
