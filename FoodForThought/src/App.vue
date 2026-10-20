@@ -7,28 +7,33 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
+const isAdmin = computed(() => auth.user?.role === 'admin')
+const displayName = computed(() => auth.user?.name || 'Guest')
 const menuOpen = ref(false)
+
+function handleLogout() {
+  auth.logout()
+  menuOpen.value = false
+  router.push('/login')
+}
 </script>
 
 <template>
   <header v-if="showMainNav" class="app-navbar sticky-top">
-    <!-- container-fluid = spans all 12 columns edge to edge -->
     <nav class="navbar navbar-expand-lg app-navbar-bar">
       <div class="container-fluid px-3 px-lg-4">
         <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
           🌱 FoodForThought
         </RouterLink>
 
-        <!-- Hamburger: visible below lg (xs + sm) -->
         <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
           aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
           <span class="navbar-toggler-icon"></span>
         </button>
 
-        <!-- Collapsible area -->
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
           <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
-            <li class="nav-item">
+            <li v-if="isAdmin" class="nav-item">
               <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
             </li>
             <li class="nav-item">
@@ -52,14 +57,14 @@ const menuOpen = ref(false)
             <div class="d-flex align-items-center gap-3">
               <img class="app-avatar" alt="Profile"
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              <span class="d-none d-md-inline text-success">John Doe</span>
+              <span class="d-none d-md-inline text-success">{{ displayName }}</span>
             </div>
             <div class="d-flex align-items-center gap-3">
-                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
-                </div>
+              <button type="button" class="btn btn-link nav-link app-nav-link p-0" @click="handleLogout">Logout</button>
             </div>
           </div>
         </div>
+      </div>
     </nav>
   </header>
 
