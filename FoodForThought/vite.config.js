@@ -34,7 +34,11 @@ export default defineConfig({
       '/analytics': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-      }
+      },
+      '/activity': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })
