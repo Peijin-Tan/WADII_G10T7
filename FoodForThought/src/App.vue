@@ -305,4 +305,45 @@ body {
   object-fit: cover;
   box-shadow: 0 0 0 2px var(--nav-primary-fixed);
 }
+
+/* Footer (margin-top: auto pushes it to the bottom on short pages) */
+.app-footer {
+  margin-top: auto;
+  background: #f4f4ed;
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.02);
+  font-family: 'Inter', sans-serif;
+}
+
+.app-footer-brand {
+  font: 500 20px/28px 'Outfit', sans-serif;
+  color: #32533c;
+  white-space: nowrap;
+}
+
+.app-footer-tagline {
+  font: 400 13px/20px 'Inter', sans-serif;
+  color: #424842;
+}
+
+.app-footer-link {
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  color: #424842;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.app-footer-link:hover {
+  color: #1a1c18;
+}
+
+.app-footer-link.router-link-active {
+  color: #32533c;
+}
+
+.app-footer-copy {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.03em;
+  color: #727972;
+}
 </style>
