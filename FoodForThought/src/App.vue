@@ -60,7 +60,7 @@ function handleLogout() {
               <span class="d-none d-md-inline text-success">{{ displayName }}</span>
             </div>
             <div class="d-flex align-items-center gap-3">
-              <button type="button" class="btn btn-link nav-link app-nav-link p-0" @click="handleLogout">Logout</button>
+              <button type="button" class="btn app-logout-button" @click="handleLogout">Logout</button>
             </div>
           </div>
         </div>
@@ -218,6 +218,25 @@ body {
   color: var(--nav-on-surface-variant) !important;
   white-space: nowrap;
   transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.app-logout-button {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #ffffff !important;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.app-logout-button:hover,
+.app-logout-button:focus {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff !important;
+  transform: translateY(-1px);
 }
 
 .app-nav-link:hover {
