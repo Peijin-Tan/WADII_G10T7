@@ -19,7 +19,6 @@ const plannerRouter = require('./src/router/Planner')
 const recipeRouter = require('./src/router/recipe')
 const dashboardRouter = require('./src/router/analytics')
 const activityRouter = require('./src/router/activity')
-const usersRouter = require('./src/router/users')
 
 const app = express()
 app.use(cors({
