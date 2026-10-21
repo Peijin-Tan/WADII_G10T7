@@ -18,6 +18,7 @@ const postsRouter = require('./src/router/Post')
 const plannerRouter = require('./src/router/Planner')
 const recipeRouter = require('./src/router/recipe')
 const dashboardRouter = require('./src/router/analytics')
+const activityRouter = require('./src/router/activity')
 
 const app = express()
 app.use(cors({
@@ -45,6 +46,10 @@ app.use(limiter)
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
 app.use('/users', usersRouter)
+app.use('/planner', plannerRouter)
+app.use('/recipes', recipeRouter)
+app.use('/analytics', dashboardRouter)
+app.use('/activity', activityRouter)
 
 app.get('/admin/stats', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
@@ -83,10 +88,6 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
     })
   }
 })
-
-app.use('/planner', plannerRouter)
-app.use('/recipes', recipeRouter)
-app.use('/analytics', dashboardRouter)
 
 // Expose a simple CSRF token endpoint (uses csurf internally)
 const csrfProtection = csrf({ cookie: true })

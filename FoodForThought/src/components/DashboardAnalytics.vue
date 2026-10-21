@@ -492,10 +492,11 @@ onMounted(() => {
 
 <style scoped>
 .analytics-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E6E8E7;
-  border-radius: 14px;
+  background-color: var(--fft-card);
+  border: 1px solid rgb(194 200 192 / 40%);
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
 
 .panel-header {
@@ -504,19 +505,21 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 18px 22px;
-  border-bottom: 1px solid #EFF1EF;
+  border-bottom: 1px solid var(--fft-surface-high);
 }
 
 .panel-label {
-  color: #66716B;
-  font-size: 0.7rem;
+  color: var(--fft-secondary-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .period-label {
-  color: #7B847E;
+  color: var(--fft-muted);
+  font-family: 'Inter', sans-serif;
   font-size: 0.75rem;
 }
 
@@ -525,12 +528,12 @@ onMounted(() => {
 }
 
 .chart-introduction {
-  color: #7B847E;
+  color: var(--fft-muted);
   font-size: 0.8rem;
 }
 
 .chart-note {
-  color: #7B847E;
+  color: var(--fft-muted);
   font-size: 0.72rem;
   line-height: 1.6;
 }
@@ -562,11 +565,14 @@ onMounted(() => {
   justify-content: center;
 }
 
-.donut-total {
-  color: #303833;
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: -0.04em;
+.donut-total,
+.activity-total {
+  color: var(--fft-text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 40px;
+  letter-spacing: -0.01em;
 }
 
 .cuisine-legend-row {
@@ -574,7 +580,9 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 0;
-  border-bottom: 1px solid #F0F2F0;
+  border-bottom: 1px solid var(--fft-surface-high);
+  color: var(--fft-secondary-text);
+  font-family: 'Inter', sans-serif;
   font-size: 0.8rem;
 }
 
@@ -590,13 +598,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.activity-total {
-  color: #303833;
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: -0.04em;
-}
-
 .activity-line-chart {
   display: block;
   width: 100%;
@@ -604,13 +605,14 @@ onMounted(() => {
 }
 
 .chart-grid {
-  stroke: #E9EEEC;
+  stroke: var(--fft-surface-high);
   stroke-width: 1;
   stroke-dasharray: 3 5;
 }
 
 .chart-date {
-  fill: #7C8581;
+  fill: var(--fft-muted);
+  font-family: 'Inter', sans-serif;
   font-size: 11px;
 }
 
@@ -619,13 +621,18 @@ onMounted(() => {
 }
 
 .analytics-button {
-  --bs-btn-color: #4B8A6C;
-  --bs-btn-border-color: #CFDCD4;
-  --bs-btn-hover-color: #386850;
-  --bs-btn-hover-bg: #F0F5F2;
-  --bs-btn-hover-border-color: #4B8A6C;
-  --bs-btn-active-color: #386850;
-  --bs-btn-active-bg: #E5EEE8;
-  --bs-btn-active-border-color: #4B8A6C;
+  --bs-btn-color: var(--fft-primary);
+  --bs-btn-border-color: var(--fft-border);
+
+  --bs-btn-hover-color: var(--fft-primary-hover);
+  --bs-btn-hover-bg: var(--fft-surface-low);
+  --bs-btn-hover-border-color: var(--fft-primary);
+
+  --bs-btn-active-color: var(--fft-primary-hover);
+  --bs-btn-active-bg: var(--fft-surface-high);
+  --bs-btn-active-border-color: var(--fft-primary);
+
+  --bs-btn-disabled-color: var(--fft-muted);
+  --bs-btn-disabled-border-color: var(--fft-border);
 }
 </style>

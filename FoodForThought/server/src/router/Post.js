@@ -5,6 +5,10 @@ const Like = require('../../models/Like')
 const User = require('../../models/User')
 const Recipe = require('../../models/Recipe')
 const requireAuth = require('../middleware/auth')
+<<<<<<< HEAD
+=======
+
+>>>>>>> cc16e210b4ecf414e90f3b92c8fbff8f0568e8a8
 
 const router = express.Router()
 router.get('/', async (req, res) => {
