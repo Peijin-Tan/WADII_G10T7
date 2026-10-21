@@ -290,15 +290,6 @@ onMounted(() => {
               View Original Recipe
             </a>
 
-            <button
-              v-else
-              class="btn btn-outline-success mt-auto"
-              type="button"
-              disabled
-            >
-              Saved Recipe
-            </button>
-
             <div
               v-if="recipe.source !== 'spoonacular'"
               class="d-flex gap-2 mt-3"
