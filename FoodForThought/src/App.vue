@@ -22,48 +22,51 @@ function handleLogout() {
   <header v-if="showMainNav" class="app-navbar sticky-top">
     <nav class="navbar navbar-expand-lg app-navbar-bar">
       <div class="container-fluid px-3 px-lg-4">
-        <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
-          🌱 FoodForThought
-        </RouterLink>
+        <div class="app-nav-row">
+          <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
+            🌱 FoodForThought
+          </RouterLink>
 
-        <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
-          aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
-          <span class="navbar-toggler-icon"></span>
-        </button>
+          <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
+            aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+        </div>
 
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
-            <li v-if="isAdmin" class="nav-item">
-              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
-            </li>
-          </ul>
+          <div class="app-main-nav">
+            <ul class="navbar-nav app-nav">
+              <li v-if="isAdmin" class="nav-item">
+                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
+              </li>
+            </ul>
 
-          <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
-            <div class="d-flex align-items-center gap-3">
-              <img class="app-avatar" alt="Profile"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              <span class="d-none d-md-inline text-success">{{ displayName }}</span>
-            </div>
-            <div class="d-flex align-items-center gap-3">
+            <div class="app-user-controls">
+              <div class="d-flex align-items-center gap-3">
+                <img class="app-avatar" alt="Profile"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
+                <span class="d-none d-md-inline text-success">{{ displayName }}</span>
+              </div>
               <button type="button" class="btn app-logout-button" @click="handleLogout">Logout</button>
             </div>
           </div>
         </div>
+      </div>
     </nav>
   </header>
 
@@ -175,16 +178,42 @@ body {
   width: 100%;
 }
 
+.app-nav-row--main {
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.app-main-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+
 .app-nav {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 0.4rem;
   padding: 4px;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
   min-width: 0;
+  margin: 0 auto;
+}
+
+.app-user-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 @media (min-width: 768px) {
