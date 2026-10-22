@@ -3,6 +3,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import RecipeComments from '@/components/RecipeComments.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -236,6 +237,10 @@ onMounted(fetchRecipe)
           View Original Recipe
         </a>
       </div>
+      <RecipeComments
+        :key="recipe._id"
+        :recipe-id="recipe._id"
+      />
     </div>
   </div>
 </template>

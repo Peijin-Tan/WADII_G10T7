@@ -1,5 +1,11 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch
+} from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
@@ -12,6 +18,12 @@ const currentIndex = ref(0)
 const loadingRecipes = ref(true)
 const recipesError = ref('')
 const carouselPaused = ref(false)
+
+const mealProgress = ref(null)
+const loadingMealProgress = ref(true)
+const mealProgressError = ref('')
+
+let mealProgressRequest = 0
 
 const currentRecipe = computed(() => {
   return topRecipes.value[currentIndex.value]
@@ -44,6 +56,61 @@ async function loadTopRecipes() {
   }
 }
 
+async function loadMealProgress() {
+  const request = ++mealProgressRequest
+  const token = auth.token
+
+  mealProgress.value = null
+  mealProgressError.value = ''
+  loadingMealProgress.value = false
+
+  if (!token) {
+    mealProgressError.value =
+      'Please log in to view your meal-plan progress.'
+    return
+  }
+
+  loadingMealProgress.value = true
+
+  try {
+    const response = await axios.get(
+      '/analytics/meal-progress',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    )
+
+    if (
+      request !== mealProgressRequest ||
+      token !== auth.token
+    ) {
+      return
+    }
+
+    mealProgress.value = response.data
+  } catch (err) {
+    if (
+      request !== mealProgressRequest ||
+      token !== auth.token
+    ) {
+      return
+    }
+
+    mealProgressError.value =
+      err.response?.data?.message ||
+      'Unable to load your meal-plan progress.'
+  } finally {
+    if (
+      request === mealProgressRequest &&
+      token === auth.token
+    ) {
+      loadingMealProgress.value = false
+    }
+  }
+}
+
 function previousRecipe() {
   if (topRecipes.value.length === 0) return
 
@@ -64,10 +131,13 @@ function nextRecipe() {
   }
 }
 
+watch(() => auth.token, loadMealProgress)
+
 let carouselTimer
 
 onMounted(() => {
   loadTopRecipes()
+  loadMealProgress()
 
   carouselTimer = setInterval(() => {
     if (
@@ -110,7 +180,6 @@ onUnmounted(() => {
       </header>
 
       <div class="row g-4">
-
         <!-- Left column -->
         <div class="col-12 col-lg-5">
           <section class="dashboard-card">
@@ -123,7 +192,11 @@ onUnmounted(() => {
             </div>
 
             <div class="panel-body">
-              <p v-if="loadingRecipes" class="text-muted" role="status">
+              <p
+                v-if="loadingRecipes"
+                class="text-muted"
+                role="status"
+              >
                 Loading recipes...
               </p>
 
@@ -247,6 +320,7 @@ onUnmounted(() => {
 
         <!-- Right column -->
         <div class="col-12 col-lg-7">
+          <!-- Monthly meal-plan completion -->
           <section class="dashboard-card">
             <div class="panel-header">
               <h2 class="panel-label mb-0">
@@ -257,29 +331,97 @@ onUnmounted(() => {
             </div>
 
             <div class="panel-body">
-              <div class="d-flex justify-content-between align-items-end">
-                <div>
-                  <p class="text-muted small mb-1">Meals completed</p>
-                  <p class="progress-total mb-0">— / —</p>
-                </div>
+              <p
+                v-if="loadingMealProgress"
+                class="text-muted"
+                role="status"
+              >
+                Loading your meal-plan progress...
+              </p>
 
-                <span class="text-muted small">Not connected yet</span>
+              <div v-else-if="mealProgressError">
+                <p class="text-danger" role="alert">
+                  {{ mealProgressError }}
+                </p>
+
+                <button
+                  type="button"
+                  class="btn dashboard-outline btn-sm"
+                  @click="loadMealProgress"
+                >
+                  Try again
+                </button>
               </div>
 
-              <div class="meal-progress-box mt-3">
+              <div v-else-if="mealProgress">
                 <div
-                  class="progress"
-                  aria-label="Meal-plan progress not available yet"
-                ></div>
+                  class="d-flex justify-content-between align-items-end"
+                >
+                  <div>
+                    <p class="text-muted small mb-1">
+                      Meals completed
+                    </p>
 
-                <p class="text-muted small mt-3 mb-0">
-                  Your monthly progress will appear once meal-plan
-                  tracking is connected.
-                </p>
+                    <p class="progress-total mb-0">
+                      {{ mealProgress.completedMeals }} /
+                      {{ mealProgress.totalMeals }}
+                    </p>
+                  </div>
+
+                  <span class="text-muted small">
+                    {{ mealProgress.percentage }}% complete
+                  </span>
+                </div>
+
+                <div class="meal-progress-box mt-3">
+                  <div
+                    class="progress"
+                    role="progressbar"
+                    aria-label="Monthly meal-plan completion"
+                    :aria-valuenow="mealProgress.percentage"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <div
+                      class="progress-bar"
+                      :style="{
+                        width: mealProgress.percentage + '%'
+                      }"
+                    ></div>
+                  </div>
+
+                  <p
+                    v-if="mealProgress.totalMeals === 0"
+                    class="text-muted small mt-3 mb-0"
+                  >
+                    No meals planned for this month yet.
+                  </p>
+
+                  <p
+                    v-else
+                    class="text-muted small mt-3 mb-0"
+                  >
+                    {{ mealProgress.completedMeals }} of
+                    {{ mealProgress.totalMeals }}
+                    planned meals completed this month.
+
+                    <span v-if="mealProgress.skippedMeals > 0">
+                      {{ mealProgress.skippedMeals }} skipped.
+                    </span>
+                  </p>
+                </div>
+
+                <RouterLink
+                  to="/planner"
+                  class="btn dashboard-outline btn-sm mt-3"
+                >
+                  View Meal Plan
+                </RouterLink>
               </div>
             </div>
           </section>
 
+          <!-- Your separate comments and likes cards -->
           <div class="mt-4">
             <DashboardAnalytics section="activity" />
           </div>
@@ -347,7 +489,6 @@ onUnmounted(() => {
       </div>
     </main>
   </div>
-  
 </template>
 
 <style scoped>

@@ -9,11 +9,106 @@ const router = express.Router()
 
 const recipeFields =
   '_id title image cuisine totalTime source externalId'
-
 // All activity routes require login.
 router.use(requireAuth)
+// GET /activity/recipes/:recipeId/comments
+// Retrieve all comments on one recipe.
+router.get('/recipes/:recipeId/comments', async (req, res) => {
+  const recipeId = req.params.recipeId
 
-// GET /api/activity/comments
+  if (!mongoose.isObjectIdOrHexString(recipeId)) {
+    return res.status(400).json({
+      message: 'Invalid recipe ID'
+    })
+  }
+
+  try {
+    const recipe = await Recipe.findById(recipeId)
+      .select('_id')
+
+    if (!recipe) {
+      return res.status(404).json({
+        message: 'Recipe not found'
+      })
+    }
+
+    const comments = await Comment.find({
+      recipeId: recipeId
+    })
+      .populate('userId', 'name')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean()
+
+    return res.json(comments)
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Unable to load recipe comments'
+    })
+  }
+})
+
+// POST /activity/recipes/:recipeId/comments
+// Create a comment on one recipe.
+router.post('/recipes/:recipeId/comments', async (req, res) => {
+  const recipeId = req.params.recipeId
+
+  const body = req.body || {}
+  const content = body.content
+
+  if (!mongoose.isObjectIdOrHexString(recipeId)) {
+    return res.status(400).json({
+      message: 'Invalid recipe ID'
+    })
+  }
+
+  if (
+    typeof content !== 'string' ||
+    content.trim() === '' ||
+    content.trim().length > 2000
+  ) {
+    return res.status(400).json({
+      message: 'Comment must contain 1–2000 characters'
+    })
+  }
+
+  try {
+    const recipe = await Recipe.findById(recipeId)
+      .select('_id')
+
+    if (!recipe) {
+      return res.status(404).json({
+        message: 'Recipe not found'
+      })
+    }
+
+    const comment = await Comment.create({
+      userId: req.user._id,
+      recipeId: recipe._id,
+      content: content.trim()
+    })
+
+    // Include the author's name for immediate frontend display.
+    await comment.populate('userId', 'name')
+
+    return res.status(201).json(comment)
+  } catch (err) {
+    console.error(err)
+
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({
+        message: 'Invalid comment data'
+      })
+    }
+
+    return res.status(500).json({
+      message: 'Unable to add your comment'
+    })
+  }
+})
+
+// GET /activity/comments
 // Retrieve the logged-in user's comments and recipe details.
 router.get('/comments', async (req, res) => {
   try {
@@ -34,7 +129,7 @@ router.get('/comments', async (req, res) => {
   }
 })
 
-// PUT /api/activity/comments/:id
+// PUT /activity/comments/:id
 // Edit a comment belonging to the logged-in user.
 router.put('/comments/:id', async (req, res) => {
   const commentId = req.params.id
@@ -91,7 +186,7 @@ router.put('/comments/:id', async (req, res) => {
   }
 })
 
-// DELETE /api/activity/comments/:id
+// DELETE /activity/comments/:id
 // Delete a comment belonging to the logged-in user.
 router.delete('/comments/:id', async (req, res) => {
   const commentId = req.params.id
@@ -126,7 +221,7 @@ router.delete('/comments/:id', async (req, res) => {
   }
 })
 
-// GET /api/activity/likes
+// GET /activity/likes
 // Retrieve the logged-in user's likes with recipe previews.
 router.get('/likes', async (req, res) => {
   try {
@@ -223,7 +318,7 @@ router.get('/likes', async (req, res) => {
   }
 })
 
-// DELETE /api/activity/likes/:id
+// DELETE /activity/likes/:id
 // Remove a like belonging to the logged-in user.
 // The ID here is the Like document's ID, not the recipe ID.
 router.delete('/likes/:id', async (req, res) => {
