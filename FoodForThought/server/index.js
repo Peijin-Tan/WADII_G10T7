@@ -10,7 +10,6 @@ const authRouter = require('./src/router/auth')
 //const adminRouter = require('./src/router/admin')
 const postsRouter = require('./src/router/Post')
 const recipeRouter = require('./src/router/recipe')
-const cors = require('cors')
 
 const app = express()
 app.use(cors({
