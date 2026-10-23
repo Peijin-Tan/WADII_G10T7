@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
@@ -68,34 +68,50 @@ const cuisinePieBackground = computed(() => {
   return `conic-gradient(${slices.join(', ')})`
 })
 
-// Community activity
-const highestPostCount = computed(() => {
-  let highest = 0
+// Your activity chart colours
+const commentColour = '#548FA3'
+const likeColour = '#C98368'
 
-  for (const day of activity.value) {
-    if (day.postCount > highest) {
-      highest = day.postCount
-    }
-  }
-
-  return highest
-})
-
-const totalPosts = computed(() => {
+const totalComments = computed(() => {
   let total = 0
 
   for (const day of activity.value) {
-    total += day.postCount
+    total += day.commentCount
   }
 
   return total
 })
 
-// Use an integer scale with four equal intervals.
+const totalLikes = computed(() => {
+  let total = 0
+
+  for (const day of activity.value) {
+    total += day.likeCount
+  }
+
+  return total
+})
+
+// Find the highest value across both chart lines.
+const highestActivityCount = computed(() => {
+  let highest = 0
+
+  for (const day of activity.value) {
+    highest = Math.max(
+      highest,
+      day.commentCount,
+      day.likeCount
+    )
+  }
+
+  return highest
+})
+
+// Four equal intervals, using whole numbers.
 const chartMaximum = computed(() => {
   return Math.max(
     4,
-    Math.ceil(highestPostCount.value / 4) * 4
+    Math.ceil(highestActivityCount.value / 4) * 4
   )
 })
 
@@ -122,44 +138,82 @@ const activityPoints = computed(() => {
       ? 310
       : 40 + (i / (activity.value.length - 1)) * 540
 
-    const y = 180 - (day.postCount / chartMaximum.value) * 140
-
     points.push({
       x: x,
-      y: y,
+      commentY: 180 - (day.commentCount / chartMaximum.value) * 140,
+      likeY: 180 - (day.likeCount / chartMaximum.value) * 140,
       date: day.date,
-      postCount: day.postCount
+      commentCount: day.commentCount,
+      likeCount: day.likeCount
     })
   }
 
   return points
 })
 
-const activityLine = computed(() => {
+const commentLine = computed(() => {
   return activityPoints.value
-    .map(point => `${point.x},${point.y}`)
+    .map(point => `${point.x},${point.commentY}`)
     .join(' ')
 })
 
-const activityArea = computed(() => {
-  if (activityPoints.value.length === 0) return ''
+const likeLine = computed(() => {
+  return activityPoints.value
+    .map(point => `${point.x},${point.likeY}`)
+    .join(' ')
+})
 
-  const firstPoint = activityPoints.value[0]
-  const lastPoint =
-    activityPoints.value[activityPoints.value.length - 1]
+const activityCharts = computed(() => {
+  const charts = [
+    {
+      key: 'comments',
+      label: 'Comments',
+      colour: commentColour,
+      line: commentLine.value,
+      points: activityPoints.value.map(point => ({
+        x: point.x,
+        y: point.commentY,
+        date: point.date,
+        count: point.commentCount
+      }))
+    },
+    {
+      key: 'likes',
+      label: 'Likes',
+      colour: likeColour,
+      line: likeLine.value,
+      points: activityPoints.value.map(point => ({
+        x: point.x,
+        y: point.likeY,
+        date: point.date,
+        count: point.likeCount
+      }))
+    }
+  ]
 
-  return [
-    `${firstPoint.x},180`,
-    activityLine.value,
-    `${lastPoint.x},180`
-  ].join(' ')
+  for (const chart of charts) {
+    if (chart.points.length === 0) {
+      chart.area = ''
+      continue
+    }
+
+    const firstPoint = chart.points[0]
+    const lastPoint = chart.points[chart.points.length - 1]
+
+    chart.area = [
+      `${firstPoint.x},180`,
+      chart.line,
+      `${lastPoint.x},180`
+    ].join(' ')
+  }
+
+  return charts
 })
 
 const activityDescription = computed(() => {
   return activity.value
     .map(day => {
-      const word = day.postCount === 1 ? 'post' : 'posts'
-      return `${formatDate(day.date)}: ${day.postCount} ${word}`
+      return `${formatDate(day.date)}: ${day.commentCount} comments, ${day.likeCount} likes`
     })
     .join('. ')
 })
@@ -192,33 +246,82 @@ async function loadCuisines() {
   }
 }
 
+// Prevent responses from an earlier login replacing current data.
+let activityRequest = 0
+
 async function loadActivity() {
-  loadingActivity.value = true
+  const request = ++activityRequest
+  const token = auth.token
+
+  activity.value = []
   activityError.value = ''
+  loadingActivity.value = false
+
+  if (!token) {
+    activityError.value = 'Please log in to view your activity.'
+    return
+  }
+
+  loadingActivity.value = true
 
   try {
     const response = await axios.get('/analytics/activity', {
       headers: {
-        Authorization: `Bearer ${auth.token}`
+        Authorization: `Bearer ${token}`
       }
     })
 
+    if (
+      request !== activityRequest ||
+      token !== auth.token
+    ) {
+      return
+    }
+
     activity.value = response.data
   } catch (err) {
+    if (
+      request !== activityRequest ||
+      token !== auth.token
+    ) {
+      return
+    }
+
     activityError.value =
       err.response?.data?.message ||
-      'Unable to load community activity.'
+      'Unable to load your activity.'
   } finally {
-    loadingActivity.value = false
+    if (
+      request === activityRequest &&
+      token === auth.token
+    ) {
+      loadingActivity.value = false
+    }
   }
 }
 
+// Reload personal activity when the logged-in account changes.
+watch(() => auth.token, () => {
+  if (
+    props.section === 'all' ||
+    props.section === 'activity'
+  ) {
+    loadActivity()
+  }
+})
+
 onMounted(() => {
-  if (props.section === 'all' || props.section === 'cuisines') {
+  if (
+    props.section === 'all' ||
+    props.section === 'cuisines'
+  ) {
     loadCuisines()
   }
 
-  if (props.section === 'all' || props.section === 'activity') {
+  if (
+    props.section === 'all' ||
+    props.section === 'activity'
+  ) {
     loadActivity()
   }
 })
@@ -226,7 +329,6 @@ onMounted(() => {
 
 <template>
   <div class="row g-4 text-start">
-
     <!-- Trending cuisines -->
     <div
       v-if="props.section === 'all' || props.section === 'cuisines'"
@@ -234,12 +336,19 @@ onMounted(() => {
     >
       <section class="analytics-card">
         <div class="panel-header">
-          <h2 class="panel-label mb-0">Trending cuisines</h2>
+          <h2 class="panel-label mb-0">
+            Trending cuisines
+          </h2>
+
           <span class="period-label">This month</span>
         </div>
 
         <div class="panel-body">
-          <p v-if="loadingCuisines" class="text-muted" role="status">
+          <p
+            v-if="loadingCuisines"
+            class="text-muted"
+            role="status"
+          >
             Loading cuisines...
           </p>
 
@@ -278,11 +387,11 @@ onMounted(() => {
 
               <div class="cuisine-centre">
                 <span class="donut-total">
-                  {{ totalCuisineLikes }}
+                  {{ cuisines.length }}
                 </span>
 
                 <span class="text-muted small">
-                  Cuisine
+                  {{ cuisines.length === 1 ? 'Cuisine' : 'Cuisines' }}
                 </span>
               </div>
             </div>
@@ -309,6 +418,7 @@ onMounted(() => {
                 <span class="ms-auto text-muted text-end">
                   {{ item.likeCount }}
                   {{ item.likeCount === 1 ? 'like' : 'likes' }}
+
                   <span class="ms-2">
                     {{ cuisinePercentage(item.likeCount) }}%
                   </span>
@@ -317,79 +427,87 @@ onMounted(() => {
             </ul>
 
             <p class="chart-note mb-0">
-              Share of like counts among the top five cuisines.
+              Share of like counts among the top cuisines.
               A recipe can contribute to more than one cuisine.
             </p>
           </div>
         </div>
       </section>
     </div>
-
-    <!-- Community activity -->
+    <!-- Your activity -->
     <div
       v-if="props.section === 'all' || props.section === 'activity'"
       class="col-12"
     >
-      <section class="analytics-card">
-        <div class="panel-header">
-          <h2 class="panel-label mb-0">Community activity</h2>
-          <span class="period-label">Last 7 days</span>
-        </div>
+      <p
+        v-if="loadingActivity"
+        class="text-muted"
+        role="status"
+      >
+        Loading your activity...
+      </p>
 
+      <div v-else-if="activityError" class="analytics-card">
         <div class="panel-body">
-          <p v-if="loadingActivity" class="text-muted" role="status">
-            Loading activity...
+          <p class="text-danger" role="alert">
+            {{ activityError }}
           </p>
 
-          <div v-else-if="activityError">
-            <p class="text-danger" role="alert">
-              {{ activityError }}
-            </p>
+          <button
+            type="button"
+            class="btn analytics-button btn-sm"
+            @click="loadActivity"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
 
-            <button
-              type="button"
-              class="btn analytics-button btn-sm"
-              @click="loadActivity"
-            >
-              Try again
-            </button>
+      <p
+        v-else-if="activity.length === 0"
+        class="text-muted small"
+      >
+        No activity data available.
+      </p>
+
+      <div v-else class="d-flex flex-column gap-4">
+        <section
+          v-for="chart in activityCharts"
+          :key="chart.key"
+          class="analytics-card"
+        >
+          <div class="panel-header">
+            <h2 class="panel-label mb-0">
+              Your {{ chart.label }}
+            </h2>
+
+            <span class="period-label">Last 7 days</span>
           </div>
 
-          <p
-            v-else-if="activity.length === 0"
-            class="text-muted small mb-0"
-          >
-            No activity data available.
-          </p>
+          <div class="panel-body activity-chart-body">
+            <div class="d-flex align-items-baseline gap-2">
+              <span class="activity-total">
+                {{ chart.key === 'comments' ? totalComments : totalLikes }}
+              </span>
 
-          <div v-else>
-            <div class="mb-1">
-              <span class="activity-total">{{ totalPosts }}</span>
-
-              <span class="text-muted small ms-2">
-                {{ totalPosts === 1 ? 'post shared' : 'posts shared' }}
+              <span class="text-muted small">
+                {{ chart.label.toLowerCase() }} this period
               </span>
             </div>
 
-            <p class="chart-introduction mb-3">
-              Daily posts across the community, including today.
-            </p>
-
-            <p v-if="totalPosts === 0" class="text-muted small">
-              No posts shared during this period.
-            </p>
-
             <svg
-              viewBox="0 0 620 225"
+              viewBox="0 15 620 205"
               class="activity-line-chart"
               role="img"
-              aria-label="Daily community posts over the last seven days"
+              :aria-label="chart.label + ' over the last seven days'"
             >
-              <desc>{{ activityDescription }}</desc>
+              <desc>
+                {{ chart.label }} per day, including today.
+              </desc>
 
               <defs>
                 <linearGradient
-                  id="communityActivityFill"
+                  :id="'activityFill-' + chart.key"
                   x1="0%"
                   y1="0%"
                   x2="0%"
@@ -397,20 +515,23 @@ onMounted(() => {
                 >
                   <stop
                     offset="0%"
-                    stop-color="#82B2C0"
-                    stop-opacity="0.4"
+                    :stop-color="chart.colour"
+                    stop-opacity="0.3"
                   />
 
                   <stop
                     offset="100%"
-                    stop-color="#82B2C0"
+                    :stop-color="chart.colour"
                     stop-opacity="0"
                   />
                 </linearGradient>
               </defs>
 
               <!-- Grid and scale -->
-              <g v-for="tick in chartTicks" :key="tick.value">
+              <g
+                v-for="tick in chartTicks"
+                :key="tick.value"
+              >
                 <line
                   x1="40"
                   :y1="tick.y"
@@ -429,17 +550,17 @@ onMounted(() => {
                 </text>
               </g>
 
-              <!-- Faded area -->
+              <!-- Shaded area -->
               <polygon
-                :points="activityArea"
-                fill="url(#communityActivityFill)"
+                :points="chart.area"
+                :fill="'url(#activityFill-' + chart.key + ')'"
               />
 
-              <!-- Connecting line -->
+              <!-- Line -->
               <polyline
-                :points="activityLine"
+                :points="chart.line"
                 fill="none"
-                stroke="#548FA3"
+                :stroke="chart.colour"
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -447,30 +568,22 @@ onMounted(() => {
 
               <!-- Points and dates -->
               <g
-                v-for="(point, index) in activityPoints"
+                v-for="point in chart.points"
                 :key="point.date"
                 class="chart-point"
               >
-                <title>
-                  {{ formatDate(point.date) }}:
-                  {{ point.postCount }}
-                  {{ point.postCount === 1 ? 'post' : 'posts' }}
-                </title>
-
                 <circle
                   :cx="point.x"
                   :cy="point.y"
-                  r="12"
-                  fill="transparent"
-                />
-
-                <circle
-                  :cx="point.x"
-                  :cy="point.y"
-                  :r="index === activityPoints.length - 1 ? 4 : 2"
-                  fill="#548FA3"
+                  r="3"
+                  :fill="chart.colour"
                   class="chart-dot"
-                />
+                >
+                  <title>
+                    {{ formatDate(point.date) }}:
+                    {{ point.count }} {{ chart.label }}
+                  </title>
+                </circle>
 
                 <text
                   :x="point.x"
@@ -483,19 +596,19 @@ onMounted(() => {
               </g>
             </svg>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
-
   </div>
 </template>
 
 <style scoped>
 .analytics-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E6E8E7;
-  border-radius: 14px;
+  background-color: var(--fft-card);
+  border: 1px solid rgb(194 200 192 / 40%);
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
 
 .panel-header {
@@ -504,19 +617,21 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 18px 22px;
-  border-bottom: 1px solid #EFF1EF;
+  border-bottom: 1px solid var(--fft-surface-high);
 }
 
 .panel-label {
-  color: #66716B;
-  font-size: 0.7rem;
+  color: var(--fft-secondary-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .period-label {
-  color: #7B847E;
+  color: var(--fft-muted);
+  font-family: 'Inter', sans-serif;
   font-size: 0.75rem;
 }
 
@@ -525,12 +640,12 @@ onMounted(() => {
 }
 
 .chart-introduction {
-  color: #7B847E;
+  color: var(--fft-muted);
   font-size: 0.8rem;
 }
 
 .chart-note {
-  color: #7B847E;
+  color: var(--fft-muted);
   font-size: 0.72rem;
   line-height: 1.6;
 }
@@ -562,11 +677,14 @@ onMounted(() => {
   justify-content: center;
 }
 
-.donut-total {
-  color: #303833;
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: -0.04em;
+.donut-total,
+.activity-total {
+  color: var(--fft-text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 40px;
+  letter-spacing: -0.01em;
 }
 
 .cuisine-legend-row {
@@ -574,7 +692,9 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 0;
-  border-bottom: 1px solid #F0F2F0;
+  border-bottom: 1px solid var(--fft-surface-high);
+  color: var(--fft-secondary-text);
+  font-family: 'Inter', sans-serif;
   font-size: 0.8rem;
 }
 
@@ -590,11 +710,11 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.activity-total {
-  color: #303833;
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: -0.04em;
+.activity-legend-line {
+  display: inline-block;
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
 }
 
 .activity-line-chart {
@@ -603,14 +723,31 @@ onMounted(() => {
   height: auto;
 }
 
+.activity-chart-panel {
+  padding-top: 16px;
+  border-top: 1px solid var(--fft-surface-high);
+}
+
+.activity-chart-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  color: var(--fft-secondary-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .chart-grid {
-  stroke: #E9EEEC;
+  stroke: var(--fft-surface-high);
   stroke-width: 1;
   stroke-dasharray: 3 5;
 }
 
 .chart-date {
-  fill: #7C8581;
+  fill: var(--fft-muted);
+  font-family: 'Inter', sans-serif;
   font-size: 11px;
 }
 
@@ -619,13 +756,18 @@ onMounted(() => {
 }
 
 .analytics-button {
-  --bs-btn-color: #4B8A6C;
-  --bs-btn-border-color: #CFDCD4;
-  --bs-btn-hover-color: #386850;
-  --bs-btn-hover-bg: #F0F5F2;
-  --bs-btn-hover-border-color: #4B8A6C;
-  --bs-btn-active-color: #386850;
-  --bs-btn-active-bg: #E5EEE8;
-  --bs-btn-active-border-color: #4B8A6C;
+  --bs-btn-color: var(--fft-primary);
+  --bs-btn-border-color: var(--fft-border);
+
+  --bs-btn-hover-color: var(--fft-primary-hover);
+  --bs-btn-hover-bg: var(--fft-surface-low);
+  --bs-btn-hover-border-color: var(--fft-primary);
+
+  --bs-btn-active-color: var(--fft-primary-hover);
+  --bs-btn-active-bg: var(--fft-surface-high);
+  --bs-btn-active-border-color: var(--fft-primary);
+
+  --bs-btn-disabled-color: var(--fft-muted);
+  --bs-btn-disabled-border-color: var(--fft-border);
 }
 </style>

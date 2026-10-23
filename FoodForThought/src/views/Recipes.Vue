@@ -1,13 +1,19 @@
-
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { RouterLink } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const recipes = ref([])
 const search = ref('')
 const loading = ref(false)
 const error = ref('')
 const searchMode = ref(false)
+const auth = useAuthStore()
+const likedRecipeIds = ref([])
+const likeMessage = ref('')
+const likingRecipeIds = ref([])
+const loadingLikes = ref(true)
 
 async function fetchRecipes() {
   loading.value = true
@@ -67,10 +73,116 @@ async function searchRecipes() {
   }
 }
 
-onMounted(fetchRecipes)
+function getRecipeKey(recipe) {
+  if (recipe.externalId != null) {
+    return 'spoonacular-' + recipe.externalId
+  }
+
+  return 'recipe-' + recipe._id
+}
+
+function isLiked(recipe) {
+  return likedRecipeIds.value.includes(getRecipeKey(recipe))
+}
+
+async function toggleLike(recipe) {
+  likeMessage.value = ''
+
+  if (!auth.token) {
+    likeMessage.value = 'Please log in to like recipes.'
+    return
+  }
+
+  const recipeKey = getRecipeKey(recipe)
+
+  if (
+    loadingLikes.value ||
+    likingRecipeIds.value.includes(recipeKey)
+  ) {
+    return
+  }
+
+  likingRecipeIds.value.push(recipeKey)
+
+  const config = {
+    headers: {
+      Authorization: `Bearer ${auth.token}`
+    }
+  }
+
+  try {
+    let response
+
+    if (isLiked(recipe)) {
+      response = await axios.delete(
+        `/api/recipes/${recipeKey}/like`,
+        config
+      )
+    } else {
+      response = await axios.post(
+        `/api/recipes/${recipeKey}/like`,
+        {},
+        config
+      )
+    }
+
+    const index = likedRecipeIds.value.indexOf(recipeKey)
+
+    if (response.data.liked) {
+      if (index === -1) {
+        likedRecipeIds.value.push(recipeKey)
+      }
+    } else if (index !== -1) {
+      likedRecipeIds.value.splice(index, 1)
+    }
+  } catch (err) {
+    likeMessage.value =
+      err.response?.data?.message ||
+      'Unable to update your like.'
+  } finally {
+    likingRecipeIds.value = likingRecipeIds.value.filter(
+      key => key !== recipeKey
+    )
+  }
+}
+
+async function loadMyLikes() {
+  loadingLikes.value = true
+  likedRecipeIds.value = []
+  likeMessage.value = ''
+
+  try {
+    if (!auth.token) return
+
+    const response = await axios.get('/api/recipes/liked', {
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
+
+    likedRecipeIds.value = response.data
+  } catch (err) {
+    likeMessage.value =
+      err.response?.data?.message ||
+      'Unable to load your likes.'
+  } finally {
+    loadingLikes.value = false
+  }
+}
+
+function getRecipeLink(recipe) {
+  if (recipe._id) {
+    return '/recipes/' + recipe._id
+  }
+
+  return '/recipes/external/' + recipe.externalId
+}
+
+onMounted(() => {
+  fetchRecipes()
+  loadMyLikes()
+})
 </script>
-
-
 
 <template>
   <div class="container mt-5 mb-5">
@@ -113,6 +225,10 @@ onMounted(fetchRecipes)
         Clear
       </button>
     </form>
+
+    <div v-if="likeMessage" class="alert alert-info" role="alert">
+      {{ likeMessage }}
+    </div>
 
     <div v-if="loading" class="text-center my-4">
       Loading recipes...
@@ -174,14 +290,32 @@ onMounted(fetchRecipes)
               View Original Recipe
             </a>
 
-            <button
-              v-else
-              class="btn btn-outline-success mt-auto"
-              type="button"
-              disabled
+            <div
+              v-if="recipe.source !== 'spoonacular'"
+              class="d-flex gap-2 mt-3"
             >
-              Saved Recipe
-            </button>
+              <RouterLink
+                :to="getRecipeLink(recipe)"
+                class="btn btn-outline-success"
+              >
+                View Recipe
+              </RouterLink>
+
+              <button
+                type="button"
+                class="btn"
+                :class="isLiked(recipe)
+                  ? 'btn-success'
+                  : 'btn-outline-success'"
+                :disabled="
+                  loadingLikes ||
+                  likingRecipeIds.includes(getRecipeKey(recipe))
+                "
+                @click="toggleLike(recipe)"
+              >
+                {{ isLiked(recipe) ? 'Unlike' : 'Like' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

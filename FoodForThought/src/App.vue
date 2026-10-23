@@ -7,59 +7,66 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
+const isAdmin = computed(() => auth.user?.role === 'admin')
+const displayName = computed(() => auth.user?.name || 'Guest')
 const menuOpen = ref(false)
+
+function handleLogout() {
+  auth.logout()
+  menuOpen.value = false
+  router.push('/login')
+}
 </script>
 
 <template>
   <header v-if="showMainNav" class="app-navbar sticky-top">
-    <!-- container-fluid = spans all 12 columns edge to edge -->
     <nav class="navbar navbar-expand-lg app-navbar-bar">
       <div class="container-fluid px-3 px-lg-4">
-        <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
-          🌱 FoodForThought
-        </RouterLink>
+        <div class="app-nav-row">
+          <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
+            🌱 FoodForThought
+          </RouterLink>
 
-        <!-- Hamburger: visible below lg (xs + sm) -->
-        <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
-          aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
-          <span class="navbar-toggler-icon"></span>
-        </button>
+          <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
+            aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+        </div>
 
-        <!-- Collapsible area -->
         <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <ul class="navbar-nav app-nav w-100 flex-grow-1 align-items-md-center ms-md-4 my-3 my-md-0">
-            <li class="nav-item">
-              <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
-            </li>
-          </ul>
+          <div class="app-main-nav">
+            <ul class="navbar-nav app-nav">
+              <li v-if="isAdmin" class="nav-item">
+                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
+              </li>
+            </ul>
 
-          <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-3 pb-3 pb-md-0">
-            <div class="d-flex align-items-center gap-3">
-              <img class="app-avatar" alt="Profile"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-              <span class="d-none d-md-inline text-success">John Doe</span>
-            </div>
-            <div class="d-flex align-items-center gap-3">
-                  <RouterLink to="/home" class="nav-link app-nav-link" @click="menuOpen = false">Logout</RouterLink> 
-                </div>
+            <div class="app-user-controls">
+              <div class="d-flex align-items-center gap-3">
+                <img class="app-avatar" alt="Profile"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
+                <span class="d-none d-md-inline text-success">{{ displayName }}</span>
+              </div>
+              <button type="button" class="btn app-logout-button" @click="handleLogout">Logout</button>
             </div>
           </div>
         </div>
+      </div>
     </nav>
   </header>
 
@@ -171,16 +178,42 @@ body {
   width: 100%;
 }
 
+.app-nav-row--main {
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.app-main-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+
 .app-nav {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 0.4rem;
   padding: 4px;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
   min-width: 0;
+  margin: 0 auto;
+}
+
+.app-user-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 @media (min-width: 768px) {
@@ -213,6 +246,25 @@ body {
   color: var(--nav-on-surface-variant) !important;
   white-space: nowrap;
   transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.app-logout-button {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #ffffff !important;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.app-logout-button:hover,
+.app-logout-button:focus {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff !important;
+  transform: translateY(-1px);
 }
 
 .app-nav-link:hover {
@@ -304,5 +356,46 @@ body {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 0 0 2px var(--nav-primary-fixed);
+}
+
+/* Footer (margin-top: auto pushes it to the bottom on short pages) */
+.app-footer {
+  margin-top: auto;
+  background: #f4f4ed;
+  box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.02);
+  font-family: 'Inter', sans-serif;
+}
+
+.app-footer-brand {
+  font: 500 20px/28px 'Outfit', sans-serif;
+  color: #32533c;
+  white-space: nowrap;
+}
+
+.app-footer-tagline {
+  font: 400 13px/20px 'Inter', sans-serif;
+  color: #424842;
+}
+
+.app-footer-link {
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  color: #424842;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.app-footer-link:hover {
+  color: #1a1c18;
+}
+
+.app-footer-link.router-link-active {
+  color: #32533c;
+}
+
+.app-footer-copy {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.03em;
+  color: #727972;
 }
 </style>

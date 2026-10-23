@@ -1,14 +1,24 @@
 const express = require('express')
-const Post = require('../../models/Post')
+const Comment = require('../../models/Comment')
 const Like = require('../../models/Like')
 const Recipe = require('../../models/Recipe')
+const MealPlan = require('../../models/MealPlan')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
 
+function getRecipeKey(recipe) {
+  if (recipe.externalId != null) {
+    return 'spoonacular-' + recipe.externalId
+  }
+
+  return 'recipe-' + recipe._id.toString()
+}
+
+// GET /analytics
+// Top five recipes by likes received this month.
 router.get('/', requireAuth, async (req, res) => {
   try {
-    // Start of the current month
     const now = new Date()
 
     const monthStart = new Date(
@@ -17,24 +27,20 @@ router.get('/', requireAuth, async (req, res) => {
       1
     )
 
-    const posts = await Post.find()
-      .populate('recipeId')
-      .lean()
+    const recipes = await Recipe.find({
+      source: 'user'
+    }).lean()
 
     const recipeRankings = []
 
-    for (const post of posts) {
-      // Skip posts without a recipe.
-      if (!post.recipeId) {
-        continue
-      }
+    for (const recipe of recipes) {
+      const recipeKey = getRecipeKey(recipe)
 
-      // Count likes received by this post this month.
       const likeCount = await Like.countDocuments({
-        postId: post._id,
+        recipeKey: recipeKey,
         createdAt: {
-          $gte: monthStart, //greater than or equal to (start of the month)
-          $lte: now //lesser than or equal to
+          $gte: monthStart,
+          $lte: now
         }
       })
 
@@ -42,36 +48,22 @@ router.get('/', requireAuth, async (req, res) => {
         continue
       }
 
-      const recipe = post.recipeId
-
-      // Check whether this recipe is already in the rankings.
-      const existingRecipe = recipeRankings.find(
-        item => item.recipeId === recipe._id.toString()
-      )
-
-      if (existingRecipe) {
-        existingRecipe.likeCount += likeCount
-      } else {
-        recipeRankings.push({
-          postId: post._id.toString(),
-          recipeId: recipe._id.toString(),
-          title: recipe.title,
-          image: recipe.image,
-          cuisine: recipe.cuisine,
-          totalTime: recipe.totalTime,
-          likeCount: likeCount
-        })
-      }
+      recipeRankings.push({
+        recipeId: recipe._id.toString(),
+        title: recipe.title,
+        image: recipe.image,
+        cuisine: recipe.cuisine,
+        totalTime: recipe.totalTime,
+        likeCount: likeCount
+      })
     }
 
-    // Sort by likes, then alphabetically if likes are equal.
     recipeRankings.sort(
       (a, b) =>
         b.likeCount - a.likeCount ||
         a.title.localeCompare(b.title)
     )
 
-    // Return the top five recipes.
     return res.json(recipeRankings.slice(0, 5))
   } catch (err) {
     console.error(err)
@@ -83,6 +75,7 @@ router.get('/', requireAuth, async (req, res) => {
 })
 
 // GET /analytics/cuisines
+// Trending cuisines based on recipe likes received this month.
 router.get('/cuisines', requireAuth, async (req, res) => {
   try {
     const now = new Date()
@@ -93,29 +86,30 @@ router.get('/cuisines', requireAuth, async (req, res) => {
       1
     )
 
-    const posts = await Post.find()
-      .populate('recipeId')
-      .lean()
+    const recipes = await Recipe.find({
+      source: 'user'
+    }).lean()
 
     const cuisineRankings = []
 
-    for (const post of posts) {
-      if (!post.recipeId) continue
+    for (const recipe of recipes) {
+      const recipeKey = getRecipeKey(recipe)
 
       const likeCount = await Like.countDocuments({
-        postId: post._id,
+        recipeKey: recipeKey,
         createdAt: {
           $gte: monthStart,
           $lte: now
         }
       })
 
-      if (likeCount === 0) continue
+      if (likeCount === 0) {
+        continue
+      }
 
-      // Prevent duplicate cuisine labels within the same recipe.
       const countedCuisines = []
 
-      for (const value of post.recipeId.cuisine || []) {
+      for (const value of recipe.cuisine || []) {
         const cuisineName = value.trim().toLowerCase()
 
         if (
@@ -159,11 +153,11 @@ router.get('/cuisines', requireAuth, async (req, res) => {
 })
 
 // GET /analytics/activity
+// Your comments and likes over the last seven days.
 router.get('/activity', requireAuth, async (req, res) => {
   try {
     const now = new Date()
 
-    // Start at midnight six days ago, including today.
     const firstDay = new Date(
       now.getFullYear(),
       now.getMonth(),
@@ -181,7 +175,17 @@ router.get('/activity', requireAuth, async (req, res) => {
       const dayEnd = new Date(dayStart)
       dayEnd.setDate(dayEnd.getDate() + 1)
 
-      const postCount = await Post.countDocuments({
+      const commentCount = await Comment.countDocuments({
+        userId: req.user._id,
+        createdAt: {
+          $gte: dayStart,
+          $lt: dayEnd,
+          $lte: now
+        }
+      })
+
+      const likeCount = await Like.countDocuments({
+        userId: req.user._id,
         createdAt: {
           $gte: dayStart,
           $lt: dayEnd,
@@ -191,7 +195,8 @@ router.get('/activity', requireAuth, async (req, res) => {
 
       activity.push({
         date: dayStart,
-        postCount: postCount
+        commentCount: commentCount,
+        likeCount: likeCount
       })
     }
 
@@ -200,8 +205,98 @@ router.get('/activity', requireAuth, async (req, res) => {
     console.error(err)
 
     return res.status(500).json({
-      message: 'Failed to retrieve community activity'
+      message: 'Failed to retrieve your activity'
     })
   }
 })
+
+// GET /analytics/meal-progress
+// Completion of meals scheduled within the current month.
+router.get('/meal-progress', requireAuth, async (req, res) => {
+  try {
+    // The meal-plan model stores weekStart at Singapore midnight.
+    const singaporeOffset = 8 * 60 * 60 * 1000
+    const oneDay = 24 * 60 * 60 * 1000
+
+    const singaporeNow = new Date(
+      Date.now() + singaporeOffset
+    )
+
+    const year = singaporeNow.getUTCFullYear()
+    const month = singaporeNow.getUTCMonth()
+
+    const monthStart = new Date(
+      Date.UTC(year, month, 1) - singaporeOffset
+    )
+
+    const monthEnd = new Date(
+      Date.UTC(year, month + 1, 1) - singaporeOffset
+    )
+
+    // Include weeks beginning last month that overlap this month.
+    const earliestWeekStart = new Date(
+      monthStart.getTime() - 6 * oneDay
+    )
+
+    const plans = await MealPlan.find({
+      userId: req.user._id,
+      weekStart: {
+        $gte: earliestWeekStart,
+        $lt: monthEnd
+      }
+    })
+      .select('weekStart entries')
+      .lean()
+
+    let totalMeals = 0
+    let completedMeals = 0
+    let skippedMeals = 0
+
+    for (const plan of plans) {
+      for (const entry of plan.entries) {
+        const mealDate = new Date(
+          new Date(plan.weekStart).getTime() +
+          entry.dayOfWeek * oneDay
+        )
+
+        if (
+          mealDate < monthStart ||
+          mealDate >= monthEnd
+        ) {
+          continue
+        }
+
+        totalMeals++
+
+        if (entry.status === 'Cooked') {
+          completedMeals++
+        } else if (entry.status === 'Skipped') {
+          skippedMeals++
+        }
+      }
+    }
+
+    let percentage = 0
+
+    if (totalMeals > 0) {
+      percentage = Math.round(
+        completedMeals / totalMeals * 100
+      )
+    }
+
+    return res.json({
+      totalMeals: totalMeals,
+      completedMeals: completedMeals,
+      skippedMeals: skippedMeals,
+      percentage: percentage
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to retrieve meal-plan progress'
+    })
+  }
+})
+
 module.exports = router
