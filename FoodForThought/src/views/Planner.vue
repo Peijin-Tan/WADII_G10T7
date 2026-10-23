@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import viewRecipeModal from '../components/Mealplan/viewRecipe.vue'
 import swapRecipeModal from '../components/Mealplan/swapRecipe.vue'
 import addMealModal from '../components/Mealplan/addmeal.vue'
@@ -13,11 +15,29 @@ import addMealModal from '../components/Mealplan/addmeal.vue'
 // All planner requests go to the Express router mounted at /planner.
 const api = axios.create({ baseURL: 'http://localhost:8000/planner' })
 
+// The login page saves the JWT in the auth store (persisted in localStorage as 'foodforthought_auth').
+// We only send the token: the server works out the userId from it (requireAuth -> req.user),
+// so the page never needs to know or send the userId itself.
+const auth = useAuthStore()
+const router = useRouter()
+
+// send the login token with every planner request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
   return config
 })
+
+// no token / expired token (they last 1h) -> log out and go to the login page
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      auth.logout()
+      router.push('/login')
+    }
+    return Promise.reject(err)
+  }
+)
 
 /* ---------- Date helpers ---------- */
 function addDays(date, n) {
