@@ -4,9 +4,7 @@ import Dashboard from '../views/Dashboard.vue'
 import Pantry from '../views/Pantry.vue'
 import Recipes from '../views/Recipes.vue'
 import RecipeDetail from '../views/RecipeDetail.vue'
-import AdminDashboard from '../views/admindashboard.vue'
 import NotFound from '../components/Error/NotFound.vue'
-import Community from '../views/Community.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -25,21 +23,17 @@ const router = createRouter({
       redirect: '/admindashboard'
     },
     {
+      // Admin-only page: the beforeEach guard below checks meta.requiresAdmin
       path: '/admindashboard',
       name: 'admindashboard',
-      component: () => import('../views/admindashboard.vue')
-    },
-    {
-      component: AdminDashboard,
+      component: () => import('../views/admindashboard.vue'),
       meta: { requiresAdmin: true }
     },
-
     {
       path: '/pantry',
       name: 'pantry',
       component: Pantry
     },
-
     {
       path: '/recipes',
       name: 'recipes',
@@ -89,6 +83,12 @@ const router = createRouter({
       name: 'community-recipe',
       component: () => import('@/views/CommunityRecipe.vue')
     },
+    {
+      // Catch-all: any unknown URL shows the NotFound page
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: NotFound
+    }
   ],
 })
 
