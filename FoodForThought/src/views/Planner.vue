@@ -277,9 +277,42 @@ async function addMealToPlan(payload) {
   activeIndex.value = dayOfWeek // jump to the day the meal was added to
 }
 
-// from viewRecipe.vue (and the "Mark Cooked" button): { entryId, status }
+// from viewRecipe.vue and the status dropdown on each card: { entryId, status }
 function onStatusChange({ entryId, status }) {
   return saveChange(api.patch(`/entries/${entryId}`, { status }))
+}
+
+/* ---------- Card controls: status + meal time ---------- */
+// value = what the database stores, label/icon/tone = how the picker on the card looks
+const STATUS_OPTIONS = [
+  { value: 'Planned', label: 'In Progress', icon: 'pending', tone: 'planned' },
+  { value: 'Cooked', label: 'Logged Cooked', icon: 'check_circle', tone: 'cooked' },
+  { value: 'Skipped', label: 'Skipped', icon: 'block', tone: 'skipped' },
+]
+const SLOT_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast', icon: 'bakery_dining' },
+  { value: 'lunch', label: 'Lunch', icon: 'lunch_dining' },
+  { value: 'dinner', label: 'Dinner', icon: 'dinner_dining' },
+  { value: 'snack', label: 'Snack', icon: 'cookie' },
+]
+const statusMeta = (status) => STATUS_OPTIONS.find((s) => s.value === status) || STATUS_OPTIONS[0]
+const slotMeta = (slot) => SLOT_OPTIONS.find((s) => s.value === slot) || SLOT_OPTIONS[0]
+
+// The pickers always show the saved value (not v-model), so the server stays the source of truth.
+// If a save fails, bumping this key re-draws the pickers back to the saved value.
+const controlsKey = ref(0)
+
+async function changeStatus(entry, status) {
+  if (status === entry.status) return
+  await onStatusChange({ entryId: entry.id, status })
+  if (errorMsg.value) controlsKey.value++
+}
+
+// Moving to a meal time that's already taken that day swaps the two meals (handled by the server)
+async function changeMealTime(entry, slot) {
+  if (slot === entry.slotKey) return
+  await saveChange(api.patch(`/entries/${entry.id}`, { mealSlot: slot }))
+  if (errorMsg.value) controlsKey.value++
 }
 
 // from swapRecipe.vue: { entryId, recipe }
@@ -552,14 +585,40 @@ function sendToGrocery() {
                             </div>
                           </div>
 
+                          <!-- Status + meal time -->
+                          <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row">
+                            <!-- Status -->
+                            <div class="fft-picker" :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Status</span>
+                                <span class="fft-picker-value">{{ statusMeta(entry.status).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status" :disabled="saving"
+                                @change="changeStatus(entry, $event.target.value)">
+                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+
+                            <!-- Meal time -->
+                            <div class="fft-picker" :class="{ 'is-disabled': saving }"
+                              title="Moving to a meal time that's already taken swaps the two meals">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Meal time</span>
+                                <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey" :disabled="saving"
+                                @change="changeMealTime(entry, $event.target.value)">
+                                <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+                          </div>
+
                           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                             <div class="d-flex align-items-center gap-2">
-                              <button v-if="entry.status === 'Planned'"
-                                class="btn fft-btn-primary fft-btn-lg d-flex align-items-center gap-2" type="button"
-                                :disabled="saving" @click="onStatusChange({ entryId: entry.id, status: 'Cooked' })">
-                                <span class="material-symbols-outlined" style="font-size: 18px">done</span>
-                                <span>Mark Cooked</span>
-                              </button>
                               <button class="btn fft-btn-soft fft-btn-lg d-flex align-items-center gap-1" type="button"
                                 @click="selectedEntry = entry">
                                 <span class="material-symbols-outlined" style="font-size: 18px">menu_book</span>
@@ -633,11 +692,37 @@ function sendToGrocery() {
                         </div>
 
                         <div class="d-flex flex-md-column align-items-stretch justify-content-end flex-wrap gap-2 flex-shrink-0">
-                          <button v-if="entry.status === 'Planned'"
-                            class="btn fft-btn-primary d-flex align-items-center gap-1" type="button" :disabled="saving"
-                            @click="onStatusChange({ entryId: entry.id, status: 'Cooked' })">
-                            <span class="material-symbols-outlined" style="font-size: 16px">done</span>Mark Cooked
-                          </button>
+                          <!-- Status + meal time -->
+                          <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row fft-controls-row--stacked">
+                            <!-- Status -->
+                            <div class="fft-picker" :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Status</span>
+                                <span class="fft-picker-value">{{ statusMeta(entry.status).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status" :disabled="saving"
+                                @change="changeStatus(entry, $event.target.value)">
+                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+
+                            <!-- Meal time -->
+                            <div class="fft-picker" :class="{ 'is-disabled': saving }"
+                              title="Moving to a meal time that's already taken swaps the two meals">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Meal time</span>
+                                <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey" :disabled="saving"
+                                @change="changeMealTime(entry, $event.target.value)">
+                                <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+                          </div>
                           <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button"
                             @click="selectedEntry = entry">
                             <span class="material-symbols-outlined" style="font-size: 16px">menu_book</span>Recipe Steps
@@ -1366,6 +1451,131 @@ function sendToGrocery() {
   background: var(--fft-surface);
   color: var(--fft-primary);
   opacity: 0.95;
+}
+
+/* ===== Meal card pickers (status + meal time) =====
+   Each picker is a styled pill with a real <select> stretched invisibly over it:
+   clicking anywhere on the pill opens the native list (keyboard, screen readers and
+   phone pickers still work), while the pill shows the saved value. */
+.foodforthought .fft-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.foodforthought .fft-controls-row--stacked {
+  flex-direction: column;
+}
+
+/* ---------- Pill ---------- */
+.foodforthought .fft-picker {
+  --tone-bg: var(--fft-surface-low, #f4f4ed);
+  --tone-bg-hover: var(--fft-surface-high, #e8e9e2);
+  --tone-fg: var(--fft-on-surface, #1a1c18);
+  --tone-icon: var(--fft-outline, #727972);
+  --tone-border: rgba(194, 200, 192, 0.6);
+
+  position: relative; /* the invisible <select> is stretched over this */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 168px;
+  padding: 6px 8px 6px 10px;
+  border-radius: var(--fft-radius-xl, 0.75rem);
+  border: 1px solid var(--tone-border);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.foodforthought .fft-picker:hover {
+  background: var(--tone-bg-hover);
+}
+/* keyboard focus lands on the hidden <select>, so show the ring on the pill */
+.foodforthought .fft-picker:focus-within {
+  border-color: var(--fft-primary, #32533c);
+  box-shadow: 0 0 0 3px rgba(50, 83, 60, 0.18);
+}
+
+/* Status colours */
+.foodforthought .fft-picker--planned {
+  --tone-bg: #fff4e3;
+  --tone-bg-hover: #ffeacc;
+  --tone-fg: var(--fft-on-tertiary-fixed, #2a1800);
+  --tone-icon: var(--fft-tertiary, #6b4400);
+  --tone-border: rgba(107, 68, 0, 0.18);
+}
+.foodforthought .fft-picker--cooked {
+  --tone-bg: #e6f4e8;
+  --tone-bg-hover: #d5ecd8;
+  --tone-fg: var(--fft-on-primary-fixed, #01210f);
+  --tone-icon: var(--fft-primary, #32533c);
+  --tone-border: rgba(50, 83, 60, 0.2);
+}
+.foodforthought .fft-picker--skipped {
+  --tone-bg: #fdece6;
+  --tone-bg-hover: #fadfd5;
+  --tone-fg: var(--fft-on-secondary-fixed, #390c00);
+  --tone-icon: var(--fft-secondary, #a23e18);
+  --tone-border: rgba(162, 62, 24, 0.18);
+}
+
+/* ---------- Contents ---------- */
+.foodforthought .fft-picker-icon {
+  font-size: 18px;
+  color: var(--tone-icon);
+  flex-shrink: 0;
+}
+.foodforthought .fft-picker-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.15;
+}
+.foodforthought .fft-picker-label {
+  font: 600 10px/12px 'Inter', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fft-outline, #727972);
+}
+.foodforthought .fft-picker-value {
+  font: 600 13px/18px 'Inter', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.foodforthought .fft-picker-chevron {
+  font-size: 18px;
+  color: var(--tone-icon);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.foodforthought .fft-picker:hover .fft-picker-chevron {
+  transform: translateY(1px);
+}
+
+/* ---------- The real <select>, invisible but clickable ---------- */
+.foodforthought .fft-picker-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* stops iOS zooming in when the picker opens */
+}
+
+/* ---------- Disabled while saving ---------- */
+.foodforthought .fft-picker.is-disabled {
+  opacity: 0.6;
+}
+.foodforthought .fft-picker.is-disabled .fft-picker-select {
+  cursor: progress;
+}
+
+@media (max-width: 575.98px) {
+  .foodforthought .fft-controls-row:not(.fft-controls-row--stacked) .fft-picker {
+    flex: 1 1 100%;
+  }
 }
 
 .foodforthought .fft-spin {

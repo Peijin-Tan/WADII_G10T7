@@ -317,15 +317,32 @@ router.patch('/entries/:entryId', handle(async (req, res) => {
     checkServings(servings)
     entry.servings = servings
   }
-  if (dayOfWeek !== undefined) {
-    checkDay(dayOfWeek)
-    entry.dayOfWeek = dayOfWeek
-  }
-  if (mealSlot !== undefined) {
-    checkSlot(mealSlot)
-    entry.mealSlot = mealSlot
+  // Moving the meal to another day and/or meal time
+  if (dayOfWeek !== undefined || mealSlot !== undefined) {
+    if (dayOfWeek !== undefined) checkDay(dayOfWeek)
+    if (mealSlot !== undefined) checkSlot(mealSlot)
+
+    const oldDay = entry.dayOfWeek
+    const oldSlot = entry.mealSlot
+    const newDay = dayOfWeek !== undefined ? dayOfWeek : oldDay
+    const newSlot = mealSlot !== undefined ? mealSlot : oldSlot
+
+    // If another meal already sits in the target slot (e.g. moving lunch -> dinner when dinner exists),
+    // swap the two meals instead of putting two meals in one slot. Snacks can stack, so they never swap.
+    if (newSlot !== 'snack') {
+      const occupant = plan.entries.find((e) =>
+        !e._id.equals(entry._id) && e.dayOfWeek === newDay && e.mealSlot === newSlot)
+      if (occupant) {
+        occupant.dayOfWeek = oldDay
+        occupant.mealSlot = oldSlot
+      }
+    }
+
+    entry.dayOfWeek = newDay
+    entry.mealSlot = newSlot
   }
 
+  // one save() updates both meals together, so a swap can never be half-done
   await plan.save()
   res.json(await loadWeek(req.userId, plan.weekStart))
 }))
