@@ -2,8 +2,152 @@
 const express = require('express')
 const mongoose = require('mongoose')
 const Recipe = require('../../models/Recipe')
+const Like = require('../../models/Like')
+const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
+
+async function findRecipeKey(value) {
+  if (value.startsWith('recipe-')) {
+    const recipeId = value.slice('recipe-'.length)
+
+    if (!mongoose.isValidObjectId(recipeId)) {
+      return null
+    }
+
+    const recipe = await Recipe.findById(recipeId)
+      .select('_id externalId')
+
+    if (!recipe) {
+      return null
+    }
+
+    // Saved API recipes use the same key as their API version.
+    if (recipe.externalId != null) {
+      return 'spoonacular-' + recipe.externalId
+    }
+
+    return 'recipe-' + recipe._id.toString()
+  }
+
+  if (value.startsWith('spoonacular-')) {
+    const externalId = value.slice('spoonacular-'.length)
+
+    if (!/^[1-9]\d*$/.test(externalId)) {
+      return null
+    }
+
+    if (!Number.isSafeInteger(Number(externalId))) {
+      return null
+    }
+
+    return 'spoonacular-' + externalId
+  }
+
+  return null
+}
+
+// GET /recipes/liked
+// Retrieve the logged-in user's liked recipe keys.
+router.get('/liked', requireAuth, async (req, res) => {
+  try {
+    const likes = await Like.find({
+      userId: req.user._id
+    }).select('recipeKey')
+
+    const likedRecipeKeys = []
+
+    for (const like of likes) {
+      likedRecipeKeys.push(like.recipeKey)
+    }
+
+    return res.json(likedRecipeKeys)
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to retrieve liked recipes'
+    })
+  }
+})
+
+// POST /recipes/:recipeKey/like
+// Like a recipe.
+router.post('/:recipeKey/like', requireAuth, async (req, res) => {
+  try {
+    const recipeKey = await findRecipeKey(req.params.recipeKey)
+
+    if (!recipeKey) {
+      return res.status(400).json({
+        message: 'Invalid or unavailable recipe'
+      })
+    }
+
+    try {
+      await Like.create({
+        userId: req.user._id,
+        recipeKey: recipeKey
+      })
+    } catch (err) {
+      // The unique index prevents duplicate likes.
+      // If it is already liked, continue and return its current state.
+      if (err.code !== 11000) {
+        throw err
+      }
+    }
+
+    const likeCount = await Like.countDocuments({
+      recipeKey: recipeKey
+    })
+
+    return res.json({
+      recipeKey: recipeKey,
+      liked: true,
+      likeCount: likeCount
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to like recipe'
+    })
+  }
+})
+
+// DELETE /recipes/:recipeKey/like
+// Remove the logged-in user's like.
+router.delete('/:recipeKey/like', requireAuth, async (req, res) => {
+  try {
+    const recipeKey = await findRecipeKey(req.params.recipeKey)
+
+    if (!recipeKey) {
+      return res.status(400).json({
+        message: 'Invalid or unavailable recipe'
+      })
+    }
+
+    await Like.deleteOne({
+      userId: req.user._id,
+      recipeKey: recipeKey
+    })
+
+    const likeCount = await Like.countDocuments({
+      recipeKey: recipeKey
+    })
+
+    return res.json({
+      recipeKey: recipeKey,
+      liked: false,
+      likeCount: likeCount
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to unlike recipe'
+    })
+  }
+})
 
 // GET /recipes
 // Get recipes with optional search and filters
