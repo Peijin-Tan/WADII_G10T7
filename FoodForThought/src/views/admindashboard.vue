@@ -340,11 +340,9 @@ onMounted(() => {
     <div class="card border-0 shadow-sm mt-4">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <h5 class="card-title mb-0">Post Moderation Queue</h5>
-          <span class="badge bg-warning text-dark">{{ posts.length }} to review</span>
+          <h5 class="card-title mb-0">Current Posts</h5>
+          <span class="badge bg-success-subtle text-success-emphasis">{{ posts.length }} active</span>
         </div>
-
-        <p v-if="postsError" class="text-danger mb-3">{{ postsError }}</p>
 
         <div v-if="postsLoading" class="text-center py-3">
           <div class="spinner-border spinner-border-sm text-success" role="status">
@@ -353,7 +351,7 @@ onMounted(() => {
         </div>
 
         <div v-else-if="posts.length === 0" class="text-muted">
-          No community posts currently need moderation.
+          No posts currently available.
         </div>
 
         <div v-else class="list-group list-group-flush">
