@@ -1,8 +1,11 @@
+<script setup>
+import logo from '@/assets/foodforthought-logo-main.svg'
+</script>
+
 <template>
   <div class="auth-landing">
     <div class="landing-card">
-      <div class="brand-mark">🌱</div>
-      <h1>Welcome to FoodForThought</h1>
+      <img :src="logo" alt="FoodForThought: Plan. Shop. Cook." class="landing-logo" />
       <p>Your personal food management app.</p>
 
       <div class="action-row">
@@ -33,16 +36,13 @@
   text-align: center;
 }
 
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: rgba(25, 135, 84, 0.12);
-  font-size: 1.8rem;
-  margin-bottom: 18px;
+/* Logo is roughly 2:1, so width drives the size and height follows.
+   Shrinks to fit narrow phones, caps at 320px on larger screens. */
+.landing-logo {
+  display: block;
+  width: min(320px, 100%);
+  height: auto;
+  margin: 0 auto 20px;
 }
 
 h1 {

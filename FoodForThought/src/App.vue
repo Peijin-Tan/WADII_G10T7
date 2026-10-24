@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import logo from '@/assets/foodforthought-logo-horizontal.svg'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,11 +21,11 @@ function handleLogout() {
 
 <template>
   <header v-if="showMainNav" class="app-navbar sticky-top">
-    <nav class="navbar navbar-expand-lg app-navbar-bar">
+    <nav class="navbar navbar-expand-xl app-navbar-bar">
       <div class="container-fluid px-3 px-lg-4">
         <div class="app-nav-row">
-          <RouterLink to="/home" class="navbar-brand app-brand" @click="menuOpen = false">
-            🌱 FoodForThought
+          <RouterLink to="/dashboard" class="navbar-brand app-brand" @click="menuOpen = false">
+            <img :src="logo" alt="FoodForThought home" class="app-logo" />
           </RouterLink>
 
           <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
@@ -37,13 +38,20 @@ function handleLogout() {
           <div class="app-main-nav">
             <ul class="navbar-nav app-nav">
               <li v-if="isAdmin" class="nav-item">
-                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin
+                </RouterLink>
               </li>
               <li class="nav-item">
-                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
+                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan
+                </RouterLink>
               </li>
               <li class="nav-item">
-                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
+                <RouterLink to="/shoppinglist" class="nav-link app-nav-link" @click="menuOpen = false">Shopping List
+                </RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard
+                </RouterLink>
               </li>
               <li class="nav-item">
                 <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
@@ -52,7 +60,8 @@ function handleLogout() {
                 <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
               </li>
               <li class="nav-item">
-                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
+                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community
+                </RouterLink>
               </li>
             </ul>
 
@@ -60,9 +69,12 @@ function handleLogout() {
               <div class="d-flex align-items-center gap-3">
                 <img class="app-avatar" alt="Profile"
                   src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-                <span class="d-none d-md-inline text-success">{{ displayName }}</span>
+                <span class="d-inline d-xl-none d-xxl-inline text-success">{{ displayName }}</span>
               </div>
-              <button type="button" class="btn app-logout-button" @click="handleLogout">Logout</button>
+              <button type="button" class="btn app-logout-button" @click="handleLogout">
+                <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+                Logout
+              </button>
             </div>
           </div>
         </div>
@@ -76,7 +88,7 @@ function handleLogout() {
     <div
       class="container-fluid px-3 px-md-4 py-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 text-center text-md-start">
       <div class="d-flex flex-column flex-md-row align-items-center gap-1 gap-md-2">
-        <span class="app-footer-brand">🌱 FoodForThought</span>
+        <img :src="logo" alt="FoodForThought" class="app-footer-logo" />
       </div>
 
       <nav class="d-flex flex-wrap justify-content-center gap-3 gap-md-4">
@@ -143,14 +155,28 @@ body {
 }
 
 .app-brand {
-  font: 500 clamp(1.2rem, 2vw, 2rem)/1.2 'Outfit', sans-serif;
-  letter-spacing: -0.01em;
-  color: var(--nav-primary);
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  margin-right: 0;
+  border-radius: 0.5rem;
+  transition: opacity 0.18s ease;
 }
 
 .app-brand:hover {
-  color: var(--nav-primary-container);
+  opacity: 0.85;
+}
+
+.app-brand:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--nav-primary);
+}
+
+/* Logo is about 5:1 (wide), so height drives the size and width follows.
+   32px tall on phones (~165px wide), up to 40px on large screens (~205px wide). */
+.app-logo {
+  display: block;
+  height: clamp(32px, 3vw, 40px);
+  width: auto;
 }
 
 .app-toggler {
@@ -164,30 +190,21 @@ body {
   box-shadow: 0 0 0 2px var(--nav-primary);
 }
 
-/* Links: stacked list on mobile, pill group from md up */
-.app-nav-shell {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
+/* Brand + hamburger row. Its width is set to 100% only when collapsed (see the
+   max-width: 1199.98px block below) so it doesn't squash the links on desktop. */
 .app-nav-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  width: 100%;
-}
-
-.app-nav-row--main {
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
+  flex-shrink: 0;
 }
 
 .app-main-nav {
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* "safe" stops the row from overflowing off the left edge if it ever gets too wide */
+  justify-content: safe center;
   width: 100%;
   gap: 1rem;
   flex-wrap: nowrap;
@@ -199,7 +216,7 @@ body {
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.25rem;
   padding: 4px;
   background: var(--nav-surface-low);
   border-radius: 0.5rem;
@@ -216,55 +233,14 @@ body {
   margin-left: auto;
 }
 
-@media (min-width: 768px) {
-  .app-nav {
-    flex-direction: row;
-  }
-}
-
-.app-user-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  gap: 0.75rem;
-  margin-left: auto;
-}
-
-.app-user-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
 .app-nav-link {
-  padding: clamp(0.55rem, 0.8vw, 0.8rem) clamp(0.9rem, 1.8vw, 1.2rem) !important;
+  padding: 0.55rem 0.8rem !important;
   border-radius: 0.75rem;
-  font: 600 clamp(0.78rem, 1.2vw, 0.92rem)/1.35 'Inter', sans-serif;
+  font: 600 0.875rem/1.35 'Inter', sans-serif;
   letter-spacing: 0.01em;
   color: var(--nav-on-surface-variant) !important;
   white-space: nowrap;
   transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-
-.app-logout-button {
-  background: #dc2626;
-  border: 1px solid #dc2626;
-  color: #ffffff !important;
-  border-radius: 0.75rem;
-  padding: 0.6rem 1rem;
-  font-weight: 700;
-  line-height: 1.2;
-  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-}
-
-.app-logout-button:hover,
-.app-logout-button:focus {
-  background: #b91c1c;
-  border-color: #b91c1c;
-  color: #ffffff !important;
-  transform: translateY(-1px);
 }
 
 .app-nav-link:hover {
@@ -279,8 +255,58 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-/* Mobile: open menu appears as a dropdown panel under the bar */
-@media (max-width: 767.98px) {
+/* Logout: a muted brick red that sits with the earthy green palette,
+   sized and shaped like the nav links so the row lines up */
+.app-logout-button {
+  --logout-red: #b3261e;
+  --logout-red-dark: #8c1d18;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  background: var(--logout-red);
+  border: 0;
+  border-radius: 0.75rem;
+  color: #ffffff !important;
+  font: 600 0.875rem/1.35 'Inter', sans-serif;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.app-logout-button .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.app-logout-button:hover {
+  background: var(--logout-red-dark);
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(140, 29, 24, 0.25);
+  transform: translateY(-1px);
+}
+
+.app-logout-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Keyboard focus ring, matching the toggler's focus style */
+.app-logout-button:focus-visible {
+  background: var(--logout-red-dark);
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px #fafaf3, 0 0 0 4px var(--logout-red);
+}
+
+/* Collapsed navbar (below xl = 1200px), matching navbar-expand-xl */
+@media (max-width: 1199.98px) {
+  /* Brand row spans the full bar so the hamburger sits in the right corner */
+  .app-nav-row {
+    width: 100%;
+  }
+
+  /* Open menu floats as a panel under the bar instead of pushing content down */
   .app-navbar .navbar-collapse {
     position: absolute;
     top: 100%;
@@ -292,52 +318,23 @@ body {
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
   }
 
-  .app-nav-row {
+  /* Stack the links above the user controls inside the dropdown */
+  .app-main-nav {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .app-user-actions {
-    justify-content: flex-start;
+  .app-nav {
     width: 100%;
+    align-items: stretch;
+  }
+
+  .app-user-controls {
+    justify-content: space-between;
+    width: 100%;
+    margin-left: 0;
     padding-top: 0.25rem;
   }
-}
-
-/* Search */
-.app-search {
-  width: min(100%, 22rem);
-  min-width: 0;
-}
-
-@media (min-width: 1200px) {
-  .app-search {
-    width: 18rem;
-  }
-}
-
-.app-search-icon {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 20px;
-  color: var(--nav-outline);
-  pointer-events: none;
-}
-
-.app-search-input {
-  padding: 8px 16px 8px 40px;
-  background: #ffffff;
-  border: 0;
-  border-radius: 0.5rem;
-  font: 400 13px/20px 'Inter', sans-serif;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-}
-
-.app-search-input:focus {
-  background: #ffffff;
-  box-shadow: 0 0 0 2px var(--nav-primary);
 }
 
 /* Avatar + icon font */
@@ -366,10 +363,10 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
-.app-footer-brand {
-  font: 500 20px/28px 'Outfit', sans-serif;
-  color: #32533c;
-  white-space: nowrap;
+.app-footer-logo {
+  display: block;
+  height: 28px;
+  width: auto;
 }
 
 .app-footer-tagline {
