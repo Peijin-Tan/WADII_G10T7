@@ -1,73 +1,72 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
-import axios from "axios";
+import { ref, computed, watch, onMounted } from 'vue'
+import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import viewRecipeModal from '../components/Mealplan/viewRecipe.vue'
+import swapRecipeModal from '../components/Mealplan/swapRecipe.vue'
+import addMealModal from '../components/Mealplan/addmeal.vue'
 
 /* Bootstrap must be loaded once in your app entry (main.js):
    import 'bootstrap/dist/css/bootstrap.min.css'
    Material Symbols + fonts are loaded in the <style> block below. */
 
-const images = {
-  logo: 'https://lh3.googleusercontent.com/aida/AEtjO1W5jsZiponCyp6oX_bVJjGqnshEAT6K24qw_Xm2B8uUySK4upexVslwp_BhbxHY2Q02WX10yQS7C2xMfGUa-ze30FQU2ydnpfFRDIdTmK0oqcxO4-n2EfDwg1L0yrq60C-GoisPo6gTOpZcJ000sBN7OmKP6U9E6Z_j4buN8Pek13Cr6D3JL-AfGcXG66z5hNs75blSyxHIw4jugwMLiedQEqVglS6un3dQmdeoAZ0x',
-  avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30',
-  dinner: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBrBiTZwMj93RE5tKown8jikEfqDVBC-G24ZpeJGfw5PGVPq41_ZHqO1M9Id9fP4D0mNnZaSvv6B3Fi7mIoCV_bBhAeO6JAyR9bhktig1xa8cG3k7-TLWYJPjSNlncajfar5e6ZzBY52npTG8rV6043bpuyHab5x3Ir9X3V3KWEoiHaazRIDlUDQP7U1XCr9K9f1Yohht5l2iXJD9OnRyIuJaWccRf72WxWCqxMNNk',
-}
+/* ---------- API ---------- */
+// All planner requests go to the Express router mounted at /planner.
+const api = axios.create({ baseURL: 'http://localhost:8000/planner' })
 
-const url = "http://localhost:8000"
-const weekPlan = ref([])
-async function getWeeklyPlan() {
-  try {
-    const res = await axios.get(`${url}/`, { params: { start } })
-    weekPlan.value = res.data
-    /*
-    {
-        "_id": "66f200000000000000000001",
-        "userId": "66f000000000000000000002",
-        "weekStart": "2026-09-27T16:00:00.000Z",
-        "entries": [
-            {
-                "recipeId": "66f100000000000000000001",
-                "dayOfWeek": 0,
-                "mealSlot": "dinner",
-                "servings": 2,
-                "status": "Cooked",
-                "cookedAt": "2026-09-28T11:00:00.000Z",
-                "_id": "66f400000000000000000001"
-            },
-        ],
-        "createdAt": "2026-09-25T16:00:00.000Z",
-        "updatedAt": "2026-10-04T08:00:00.000Z"
-    },
-    */
-  } catch (error) {
-    console.log(error)
+// The login page saves the JWT in the auth store (persisted in localStorage as 'foodforthought_auth').
+// We only send the token: the server works out the userId from it (requireAuth -> req.user),
+// so the page never needs to know or send the userId itself.
+const auth = useAuthStore()
+const router = useRouter()
+
+// send the login token with every planner request
+api.interceptors.request.use((config) => {
+  if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
+  return config
+})
+
+// no token / expired token (they last 1h) -> log out and go to the login page
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      auth.logout()
+      router.push('/login')
+    }
+    return Promise.reject(err)
   }
-}
+)
 
-/* ---------- Control bar ---------- */
-const metrics = computed(() => [
-  { label: 'Planned Meals', value: hasPlan.value ? '21' : '0', unit: '/ 21', icon: 'restaurant_menu', bg: 'fft-bg-green-light text-fft-primary' },
-  { label: 'Daily Calorie Avg', value: hasPlan.value ? '2,050' : '—', unit: hasPlan.value ? 'kcal' : '', icon: 'local_fire_department', bg: 'fft-bg-peach text-fft-secondary' },
-])
-
-/* ---------- Week navigation ---------- */
-const weekOffset = ref(0) // 0 = this week, 1 = next week, -1 = last week
-
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-
+/* ---------- Date helpers ---------- */
 function addDays(date, n) {
   const d = new Date(date)
   d.setDate(d.getDate() + n)
   return d
 }
+// 'YYYY-MM-DD' in local time (toISOString() would shift to UTC and give the previous day in Singapore)
+function toISODate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 const fmt = (d, opts) => d.toLocaleDateString('en-US', opts)
 const sameDay = (a, b) => a.getTime() === b.getTime()
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
+const today = new Date()
+today.setHours(0, 0, 0, 0)
 const todayIndex = (today.getDay() + 6) % 7 // Monday = 0
 const thisMonday = addDays(today, -todayIndex)
 
+/* ---------- Week navigation ---------- */
+const weekOffset = ref(0) // 0 = this week, 1 = next week, -1 = last week
+
 const weekStart = computed(() => addDays(thisMonday, weekOffset.value * 7))
 const weekEnd = computed(() => addDays(weekStart.value, 6))
+const weekStartISO = computed(() => toISODate(weekStart.value))
 
 const weekRange = computed(() => {
   const o = { month: 'short', day: 'numeric' }
@@ -82,23 +81,115 @@ const weekLabel = computed(() => {
   return n > 0 ? `${n} weeks ahead` : `${-n} weeks ago`
 })
 
-/* Demo data only exists for the current week; other weeks start empty.
-   Replace hasPlan with a lookup into your real meal-plan data. */
-const hasPlan = computed(() => weekOffset.value === 0)
+/* ---------- Loading the week from the backend ---------- */
+const plan = ref({ id: null, entries: [] }) // what GET /api/planner returns
+const loading = ref(false)
+const saving = ref(false)
+const errorMsg = ref('')
+
+let latestRequest = 0 // ignore slow responses if the user already moved to another week
+
+async function loadWeek() {
+  const requestId = ++latestRequest
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    const res = await api.get('/', { params: { start: weekStartISO.value } })
+    if (requestId === latestRequest) plan.value = res.data
+  } catch (err) {
+    if (requestId === latestRequest) {
+      plan.value = { id: null, entries: [] }
+      errorMsg.value = err.response?.data?.message || 'Could not load your meal plan. Is the server running?'
+    }
+  } finally {
+    if (requestId === latestRequest) loading.value = false
+  }
+}
+
+// reload whenever the user changes week (and once on page load)
+watch(weekStartISO, loadWeek, { immediate: true })
+
+// Recipes shown in the Add Meal and Swap modals
+const recipeOptions = ref([])
+async function loadRecipeOptions() {
+  try {
+    const res = await api.get('/recipe-options', { params: { limit: 50 } })
+    recipeOptions.value = res.data
+  } catch (err) {
+    console.error('Could not load recipe options', err)
+  }
+}
+onMounted(loadRecipeOptions)
+
+// Every write endpoint returns the updated week, so we just replace our copy
+async function saveChange(request) {
+  saving.value = true
+  errorMsg.value = ''
+  try {
+    const res = await request
+    latestRequest++ // a load that was still in flight is now out of date
+    loading.value = false
+    plan.value = res.data
+  } catch (err) {
+    errorMsg.value = err.response?.data?.message || 'Could not save your change. Please try again.'
+  } finally {
+    saving.value = false
+  }
+}
+
+/* ---------- Turning API entries into what the cards + modals need ---------- */
+const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack']
+const SLOT_TIMES = { breakfast: '08:00 AM', lunch: '12:30 PM', dinner: '07:00 PM', snack: '03:30 PM' }
+const SLOT_PILL = { breakfast: 'fft-pill-gray', lunch: 'fft-pill-green', dinner: 'fft-pill-amber', snack: 'fft-pill-peach' }
+
+const entries = computed(() =>
+  plan.value.entries.map((e) => ({
+    ...e,
+    slotKey: e.mealSlot, // 'dinner' (what the API uses)
+    mealSlot: capitalize(e.mealSlot), // 'Dinner' (what the modals display)
+    time: SLOT_TIMES[e.mealSlot],
+    day: fmt(addDays(weekStart.value, e.dayOfWeek), { weekday: 'long' }),
+  }))
+)
+
+const hasPlan = computed(() => entries.value.length > 0)
+
+const kcalOf = (entry) => entry.recipe.nutrition.calories || 0
+const sum = (list, fn) => list.reduce((total, item) => total + fn(item), 0)
+
+// entriesByDay[0] = Monday's meals, sorted breakfast -> snack
+const entriesByDay = computed(() => {
+  const byDay = Array.from({ length: 7 }, () => [])
+  for (const e of entries.value) byDay[e.dayOfWeek].push(e)
+  byDay.forEach((list) => list.sort((a, b) => SLOT_ORDER.indexOf(a.slotKey) - SLOT_ORDER.indexOf(b.slotKey)))
+  return byDay
+})
+
+/* ---------- Control bar ---------- */
+const metrics = computed(() => {
+  const all = entries.value
+  const cooked = all.filter((e) => e.status === 'Cooked').length
+  const daysWithMeals = entriesByDay.value.filter((list) => list.length > 0)
+  const avgKcal = daysWithMeals.length
+    ? Math.round(sum(daysWithMeals, (list) => sum(list, kcalOf)) / daysWithMeals.length)
+    : 0
+  return [
+    { label: 'Meals Cooked', value: String(cooked), unit: `/ ${all.length} planned`, icon: 'restaurant_menu', bg: 'fft-bg-green-light text-fft-primary' },
+    { label: 'Daily Calorie Avg', value: avgKcal ? avgKcal.toLocaleString() : '—', unit: avgKcal ? 'kcal' : '', icon: 'local_fire_department', bg: 'fft-bg-peach text-fft-secondary' },
+  ]
+})
 
 /* ---------- Days ---------- */
-// sum daily recpies calories (from recipe collection)
-const sampleKcal = ['2,080', '1,970', '2,110', '2,040', '2,190', '2,140', '1,820']
-
 const days = computed(() =>
-  sampleKcal.map((kcal, i) => {
+  entriesByDay.value.map((list, i) => {
     const date = addDays(weekStart.value, i)
+    const cooked = list.filter((e) => e.status === 'Cooked').length
     return {
       date,
       name: `${fmt(date, { weekday: 'short' })} ${date.getDate()}`,
       today: sameDay(date, today),
-      meals: hasPlan.value ? '3/3' : '0/3',
-      kcal: hasPlan.value ? kcal : '0',
+      meals: `${cooked}/${list.length}`,
+      kcal: sum(list, kcalOf).toLocaleString(),
     }
   })
 )
@@ -107,6 +198,8 @@ const activeIndex = ref(todayIndex)
 watch(weekOffset, (n) => {
   activeIndex.value = n === 0 ? todayIndex : 0
 })
+
+const activeEntries = computed(() => entriesByDay.value[activeIndex.value])
 
 const activeDayLong = computed(() =>
   fmt(days.value[activeIndex.value].date, { weekday: 'long', month: 'short', day: 'numeric' })
@@ -120,86 +213,141 @@ const dayStatus = computed(() => {
     : { text: 'Upcoming', class: 'fft-pill-amber' }
 })
 
+const daySummary = computed(() => {
+  const list = activeEntries.value
+  const ingredients = list.flatMap((e) => e.recipe.ingredients)
+  const inPantry = ingredients.filter((i) => i.inPantry).length
+  return {
+    kcal: sum(list, kcalOf).toLocaleString(),
+    count: list.length,
+    minutes: sum(list, (e) => e.recipe.prepMinutes || 0),
+    pantryPercent: ingredients.length ? Math.round((inPantry / ingredients.length) * 100) : null,
+  }
+})
+
+function pantryPercent(entry) {
+  const ings = entry.recipe.ingredients
+  return ings.length ? Math.round((ings.filter((i) => i.inPantry).length / ings.length) * 100) : null
+}
+
+// Ingredients not in the pantry across this week's non-skipped meals (unique by name)
+const missingIngredients = computed(() => {
+  const names = new Set()
+  for (const e of entries.value) {
+    if (e.status === 'Skipped') continue
+    for (const ing of e.recipe.ingredients) {
+      if (!ing.inPantry) names.add(ing.name.toLowerCase())
+    }
+  }
+  return [...names]
+})
+
 const ctaText = computed(() =>
   hasPlan.value
-    ? "34 ingredients automatically calculated from this week's 21 planned recipes."
+    ? `${missingIngredients.value.length} ingredients needed for this week's ${entries.value.length} planned meals.`
     : 'Plan some meals for this week to build your grocery list.'
 )
 
-/* ---------- Meals ---------- */
-/* mealplan database --> recipeID (from recipe collection), get recipe info ()
-*/
+/* ---------- Modals ---------- */
+const addTarget = ref(null) // { date: 'YYYY-MM-DD', mealSlot: 'Dinner' }
+const selectedEntry = ref(null)
+const swapEntry = ref(null)
 
-const meals = [
-  {
-    slot: 'Breakfast • 08:00 AM',
-    slotClass: 'fft-pill-gray',
-    logged: true,
-    tags: [{ text: 'Fiber-Rich', class: 'fft-pill-gray' }],
-    title: 'Cinnamon Apple Steel-Cut Oatmeal',
-    desc: 'Topped with warm caramelized gala apples, toasted pecans, and a delicate maple drizzle.',
-    kcal: 360,
-    protein: 12,
-    carbs: 54,
-    prep: '15m prep time',
-    pantry: ['Steel-cut oats', 'Gala apple', 'Ground cinnamon', 'Almond milk'],
-    canPrep: false,
-  },
-  {
-    slot: 'Lunch • 12:30 PM',
-    slotClass: 'fft-pill-green',
-    tags: [
-      { text: 'Vegan', class: 'fft-pill-gray' },
-      { text: '10m Fast Prep', class: 'fft-pill-peach' },
-    ],
-    title: 'Green Goddess Chickpea & Avocado Salad Bowl',
-    desc: 'Tossed baby kale, diced ripe avocado, roasted spiced chickpeas, and creamy green goddess dressing.',
-    kcal: 480,
-    protein: 18,
-    carbs: 52,
-    prep: '10m active prep',
-    pantry: ['Organic chickpeas', 'Baby kale', 'Avocado', 'Lemon tahini'],
-    canPrep: true,
-  },
-]
+function openAddMeal(slot = 'Dinner') {
+  addTarget.value = { date: toISODate(days.value[activeIndex.value].date), mealSlot: slot }
+}
 
-const cookingSteps = [
-  'Sauté onions, ginger & spices in olive oil',
-  'Add sweet potatoes, lentils & rich broth',
-  'Simmer 20m, finish with lime & cilantro',
+// payload from addmeal.vue: { date, day, mealSlot: 'Dinner', servings, recipe }
+async function addMealToPlan(payload) {
+  const chosenDay = new Date(`${payload.date}T00:00:00`)
+  const dayOfWeek = Math.round((chosenDay - weekStart.value) / 86400000) // ms in a day
+  const body = {
+    start: weekStartISO.value,
+    dayOfWeek,
+    mealSlot: payload.mealSlot.toLowerCase(),
+    servings: payload.servings,
+  }
+  if (payload.recipe.custom) {
+    const n = payload.recipe.nutrition
+    body.customMeal = { title: payload.recipe.title, calories: n.calories, protein: n.protein, carbs: n.carbs, fat: n.fat }
+  } else {
+    body.recipeId = payload.recipe.id
+  }
+  await saveChange(api.post('/entries', body))
+  activeIndex.value = dayOfWeek // jump to the day the meal was added to
+}
+
+// from viewRecipe.vue and the status dropdown on each card: { entryId, status }
+function onStatusChange({ entryId, status }) {
+  return saveChange(api.patch(`/entries/${entryId}`, { status }))
+}
+
+/* ---------- Card controls: status + meal time ---------- */
+// value = what the database stores, label/icon/tone = how the picker on the card looks
+const STATUS_OPTIONS = [
+  { value: 'Planned', label: 'In Progress', icon: 'pending', tone: 'planned' },
+  { value: 'Cooked', label: 'Logged Cooked', icon: 'check_circle', tone: 'cooked' },
+  { value: 'Skipped', label: 'Skipped', icon: 'block', tone: 'skipped' },
 ]
+const SLOT_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast', icon: 'bakery_dining' },
+  { value: 'lunch', label: 'Lunch', icon: 'lunch_dining' },
+  { value: 'dinner', label: 'Dinner', icon: 'dinner_dining' },
+  { value: 'snack', label: 'Snack', icon: 'cookie' },
+]
+const statusMeta = (status) => STATUS_OPTIONS.find((s) => s.value === status) || STATUS_OPTIONS[0]
+const slotMeta = (slot) => SLOT_OPTIONS.find((s) => s.value === slot) || SLOT_OPTIONS[0]
+
+// The pickers always show the saved value (not v-model), so the server stays the source of truth.
+// If a save fails, bumping this key re-draws the pickers back to the saved value.
+const controlsKey = ref(0)
+
+async function changeStatus(entry, status) {
+  if (status === entry.status) return
+  await onStatusChange({ entryId: entry.id, status })
+  if (errorMsg.value) controlsKey.value++
+}
+
+// Moving to a meal time that's already taken that day swaps the two meals (handled by the server)
+async function changeMealTime(entry, slot) {
+  if (slot === entry.slotKey) return
+  await saveChange(api.patch(`/entries/${entry.id}`, { mealSlot: slot }))
+  if (errorMsg.value) controlsKey.value++
+}
+
+// from swapRecipe.vue: { entryId, recipe }
+function swapMeal({ entryId, recipe }) {
+  return saveChange(api.patch(`/entries/${entryId}`, { recipeId: recipe.id }))
+}
+
+function removeEntry(entry) {
+  if (!window.confirm(`Remove ${entry.recipe.title} from ${entry.day} ${entry.mealSlot}?`)) return
+  return saveChange(api.delete(`/entries/${entry.id}`))
+}
 
 /* ---------- Sidebar ---------- */
-const macros = [
-  { name: 'Protein', grams: '130g', percent: 88, colorClass: 'fft-ring-primary' },
-  { name: 'Carbs', grams: '210g', percent: 96, colorClass: 'fft-ring-secondary' },
-  { name: 'Fats', grams: '65g', percent: 82, colorClass: 'fft-ring-tertiary' },
-]
-
-const pantryRecipes = [
-  {
-    title: 'Quick Coconut Chickpea Curry',
-    meta: '20m · 100% pantry match',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD2_KLBLwOIHa5Ig9zQX_u3Ny_4Yir0fuOETLsNlpfTmgo4Fpez_nIcgqz1Lh-ObSkAXibATHb16H7N1t7wsyNyZijh6CyLEG4e7muCoIC3rpvOihB6nFW4uJI9gx34AD7UiW9tjOP6rxLQsr421wUi0wLs_-71ysHuW9qW6hr1ZQHRRLASeNTYGY3a4o-78KlVe2GLnnAJ1NT5vlfSkFPDSrVGVsjlRU3uQ0r2Yms',
-  },
-  {
-    title: 'Honey Mustard Chicken Bake',
-    meta: '25m · 4 ingredients needed',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAEG0ALIiU0nFVCYKL32ZMfXUGdVMhkbf0fPbgD5Muk72k9fwKZraafPp5dJNRi81KNJnkv_F1xRAxIZaVRst9gAwlZQvdnCvjtE5oLF6R36m5JdP69QzX35SzoxEY7p7eTtq5qUsI-ep5wC-V7hARM-hB3WlowmL0rJk3Hi49aQ6DMkQkHF4BC24kLJ4mA6Qp7R36bM-m2M2zHtFRyYgRYoGUhnguaXr_yRR8hAVI',
-  },
-  {
-    title: 'Tuscan Kale Caesar Crunch',
-    meta: '12m · Fast & Raw',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC67wkKXveo-2b9W1UJjMTc0oUHnVvDquADL1dzG1plqp8T0mUxVYv1bBXvKSaAhpsNEitz5cZrpx2evoc_PJ6L5lYP-cemJT2SzFz-LZscYhFynaMmeBoRWcxWdZi-8_ie_c3LDtrQvNETGGZiqyj632Ha5sdkDytL81gc-SRf6XTFDDznD1V8aqWHNlcR9jc8vePBgk4Nxl6fYs1K4PHQ4NUxbZQZzkKUrTd0UMg',
-  },
-]
+// Share of the week's calories that come from each macro (protein & carbs = 4 kcal/g, fat = 9 kcal/g)
+const macros = computed(() => {
+  const eaten = entries.value.filter((e) => e.status !== 'Skipped')
+  const grams = (key) => Math.round(sum(eaten, (e) => e.recipe.nutrition[key] || 0))
+  const protein = grams('protein')
+  const carbs = grams('carbs')
+  const fat = grams('fat')
+  const totalKcal = protein * 4 + carbs * 4 + fat * 9
+  const pct = (kcal) => (totalKcal ? Math.round((kcal / totalKcal) * 100) : 0)
+  return [
+    { name: 'Protein', grams: `${protein}g`, percent: pct(protein * 4), colorClass: 'fft-ring-primary' },
+    { name: 'Carbs', grams: `${carbs}g`, percent: pct(carbs * 4), colorClass: 'fft-ring-secondary' },
+    { name: 'Fats', grams: `${fat}g`, percent: pct(fat * 9), colorClass: 'fft-ring-tertiary' },
+  ]
+})
 
 /* ---------- Grocery sync button ---------- */
+// Still a visual placeholder: the shopping-list API isn't built yet
 const syncState = ref('idle') // idle | syncing | done
 
-// TRY auto sync??
 const syncLabel = computed(() => {
-  if (syncState.value === 'syncing') return 'Syncing 34 Items...'
+  if (syncState.value === 'syncing') return `Syncing ${missingIngredients.value.length} Items...`
   if (syncState.value === 'done') return 'Ingredients Synced!'
   return 'Send Ingredients to Grocery List'
 })
@@ -248,6 +396,12 @@ function sendToGrocery() {
                   <span class="material-symbols-outlined">chevron_right</span>
                 </button>
               </div>
+
+              <span v-if="loading || saving" class="fft-label-sm text-fft-muted d-flex align-items-center gap-1"
+                role="status">
+                <span class="material-symbols-outlined fft-spin" style="font-size: 16px">progress_activity</span>
+                {{ saving ? 'Saving...' : 'Loading...' }}
+              </span>
             </div>
           </div>
 
@@ -275,6 +429,12 @@ function sendToGrocery() {
       <!-- ============ PLANNER ============ -->
       <section class="px-4 py-4">
         <div class="container-fluid fft-container-wide">
+          <div v-if="errorMsg" class="alert alert-danger d-flex align-items-center justify-content-between gap-2"
+            role="alert">
+            <span>{{ errorMsg }}</span>
+            <button type="button" class="btn-close" aria-label="Dismiss" @click="errorMsg = ''"></button>
+          </div>
+
           <div class="row g-4 align-items-start">
             <!-- Left: day picker + meals -->
             <div class="col-12 col-xl">
@@ -287,7 +447,7 @@ function sendToGrocery() {
                       <div class="d-flex align-items-center gap-2">
                         <span class="fft-label-md fw-semibold">{{ d.name }}</span>
                         <span v-if="d.today" class="fft-today-pill">Today</span>
-                        <span v-else class="fft-day-count">{{ d.meals }}</span>
+                        <span v-else class="fft-day-count" title="Cooked / planned">{{ d.meals }}</span>
                       </div>
                       <span class="fft-day-kcal">
                         {{ d.kcal }} kcal<template v-if="d.today"> · {{ d.meals }}</template>
@@ -304,31 +464,37 @@ function sendToGrocery() {
                         <h2 class="fft-headline-md m-0">{{ activeDayLong }}</h2>
                         <span class="fft-pill" :class="dayStatus.class">{{ dayStatus.text }}</span>
                       </div>
-                      <div v-if="!hasPlan" class="fft-label-sm text-fft-muted">No meals planned yet</div>
-                      <div v-if="hasPlan" class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
+                      <div v-if="daySummary.count === 0" class="fft-label-sm text-fft-muted">No meals planned yet</div>
+                      <div v-else class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
                         <span class="d-flex align-items-center gap-1">
                           <span class="material-symbols-outlined text-fft-secondary"
                             style="font-size: 16px">local_fire_department</span>
-                          <strong>2,110</strong> kcal target
+                          <strong>{{ daySummary.kcal }}</strong> kcal planned
                         </span>
                         <span class="text-fft-outline">•</span>
                         <span class="d-flex align-items-center gap-1">
                           <span class="material-symbols-outlined text-fft-primary"
                             style="font-size: 16px">restaurant</span>
-                          3 meals planned
+                          {{ daySummary.count }} {{ daySummary.count === 1 ? 'meal' : 'meals' }} planned
                         </span>
                         <span class="text-fft-outline">•</span>
                         <span class="d-flex align-items-center gap-1">
                           <span class="material-symbols-outlined text-fft-outline" style="font-size: 16px">timer</span>
-                          45m active cook time
+                          {{ daySummary.minutes }}m prep time
                         </span>
-                        <span class="text-fft-outline">•</span>
-                        <span class="d-flex align-items-center gap-1 text-fft-primary fw-medium">
-                          <span class="material-symbols-outlined" style="font-size: 16px">inventory_2</span>
-                          100% pantry stock ready
-                        </span>
+                        <template v-if="daySummary.pantryPercent !== null">
+                          <span class="text-fft-outline">•</span>
+                          <span class="d-flex align-items-center gap-1 text-fft-primary fw-medium">
+                            <span class="material-symbols-outlined" style="font-size: 16px">inventory_2</span>
+                            {{ daySummary.pantryPercent }}% pantry stock ready
+                          </span>
+                        </template>
                       </div>
                     </div>
+                    <button v-if="daySummary.count > 0" type="button"
+                      class="btn fft-btn-soft d-flex align-items-center gap-1 flex-shrink-0" @click="openAddMeal()">
+                      <span class="material-symbols-outlined" style="font-size: 16px">add</span>Add Meal
+                    </button>
                   </div>
 
                   <!-- Shopping sync -->
@@ -353,144 +519,235 @@ function sendToGrocery() {
                   </div>
                 </div>
 
-                <!-- Meal cards -->
-                <div v-if="!hasPlan"
+                <!-- Empty day -->
+                <div v-if="activeEntries.length === 0 && !loading"
                   class="fft-card fft-card-bordered text-center py-5 d-flex flex-column align-items-center gap-2">
                   <span class="material-symbols-outlined text-fft-outline" style="font-size: 40px">edit_calendar</span>
                   <h3 class="fft-headline-sm m-0">Nothing planned for {{ activeDayLong }} yet</h3>
-                  <p class="fft-body-sm text-fft-muted m-0">Drag a recipe from the Pantry Drawer or add a meal to get
-                    started.</p>
-                  <button class="btn fft-btn-primary d-flex align-items-center gap-1 mt-2" type="button">
+                  <p class="fft-body-sm text-fft-muted m-0">Add a meal to get started.</p>
+                  <button class="btn fft-btn-primary d-flex align-items-center gap-1 mt-2" type="button"
+                    :disabled="saving" @click="openAddMeal()">
                     <span class="material-symbols-outlined" style="font-size: 18px">add</span>
                     <span>Add Meal</span>
                   </button>
                 </div>
 
-                <div v-if="hasPlan" class="d-flex flex-column gap-3">
-                  <!-- Breakfast / Lunch -->
-                  <div v-for="meal in meals" :key="meal.title" class="fft-card fft-card-bordered fft-hover-lift">
-                    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                      <div class="d-flex flex-column gap-2 flex-grow-1 fft-min-0">
-                        <div class="d-flex align-items-center flex-wrap gap-2">
-                          <span class="fft-pill fft-upper fw-semibold" :class="meal.slotClass">{{ meal.slot }}</span>
-                          <span v-if="meal.logged"
-                            class="d-flex align-items-center gap-1 fft-label-sm text-fft-primary fw-semibold">
-                            <span class="material-symbols-outlined" style="font-size: 16px">check_circle</span>Logged
-                            Cooked
-                          </span>
-                          <span v-for="tag in meal.tags" :key="tag.text" class="fft-pill fw-semibold"
-                            :class="tag.class">{{ tag.text
-                            }}</span>
+                <!-- Meal cards -->
+                <div v-else class="d-flex flex-column gap-3">
+                  <template v-for="entry in activeEntries" :key="entry.id">
+                    <!-- Dinner highlight (dinner with a photo) -->
+                    <div v-if="entry.slotKey === 'dinner' && entry.recipe.image"
+                      class="fft-card fft-card-bordered p-0 overflow-hidden fft-hover-lift">
+                      <div class="d-flex flex-column flex-lg-row">
+                        <div class="fft-dinner-img position-relative flex-shrink-0">
+                          <img :src="entry.recipe.image" :alt="entry.recipe.title" class="w-100 h-100 fft-cover" />
+                          <div class="fft-overlay-badge d-flex align-items-center gap-1">
+                            <span class="material-symbols-outlined" style="font-size: 14px">star</span>Dinner Highlight
+                          </div>
+                          <div class="fft-overlay-time">{{ entry.time }} {{ entry.status }}</div>
                         </div>
 
-                        <h3 class="fft-headline-sm m-0">{{ meal.title }}</h3>
-                        <p class="fft-body-sm text-fft-muted m-0">{{ meal.desc }}</p>
+                        <div class="p-3 d-flex flex-column justify-content-between gap-3 flex-grow-1 fft-min-0">
+                          <div class="d-flex flex-column gap-2">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                              <div class="d-flex align-items-center flex-wrap gap-2">
+                                <span v-for="tag in entry.recipe.tags.slice(0, 2)" :key="tag"
+                                  class="fft-pill fft-pill-green fw-semibold">{{ tag }}</span>
+                                <span v-if="pantryPercent(entry) !== null" class="fft-pill fft-pill-gray fw-semibold">
+                                  Pantry Ready ({{ pantryPercent(entry) }}%)
+                                </span>
+                                <span v-if="entry.status === 'Cooked'"
+                                  class="d-flex align-items-center gap-1 fft-label-sm text-fft-primary fw-semibold">
+                                  <span class="material-symbols-outlined" style="font-size: 16px">check_circle</span>Logged
+                                  Cooked
+                                </span>
+                                <span v-else-if="entry.status === 'Skipped'"
+                                  class="fft-pill fft-pill-peach fw-semibold">Skipped</span>
+                              </div>
+                              <span class="fft-label-sm text-fft-primary fw-semibold d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size: 16px">schedule</span>
+                                {{ entry.recipe.prepMinutes }}m · {{ entry.servings }} Servings
+                              </span>
+                            </div>
 
-                        <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted pt-1">
-                          <span class="fw-semibold text-fft-dark">{{ meal.kcal }} kcal</span>
-                          <span>•</span>
-                          <span>{{ meal.protein }}g Protein</span>
-                          <span>•</span>
-                          <span>{{ meal.carbs }}g Carbs</span>
-                          <span>•</span>
-                          <span>{{ meal.prep }}</span>
+                            <h3 class="fft-headline-md m-0">{{ entry.recipe.title }}</h3>
+                            <p class="fft-body-sm text-fft-muted m-0">{{ entry.recipe.description }}</p>
+
+                            <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
+                              <span class="fw-semibold text-fft-dark" style="font-size: 15px">
+                                {{ entry.recipe.nutrition.calories ?? '–' }} kcal</span>
+                              <span>•</span>
+                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.protein ?? '–' }}g Protein</span>
+                              <span>•</span>
+                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.carbs ?? '–' }}g Carbs</span>
+                              <span>•</span>
+                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.fat ?? '–' }}g Fat</span>
+                            </div>
+                          </div>
+
+                          <!-- Status + meal time -->
+                          <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row">
+                            <!-- Status -->
+                            <div class="fft-picker" :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Status</span>
+                                <span class="fft-picker-value">{{ statusMeta(entry.status).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status" :disabled="saving"
+                                @change="changeStatus(entry, $event.target.value)">
+                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+
+                            <!-- Meal time -->
+                            <div class="fft-picker" :class="{ 'is-disabled': saving }"
+                              title="Moving to a meal time that's already taken swaps the two meals">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Meal time</span>
+                                <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey" :disabled="saving"
+                                @change="changeMealTime(entry, $event.target.value)">
+                                <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                              <button class="btn fft-btn-soft fft-btn-lg d-flex align-items-center gap-1" type="button"
+                                @click="selectedEntry = entry">
+                                <span class="material-symbols-outlined" style="font-size: 18px">menu_book</span>
+                                <span>View Recipe Details</span>
+                              </button>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                              <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button"
+                                :disabled="saving" @click="swapEntry = entry">
+                                <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>
+                                <span>Swap</span>
+                              </button>
+                              <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button"
+                                :disabled="saving" @click="removeEntry(entry)">
+                                <span class="material-symbols-outlined" style="font-size: 16px">delete</span>
+                                <span>Remove</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
-
-                        <div class="d-flex align-items-center flex-wrap gap-2 pt-1">
-                          <span class="fft-label-sm text-fft-outline">Pantry Check:</span>
-                          <span v-for="item in meal.pantry" :key="item"
-                            class="fft-label-sm text-fft-primary d-flex align-items-center">
-                            <span class="material-symbols-outlined" style="font-size: 14px">check</span> {{ item }}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div class="d-flex flex-md-column align-items-stretch justify-content-end gap-2 flex-shrink-0">
-                        <button v-if="meal.canPrep" class="btn fft-btn-primary d-flex align-items-center gap-1"
-                          type="button">
-                          <span class="material-symbols-outlined" style="font-size: 16px">done</span>Mark Prepped
-                        </button>
-                        <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button">
-                          <span class="material-symbols-outlined" style="font-size: 16px">menu_book</span>Recipe Steps
-                        </button>
-                        <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
-                          <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>{{
-                            meal.canPrep ? 'Swap' :
-                              'Swap Meal' }}
-                        </button>
                       </div>
                     </div>
-                  </div>
 
-                  <!-- Dinner highlight -->
-                  <div class="fft-card fft-card-bordered p-0 overflow-hidden fft-hover-lift">
-                    <div class="d-flex flex-column flex-lg-row">
-                      <div class="fft-dinner-img position-relative flex-shrink-0">
-                        <img :src="images.dinner" alt="Moroccan Chickpea Stew" class="w-100 h-100 fft-cover" />
-                        <div class="fft-overlay-badge d-flex align-items-center gap-1">
-                          <span class="material-symbols-outlined" style="font-size: 14px">star</span>Dinner Highlight
-                        </div>
-                        <div class="fft-overlay-time">07:00 PM Planned</div>
-                      </div>
+                    <!-- Standard meal card -->
+                    <div v-else class="fft-card fft-card-bordered fft-hover-lift">
+                      <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                        <div class="d-flex flex-column gap-2 flex-grow-1 fft-min-0">
+                          <div class="d-flex align-items-center flex-wrap gap-2">
+                            <span class="fft-pill fft-upper fw-semibold" :class="SLOT_PILL[entry.slotKey]">
+                              {{ entry.mealSlot }} • {{ entry.time }}
+                            </span>
+                            <span v-if="entry.status === 'Cooked'"
+                              class="d-flex align-items-center gap-1 fft-label-sm text-fft-primary fw-semibold">
+                              <span class="material-symbols-outlined" style="font-size: 16px">check_circle</span>Logged
+                              Cooked
+                            </span>
+                            <span v-else-if="entry.status === 'Skipped'"
+                              class="fft-pill fft-pill-peach fw-semibold">Skipped</span>
+                            <span v-for="tag in entry.recipe.tags.slice(0, 3)" :key="tag"
+                              class="fft-pill fft-pill-gray fw-semibold">{{ tag }}</span>
+                          </div>
 
-                      <div class="p-3 d-flex flex-column justify-content-between gap-3 flex-grow-1 fft-min-0">
-                        <div class="d-flex flex-column gap-2">
-                          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                            <div class="d-flex align-items-center flex-wrap gap-2">
-                              <span class="fft-pill fft-pill-green fw-semibold">Plant-Based / Comfort</span>
-                              <span class="fft-pill fft-pill-amber fw-semibold">High-Fiber</span>
-                              <span class="fft-pill fft-pill-gray fw-semibold">Pantry Ready (100%)</span>
-                            </div>
-                            <span class="fft-label-sm text-fft-primary fw-semibold d-flex align-items-center gap-1">
-                              <span class="material-symbols-outlined" style="font-size: 16px">schedule</span>30m · 4
-                              Servings
+                          <h3 class="fft-headline-sm m-0">{{ entry.recipe.title }}</h3>
+                          <p class="fft-body-sm text-fft-muted m-0">{{ entry.recipe.description }}</p>
+
+                          <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted pt-1">
+                            <span class="fw-semibold text-fft-dark">{{ entry.recipe.nutrition.calories ?? '–' }} kcal</span>
+                            <span>•</span>
+                            <span>{{ entry.recipe.nutrition.protein ?? '–' }}g Protein</span>
+                            <span>•</span>
+                            <span>{{ entry.recipe.nutrition.carbs ?? '–' }}g Carbs</span>
+                            <span>•</span>
+                            <span>{{ entry.servings }} {{ entry.servings === 1 ? 'serving' : 'servings' }}</span>
+                            <template v-if="entry.recipe.prepMinutes">
+                              <span>•</span>
+                              <span>{{ entry.recipe.prepMinutes }}m prep time</span>
+                            </template>
+                          </div>
+
+                          <div v-if="entry.recipe.ingredients.length" class="d-flex align-items-center flex-wrap gap-2 pt-1">
+                            <span class="fft-label-sm text-fft-outline">Pantry Check:</span>
+                            <span v-for="ing in entry.recipe.ingredients.filter((i) => i.inPantry).slice(0, 4)"
+                              :key="ing.name" class="fft-label-sm text-fft-primary d-flex align-items-center">
+                              <span class="material-symbols-outlined" style="font-size: 14px">check</span> {{ ing.name }}
+                            </span>
+                            <span v-if="entry.recipe.ingredients.some((i) => !i.inPantry)"
+                              class="fft-label-sm text-fft-secondary">
+                              {{ entry.recipe.ingredients.filter((i) => !i.inPantry).length }} missing
                             </span>
                           </div>
-
-                          <h3 class="fft-headline-md m-0">Moroccan Spiced Lentil &amp; Sweet Potato Stew</h3>
-                          <p class="fft-body-sm text-fft-muted m-0">
-                            Simmered with warming cinnamon, ground cumin, tender sweet potatoes, chickpeas, and fresh
-                            cilantro leaves.
-                          </p>
-
-                          <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted">
-                            <span class="fw-semibold text-fft-dark" style="font-size: 15px">620 kcal</span>
-                            <span>•</span>
-                            <span class="fw-medium text-fft-dark">32g Protein</span>
-                            <span>•</span>
-                            <span class="fw-medium text-fft-dark">68g Carbs</span>
-                            <span>•</span>
-                            <span class="fw-medium text-fft-dark">18g Fat</span>
-                          </div>
                         </div>
 
-                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                          <div class="d-flex align-items-center gap-2">
-                            <button class="btn fft-btn-primary fft-btn-lg d-flex align-items-center gap-2"
-                              type="button">
-                              <span class="material-symbols-outlined" style="font-size: 18px">play_circle</span>
-                              <span>Start Cooking Mode</span>
-                            </button>
-                            <button class="btn fft-btn-soft fft-btn-lg d-flex align-items-center gap-1" type="button">
-                              <span class="material-symbols-outlined" style="font-size: 18px">menu_book</span>
-                              <span>View Recipe Details</span>
-                            </button>
+                        <div class="d-flex flex-md-column align-items-stretch justify-content-end flex-wrap gap-2 flex-shrink-0">
+                          <!-- Status + meal time -->
+                          <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row fft-controls-row--stacked">
+                            <!-- Status -->
+                            <div class="fft-picker" :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Status</span>
+                                <span class="fft-picker-value">{{ statusMeta(entry.status).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status" :disabled="saving"
+                                @change="changeStatus(entry, $event.target.value)">
+                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
+
+                            <!-- Meal time -->
+                            <div class="fft-picker" :class="{ 'is-disabled': saving }"
+                              title="Moving to a meal time that's already taken swaps the two meals">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              <span class="fft-picker-text">
+                                <span class="fft-picker-label">Meal time</span>
+                                <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
+                              </span>
+                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey" :disabled="saving"
+                                @change="changeMealTime(entry, $event.target.value)">
+                                <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              </select>
+                            </div>
                           </div>
-                          <div class="d-flex align-items-center gap-1">
-                            <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
-                              <span class="material-symbols-outlined" style="font-size: 16px">shopping_cart</span>
-                              <span>Add Extras to Grocery</span>
-                            </button>
-                            <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button">
-                              <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>
-                              <span>Swap</span>
-                            </button>
-                          </div>
+                          <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button"
+                            @click="selectedEntry = entry">
+                            <span class="material-symbols-outlined" style="font-size: 16px">menu_book</span>Recipe Steps
+                          </button>
+                          <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button"
+                            :disabled="saving" @click="swapEntry = entry">
+                            <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>Swap Meal
+                          </button>
+                          <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button"
+                            :disabled="saving" @click="removeEntry(entry)">
+                            <span class="material-symbols-outlined" style="font-size: 16px">delete</span>Remove
+                          </button>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </template>
                 </div>
+
+                <!-- Modals (teleported to <body>, so their position here doesn't matter) -->
+                <addMealModal v-if="addTarget" :default-date="addTarget.date" :default-slot="addTarget.mealSlot"
+                  :recipes="recipeOptions" @close="addTarget = null" @add="addMealToPlan" />
+                <viewRecipeModal v-if="selectedEntry" :entry="selectedEntry" @close="selectedEntry = null"
+                  @update-status="onStatusChange" />
+                <swapRecipeModal v-if="swapEntry" :entry="swapEntry" :recipes="recipeOptions"
+                  @close="swapEntry = null" @swap="swapMeal" />
               </div>
             </div>
 
@@ -502,9 +759,9 @@ function sendToGrocery() {
                   <div class="d-flex align-items-center justify-content-between">
                     <div>
                       <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Weekly Balance</span>
-                      <p class="fft-headline-sm m-0">Macro Targets</p>
+                      <p class="fft-headline-sm m-0">Macro Split</p>
                     </div>
-                    <span class="fft-pill fft-pill-green fw-medium">94% on track</span>
+                    <span class="fft-pill fft-pill-green fw-medium">% of calories</span>
                   </div>
 
                   <div class="d-flex align-items-center justify-content-between gap-2 py-1">
@@ -523,38 +780,6 @@ function sendToGrocery() {
                       </div>
                       <span class="fft-label-sm fw-semibold">{{ ring.grams }}</span>
                       <span class="fft-label-sm text-fft-outline">{{ ring.name }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Pantry drawer -->
-                <div class="fft-card fft-card-lg d-flex flex-column gap-3">
-                  <div class="d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-1">
-                      <span class="material-symbols-outlined text-fft-primary" style="font-size: 20px">shelves</span>
-                      <p class="fft-headline-sm m-0">Pantry Drawer</p>
-                    </div>
-                    <span class="fft-label-sm text-fft-muted">Drag to day</span>
-                  </div>
-
-                  <p class="fft-body-sm text-fft-muted m-0">
-                    Recipes matching ingredients currently stored in your kitchen.
-                  </p>
-
-                  <div class="d-flex flex-column gap-1">
-                    <div v-for="r in pantryRecipes" :key="r.title"
-                      class="fft-draggable d-flex align-items-center justify-content-between" draggable="true">
-                      <div class="d-flex align-items-center gap-2 fft-min-0">
-                        <div class="fft-thumb flex-shrink-0">
-                          <img :src="r.img" :alt="r.title" class="w-100 h-100 fft-cover" />
-                        </div>
-                        <div class="d-flex flex-column fft-min-0">
-                          <span class="fft-label-md text-truncate">{{ r.title }}</span>
-                          <span class="fft-label-sm text-fft-outline">{{ r.meta }}</span>
-                        </div>
-                      </div>
-                      <span class="material-symbols-outlined text-fft-outline fft-drag-handle"
-                        style="font-size: 18px">drag_indicator</span>
                     </div>
                   </div>
                 </div>
@@ -1198,39 +1423,6 @@ function sendToGrocery() {
   stroke: var(--fft-tertiary);
 }
 
-.foodforthought .fft-draggable {
-  padding: 8px;
-  border-radius: var(--fft-radius-xl);
-  background: var(--fft-surface-low);
-  cursor: grab;
-  transition: background-color 0.15s;
-}
-
-.foodforthought .fft-draggable:hover {
-  background: var(--fft-surface-high);
-}
-
-.foodforthought .fft-draggable:active {
-  cursor: grabbing;
-}
-
-.foodforthought .fft-drag-handle {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.foodforthought .fft-draggable:hover .fft-drag-handle {
-  opacity: 1;
-}
-
-.foodforthought .fft-thumb {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--fft-radius);
-  overflow: hidden;
-  background: var(--fft-surface-highest);
-}
-
 .foodforthought .fft-cta {
   background: var(--fft-primary);
   color: var(--fft-on-primary);
@@ -1259,6 +1451,131 @@ function sendToGrocery() {
   background: var(--fft-surface);
   color: var(--fft-primary);
   opacity: 0.95;
+}
+
+/* ===== Meal card pickers (status + meal time) =====
+   Each picker is a styled pill with a real <select> stretched invisibly over it:
+   clicking anywhere on the pill opens the native list (keyboard, screen readers and
+   phone pickers still work), while the pill shows the saved value. */
+.foodforthought .fft-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.foodforthought .fft-controls-row--stacked {
+  flex-direction: column;
+}
+
+/* ---------- Pill ---------- */
+.foodforthought .fft-picker {
+  --tone-bg: var(--fft-surface-low, #f4f4ed);
+  --tone-bg-hover: var(--fft-surface-high, #e8e9e2);
+  --tone-fg: var(--fft-on-surface, #1a1c18);
+  --tone-icon: var(--fft-outline, #727972);
+  --tone-border: rgba(194, 200, 192, 0.6);
+
+  position: relative; /* the invisible <select> is stretched over this */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 168px;
+  padding: 6px 8px 6px 10px;
+  border-radius: var(--fft-radius-xl, 0.75rem);
+  border: 1px solid var(--tone-border);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.foodforthought .fft-picker:hover {
+  background: var(--tone-bg-hover);
+}
+/* keyboard focus lands on the hidden <select>, so show the ring on the pill */
+.foodforthought .fft-picker:focus-within {
+  border-color: var(--fft-primary, #32533c);
+  box-shadow: 0 0 0 3px rgba(50, 83, 60, 0.18);
+}
+
+/* Status colours */
+.foodforthought .fft-picker--planned {
+  --tone-bg: #fff4e3;
+  --tone-bg-hover: #ffeacc;
+  --tone-fg: var(--fft-on-tertiary-fixed, #2a1800);
+  --tone-icon: var(--fft-tertiary, #6b4400);
+  --tone-border: rgba(107, 68, 0, 0.18);
+}
+.foodforthought .fft-picker--cooked {
+  --tone-bg: #e6f4e8;
+  --tone-bg-hover: #d5ecd8;
+  --tone-fg: var(--fft-on-primary-fixed, #01210f);
+  --tone-icon: var(--fft-primary, #32533c);
+  --tone-border: rgba(50, 83, 60, 0.2);
+}
+.foodforthought .fft-picker--skipped {
+  --tone-bg: #fdece6;
+  --tone-bg-hover: #fadfd5;
+  --tone-fg: var(--fft-on-secondary-fixed, #390c00);
+  --tone-icon: var(--fft-secondary, #a23e18);
+  --tone-border: rgba(162, 62, 24, 0.18);
+}
+
+/* ---------- Contents ---------- */
+.foodforthought .fft-picker-icon {
+  font-size: 18px;
+  color: var(--tone-icon);
+  flex-shrink: 0;
+}
+.foodforthought .fft-picker-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.15;
+}
+.foodforthought .fft-picker-label {
+  font: 600 10px/12px 'Inter', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fft-outline, #727972);
+}
+.foodforthought .fft-picker-value {
+  font: 600 13px/18px 'Inter', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.foodforthought .fft-picker-chevron {
+  font-size: 18px;
+  color: var(--tone-icon);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.foodforthought .fft-picker:hover .fft-picker-chevron {
+  transform: translateY(1px);
+}
+
+/* ---------- The real <select>, invisible but clickable ---------- */
+.foodforthought .fft-picker-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* stops iOS zooming in when the picker opens */
+}
+
+/* ---------- Disabled while saving ---------- */
+.foodforthought .fft-picker.is-disabled {
+  opacity: 0.6;
+}
+.foodforthought .fft-picker.is-disabled .fft-picker-select {
+  cursor: progress;
+}
+
+@media (max-width: 575.98px) {
+  .foodforthought .fft-controls-row:not(.fft-controls-row--stacked) .fft-picker {
+    flex: 1 1 100%;
+  }
 }
 
 .foodforthought .fft-spin {
