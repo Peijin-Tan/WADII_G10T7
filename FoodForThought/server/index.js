@@ -13,8 +13,10 @@ const requireAuth = require('./src/middleware/auth')
 const User = require('./models/User')
 const Recipe = require('./models/Recipe')
 const Post = require('./models/Post')
+const Comment = require('./models/Comment')
 const usersRouter = require('./src/router/users')
 const postsRouter = require('./src/router/Post')
+const commentsRouter = require('./src/router/comments')
 const plannerRouter = require('./src/router/Planner')
 const recipeRouter = require('./src/router/recipe')
 const dashboardRouter = require('./src/router/analytics')
@@ -45,6 +47,7 @@ app.use(limiter)
 // Mount routes
 app.use('/auth', authRouter)
 app.use('/posts', postsRouter)
+app.use('/comments', commentsRouter)
 app.use('/users', usersRouter)
 app.use('/planner', plannerRouter)
 app.use('/recipes', recipeRouter)
@@ -59,9 +62,9 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
   }
 
   try {
-    const [totalRecipes, totalCommunityPosts, roleBreakdown] = await Promise.all([
+    const [totalRecipes, totalComments, roleBreakdown] = await Promise.all([
       Recipe.countDocuments(),
-      Post.countDocuments(),
+      Comment.countDocuments(),
       User.aggregate([
         { $match: { role: { $in: ['user', 'admin'] } } },
         { $group: { _id: '$role', count: { $sum: 1 } } }
@@ -75,7 +78,7 @@ app.get('/admin/stats', requireAuth, async (req, res) => {
     const summary = {
       totalUsers,
       totalRecipes,
-      totalCommunityPosts,
+      totalComments,
       totalAdmins,
       totalRegularUsers
     }

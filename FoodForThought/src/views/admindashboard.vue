@@ -9,19 +9,19 @@ const auth = useAuthStore()
 const stats = ref({
   totalUsers: 0,
   totalRecipes: 0,
-  totalCommunityPosts: 0,
+  totalComments: 0,
   totalAdmins: 0,
   totalRegularUsers: 0
 })
 
-const posts = ref([])
+const comments = ref([])
 const users = ref([])
-const postsLoading = ref(true)
-const postsError = ref('')
+const commentsLoading = ref(true)
+const commentsError = ref('')
 const usersLoading = ref(false)
 const usersError = ref('')
 const showUsers = ref(false)
-const deletingPostId = ref(null)
+const deletingCommentId = ref(null)
 const deletingUserId = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -62,18 +62,18 @@ async function loadStats() {
   }
 }
 
-async function loadPosts() {
-  postsLoading.value = true
-  postsError.value = ''
+async function loadComments() {
+  commentsLoading.value = true
+  commentsError.value = ''
 
   try {
-    const response = await axios.get('http://localhost:8000/posts')
-    posts.value = response.data
+    const response = await axios.get('http://localhost:8000/comments')
+    comments.value = response.data
   } catch (err) {
     console.error(err)
-    postsError.value = 'Unable to load community posts for moderation.'
+    commentsError.value = 'Unable to load comments for moderation.'
   } finally {
-    postsLoading.value = false
+    commentsLoading.value = false
   }
 }
 
@@ -149,40 +149,39 @@ async function deleteUser(userId) {
   }
 }
 
-async function deletePost(postId) {
+async function deleteComment(commentId) {
   if (!auth.token) {
-    postsError.value = 'Admin login required to delete posts.'
+    commentsError.value = 'Admin login required to delete comments.'
     return
   }
 
-  if (!confirm('Are you sure you want to delete this post?')) return
+  if (!confirm('Are you sure you want to delete this comment?')) return
 
-  deletingPostId.value = postId
+  deletingCommentId.value = commentId
 
   try {
-    await axios.delete(`http://localhost:8000/posts/${postId}`, {
+    await axios.delete(`http://localhost:8000/comments/${commentId}`, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
     })
 
-    // Filter post out of local array to reflect deletion instantly
-    posts.value = posts.value.filter(post => post._id !== postId)
-    
-    if (stats.value?.totalCommunityPosts) {
-      stats.value.totalCommunityPosts = Math.max(stats.value.totalCommunityPosts - 1, 0)
+    comments.value = comments.value.filter(comment => comment._id !== commentId)
+
+    if (stats.value?.totalComments) {
+      stats.value.totalComments = Math.max(stats.value.totalComments - 1, 0)
     }
   } catch (err) {
     console.error(err)
-    postsError.value = err.response?.data?.message || 'Unable to delete post.'
+    commentsError.value = err.response?.data?.message || 'Unable to delete comment.'
   } finally {
-    deletingPostId.value = null
+    deletingCommentId.value = null
   }
 }
 
 onMounted(() => {
   loadStats()
-  loadPosts()
+  loadComments()
 })
 </script>
 
@@ -227,8 +226,8 @@ onMounted(() => {
       <div class="col-12 col-md-6 col-xl-3">
         <div class="card border-0 shadow-sm h-100">
           <div class="card-body">
-            <p class="text-muted mb-2">Community Posts</p>
-            <h3 class="fw-bold mb-0">{{ stats.totalCommunityPosts }}</h3>
+            <p class="text-muted mb-2">Comments</p>
+            <h3 class="fw-bold mb-0">{{ stats.totalComments }}</h3>
           </div>
         </div>
       </div>
@@ -328,8 +327,8 @@ onMounted(() => {
                 <strong>{{ stats.totalRecipes }}</strong>
               </li>
               <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                <span>Community posts</span>
-                <strong>{{ stats.totalCommunityPosts }}</strong>
+                <span>Total comments</span>
+                <strong>{{ stats.totalComments }}</strong>
               </li>
             </ul>
           </div>
@@ -340,41 +339,38 @@ onMounted(() => {
     <div class="card border-0 shadow-sm mt-4">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <h5 class="card-title mb-0">Current Posts</h5>
-          <span class="badge bg-success-subtle text-success-emphasis">{{ posts.length }} active</span>
+          <h5 class="card-title mb-0">Current Comments</h5>
+          <span class="badge bg-success-subtle text-success-emphasis">{{ comments.length }} active</span>
         </div>
 
-        <div v-if="postsLoading" class="text-center py-3">
+        <p v-if="commentsError" class="text-danger mb-3">{{ commentsError }}</p>
+
+        <div v-if="commentsLoading" class="text-center py-3">
           <div class="spinner-border spinner-border-sm text-success" role="status">
             <span class="visually-hidden">Loading...</span>
           </div>
         </div>
 
-        <div v-else-if="posts.length === 0" class="text-muted">
-          No posts currently available.
+        <div v-else-if="comments.length === 0" class="text-muted">
+          No comments currently available.
         </div>
 
         <div v-else class="list-group list-group-flush">
-          <div v-for="post in posts" :key="post._id" class="list-group-item px-0">
+          <div v-for="comment in comments" :key="comment._id" class="list-group-item px-0">
             <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
               <div>
-                <div class="fw-semibold">{{ post.userId?.name || 'Unknown user' }}</div>
-                <div class="text-muted small">{{ new Date(post.createdAt).toLocaleString() }}</div>
-                <p class="mb-2 mt-2">{{ post.content }}</p>
-
-                <div v-if="post.tags?.length" class="d-flex flex-wrap gap-2">
-                  <span v-for="tag in post.tags" :key="tag" class="badge bg-success-subtle text-success-emphasis">
-                    {{ tag }}
-                  </span>
-                </div>
+                <div class="fw-semibold">{{ comment.userName || comment.userId?.name || 'Unknown user' }}</div>
+                <div class="text-muted small">{{ new Date(comment.createdAt).toLocaleString() }}</div>
+                <div class="text-muted small mt-1">Recipe: {{ comment.recipeName || comment.recipeId?.title || 'Unknown recipe' }}</div>
+                <p class="mb-2 mt-2">{{ comment.content }}</p>
               </div>
 
               <button
                 class="btn btn-outline-danger btn-sm"
-                :disabled="deletingPostId === post._id"
-                @click="deletePost(post._id)"
+                :disabled="deletingCommentId === comment._id"
+                @click="deleteComment(comment._id)"
               >
-                {{ deletingPostId === post._id ? 'Deleting...' : 'Delete Post' }}
+                {{ deletingCommentId === comment._id ? 'Deleting...' : 'Delete Comment' }}
               </button>
             </div>
           </div>
