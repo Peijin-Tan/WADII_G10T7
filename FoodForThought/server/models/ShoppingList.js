@@ -1,87 +1,63 @@
-const mongoose = require("mongoose");
+/**
+ * ShoppingList model
+ * ---------------------------------------------------------------
+ * One list per user per week (same pattern as MealPlan).
+ * Compatible with the existing shoppinglists.json seed data: every
+ * field added here has a default, so old documents still load.
+ */
+const mongoose = require('mongoose');
+const { CATEGORIES, normalizeName } = require('../src/services/shoppinglistbuilder');
 
-const INGREDIENT_CATEGORIES = [
-  "produce",
-  "meat-seafood",
-  "dairy-eggs",
-  "grains-noodles",
-  "canned-sauces",
-  "spices-condiments",
-  "frozen",
-  "bakery",
-  "other",
-];
+const { Schema } = mongoose;
 
-const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
-const isValidId = (id) => typeof id === "string" && OBJECT_ID_RE.test(id);
+const itemSchema = new Schema({
+  name: { type: String, required: true, trim: true },
+  normalizedName: { type: String, required: true }, // lowercase, used for matching/merging
 
-const itemSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  normalizedName: {
-    type: String,
-    required: true,
-    lowercase: true,
-    trim: true,
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 0, // already scaled by servings, merged, and minus pantry stock
-  },
-  unit: {
-    type: String,
-    default: "",
-    lowercase: true,
-    trim: true,
-  },
-  category: {
-    type: String,
-    enum: INGREDIENT_CATEGORIES,
-    default: "other",
-  },
-  purchased: {
-    type: Boolean,
-    default: false,
-  },
-  purchasedAt: {
-    type: Date,
-  },
+  // Amount still to BUY. 0 means the pantry already covers all of it.
+  quantity: { type: Number, required: true, min: 0 },
+  unit: { type: String, default: 'piece', trim: true },
+  category: { type: String, enum: CATEGORIES, default: 'other' },
+
+  // NEW: how much of this the pantry already covers (for the "In Pantry" view).
+  pantryQuantity: { type: Number, default: 0, min: 0 },
+
+  // NEW: which recipes in this week's plan need it (shown as tags in the UI).
+  usedIn: [
+    {
+      _id: false,
+      recipeId: { type: Schema.Types.ObjectId, ref: 'Recipe' },
+      title: String,
+    },
+  ],
+
+  // NEW: "auto" = generated from the meal plan, "manual" = typed in by the user.
+  // Regenerating rebuilds auto items but never touches manual ones.
+  source: { type: String, enum: ['auto', 'manual'], default: 'auto' },
+
+  purchased: { type: Boolean, default: false },
+  purchasedAt: { type: Date, default: null },
 });
 
-// Derived from a MealPlan, so it is kept separate and regenerated whenever the plan changes
-const shoppingListSchema = new mongoose.Schema(
+// Fill normalizedName automatically if it wasn't set.
+itemSchema.pre('validate', function () {
+  if (!this.normalizedName) this.normalizedName = normalizeName(this.name);
+});
+
+const shoppingListSchema = new Schema(
   {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    mealPlanId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "MealPlan",
-      required: true,
-    },
-    weekStart: {
-      type: Date,
-      required: true,
-    },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    mealPlanId: { type: Schema.Types.ObjectId, ref: 'MealPlan', default: null },
+    weekStart: { type: Date, required: true }, // Monday 00:00 Singapore time
     items: [itemSchema],
-    generatedAt: {
-      type: Date,
-      default: Date.now,
-    },
+    generatedAt: { type: Date, default: null }, // last time it was built from the meal plan
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// one list per meal plan
-shoppingListSchema.index({ mealPlanId: 1 }, { unique: true });
+// One list per user per week.
+shoppingListSchema.index({ userId: 1, weekStart: 1 }, { unique: true });
 
-// a user's lists, newest week first
-shoppingListSchema.index({ userId: 1, weekStart: -1 });
-
-module.exports = mongoose.model("ShoppingList", shoppingListSchema);
+// The "||" avoids an OverwriteModelError if this file is required twice
+// (MealPlan.js already requires it).
+module.exports = mongoose.models.ShoppingList || mongoose.model('ShoppingList', shoppingListSchema);
