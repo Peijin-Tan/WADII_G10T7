@@ -252,26 +252,6 @@ function reconcileItems(oldItems, freshItems) {
   return sortItems([...merged, ...oldItems.filter(isManual)]);
 }
 
-/* ---------------------------------------------------------------
-   Weeks
-   "2026-10-21" -> Date for Monday 00:00 Singapore time of that week,
-   i.e. 2026-10-18T16:00:00.000Z. This matches the weekStart values in
-   the seed data. Planner.js MUST produce the exact same Date, or the
-   meal-plan lookup won't find anything. If Planner.js already has a
-   helper for this, use that one in both routers instead.
----------------------------------------------------------------- */
-const SG_OFFSET_MS = 8 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function parseWeekStart(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''))) return null;
-  const date = new Date(`${value}T00:00:00+08:00`);
-  if (Number.isNaN(date.getTime())) return null;
-  const dayInSg = new Date(date.getTime() + SG_OFFSET_MS).getUTCDay(); // 0 = Sunday
-  const daysSinceMonday = (dayInSg + 6) % 7;
-  return new Date(date.getTime() - daysSinceMonday * DAY_MS);
-}
-
 module.exports = {
   CATEGORIES,
   SHOPPING_ORDER,
@@ -283,5 +263,4 @@ module.exports = {
   sortItems,
   buildShoppingItems,
   reconcileItems,
-  parseWeekStart,
 };

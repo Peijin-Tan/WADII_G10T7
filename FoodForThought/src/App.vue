@@ -37,13 +37,20 @@ function handleLogout() {
           <div class="app-main-nav">
             <ul class="navbar-nav app-nav">
               <li v-if="isAdmin" class="nav-item">
-                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard</RouterLink>
+                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin Dashboard
+                </RouterLink>
               </li>
               <li class="nav-item">
-                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan</RouterLink>
+                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan
+                </RouterLink>
               </li>
               <li class="nav-item">
-                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard</RouterLink>
+                <RouterLink to="/shoppinglist" class="nav-link app-nav-link" @click="menuOpen = false">Shopping List
+                </RouterLink>
+              </li>
+              <li class="nav-item">
+                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard
+                </RouterLink>
               </li>
               <li class="nav-item">
                 <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
@@ -52,7 +59,8 @@ function handleLogout() {
                 <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
               </li>
               <li class="nav-item">
-                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community</RouterLink>
+                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community
+                </RouterLink>
               </li>
             </ul>
 

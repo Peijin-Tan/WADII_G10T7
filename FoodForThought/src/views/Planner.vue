@@ -12,32 +12,36 @@ import addMealModal from '../components/Mealplan/addmeal.vue'
    Material Symbols + fonts are loaded in the <style> block below. */
 
 /* ---------- API ---------- */
-// All planner requests go to the Express router mounted at /planner.
-const api = axios.create({ baseURL: 'http://localhost:8000/planner' })
-
 // The login page saves the JWT in the auth store (persisted in localStorage as 'foodforthought_auth').
 // We only send the token: the server works out the userId from it (requireAuth -> req.user),
 // so the page never needs to know or send the userId itself.
 const auth = useAuthStore()
 const router = useRouter()
 
-// send the login token with every planner request
-api.interceptors.request.use((config) => {
-  if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
-  return config
-})
-
-// no token / expired token (they last 1h) -> log out and go to the login page
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      auth.logout()
-      router.push('/login')
+// Adds the login token to every request, and logs out on 401 (tokens last 1h).
+// Used for both axios instances below so they handle auth the same way.
+function withAuth(instance) {
+  instance.interceptors.request.use((config) => {
+    if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
+    return config
+  })
+  instance.interceptors.response.use(
+    (res) => res,
+    (err) => {
+      if (err.response?.status === 401) {
+        auth.logout()
+        router.push('/login')
+      }
+      return Promise.reject(err)
     }
-    return Promise.reject(err)
-  }
-)
+  )
+  return instance
+}
+
+// Planner requests go to the Express router mounted at /planner,
+// the grocery button talks to the shopping-list router mounted at /shoppinglist.
+const api = withAuth(axios.create({ baseURL: 'http://localhost:8000/planner' }))
+const shoppingApi = withAuth(axios.create({ baseURL: 'http://localhost:8000/shoppinglist' }))
 
 /* ---------- Date helpers ---------- */
 function addDays(date, n) {
@@ -343,12 +347,16 @@ const macros = computed(() => {
 })
 
 /* ---------- Grocery sync button ---------- */
-// Still a visual placeholder: the shopping-list API isn't built yet
+// Rebuilds this week's shopping list from the meal plan on the server.
+// The server keeps items the user added by hand and items already ticked off.
 const syncState = ref('idle') // idle | syncing | done
+const itemsToBuy = ref(0) // how many items on the rebuilt list still need buying
 
 const syncLabel = computed(() => {
-  if (syncState.value === 'syncing') return `Syncing ${missingIngredients.value.length} Items...`
-  if (syncState.value === 'done') return 'Ingredients Synced!'
+  if (syncState.value === 'syncing') return 'Updating Grocery List...'
+  if (syncState.value === 'done') {
+    return itemsToBuy.value === 1 ? '1 Item to Buy' : `${itemsToBuy.value} Items to Buy`
+  }
   return 'Send Ingredients to Grocery List'
 })
 const syncIcon = computed(() => {
@@ -357,14 +365,25 @@ const syncIcon = computed(() => {
   return 'post_add'
 })
 
-function sendToGrocery() {
+// Same week as the planner, so "Go to shopping list" opens the matching list
+const shoppingListLink = computed(() => ({ path: '/shoppinglist', query: { start: weekStartISO.value } }))
+
+async function sendToGrocery() {
+  if (syncState.value === 'syncing') return
   syncState.value = 'syncing'
-  setTimeout(() => {
+  errorMsg.value = ''
+  try {
+    const { data } = await shoppingApi.post('/generate', { start: weekStartISO.value })
+    // quantity 0 = the pantry already covers it; purchased = already ticked off
+    itemsToBuy.value = data.items.filter((item) => item.quantity > 0 && !item.purchased).length
     syncState.value = 'done'
     setTimeout(() => {
       syncState.value = 'idle'
     }, 2500)
-  }, 900)
+  } catch (err) {
+    errorMsg.value = err.response?.data?.message || 'Could not update your grocery list. Is the server running?'
+    syncState.value = 'idle'
+  }
 }
 </script>
 
@@ -507,6 +526,10 @@ function sendToGrocery() {
                       <div class="d-flex flex-column">
                         <span class="fft-label-md">Ready to shop?</span>
                         <span class="fft-body-sm text-fft-muted">{{ ctaText }}</span>
+                        <router-link :to="shoppingListLink" class="fft-inline-link d-inline-flex align-items-center gap-1">
+                          Go to shopping list
+                          <span class="material-symbols-outlined" style="font-size: 16px">arrow_forward</span>
+                        </router-link>
                       </div>
                     </div>
                     <button type="button"
@@ -558,7 +581,8 @@ function sendToGrocery() {
                                 </span>
                                 <span v-if="entry.status === 'Cooked'"
                                   class="d-flex align-items-center gap-1 fft-label-sm text-fft-primary fw-semibold">
-                                  <span class="material-symbols-outlined" style="font-size: 16px">check_circle</span>Logged
+                                  <span class="material-symbols-outlined"
+                                    style="font-size: 16px">check_circle</span>Logged
                                   Cooked
                                 </span>
                                 <span v-else-if="entry.status === 'Skipped'"
@@ -577,9 +601,11 @@ function sendToGrocery() {
                               <span class="fw-semibold text-fft-dark" style="font-size: 15px">
                                 {{ entry.recipe.nutrition.calories ?? '–' }} kcal</span>
                               <span>•</span>
-                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.protein ?? '–' }}g Protein</span>
+                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.protein ?? '–' }}g
+                                Protein</span>
                               <span>•</span>
-                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.carbs ?? '–' }}g Carbs</span>
+                              <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.carbs ?? '–' }}g
+                                Carbs</span>
                               <span>•</span>
                               <span class="fw-medium text-fft-dark">{{ entry.recipe.nutrition.fat ?? '–' }}g Fat</span>
                             </div>
@@ -588,30 +614,36 @@ function sendToGrocery() {
                           <!-- Status + meal time -->
                           <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row">
                             <!-- Status -->
-                            <div class="fft-picker" :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
-                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                            <div class="fft-picker"
+                              :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{
+                                statusMeta(entry.status).icon }}</span>
                               <span class="fft-picker-text">
                                 <span class="fft-picker-label">Status</span>
                                 <span class="fft-picker-value">{{ statusMeta(entry.status).label }}</span>
                               </span>
-                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
-                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status" :disabled="saving"
-                                @change="changeStatus(entry, $event.target.value)">
-                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              <span class="material-symbols-outlined fft-picker-chevron"
+                                aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status"
+                                :disabled="saving" @change="changeStatus(entry, $event.target.value)">
+                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}
+                                </option>
                               </select>
                             </div>
 
                             <!-- Meal time -->
                             <div class="fft-picker" :class="{ 'is-disabled': saving }"
                               title="Moving to a meal time that's already taken swaps the two meals">
-                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{
+                                slotMeta(entry.slotKey).icon }}</span>
                               <span class="fft-picker-text">
                                 <span class="fft-picker-label">Meal time</span>
                                 <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
                               </span>
-                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
-                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey" :disabled="saving"
-                                @change="changeMealTime(entry, $event.target.value)">
+                              <span class="material-symbols-outlined fft-picker-chevron"
+                                aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey"
+                                :disabled="saving" @change="changeMealTime(entry, $event.target.value)">
                                 <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
                               </select>
                             </div>
@@ -665,7 +697,8 @@ function sendToGrocery() {
                           <p class="fft-body-sm text-fft-muted m-0">{{ entry.recipe.description }}</p>
 
                           <div class="d-flex align-items-center flex-wrap gap-3 fft-label-sm text-fft-muted pt-1">
-                            <span class="fw-semibold text-fft-dark">{{ entry.recipe.nutrition.calories ?? '–' }} kcal</span>
+                            <span class="fw-semibold text-fft-dark">{{ entry.recipe.nutrition.calories ?? '–' }}
+                              kcal</span>
                             <span>•</span>
                             <span>{{ entry.recipe.nutrition.protein ?? '–' }}g Protein</span>
                             <span>•</span>
@@ -678,47 +711,58 @@ function sendToGrocery() {
                             </template>
                           </div>
 
-                          <div v-if="entry.recipe.ingredients.length" class="d-flex align-items-center flex-wrap gap-2 pt-1">
+                          <div v-if="entry.recipe.ingredients.length"
+                            class="d-flex align-items-center flex-wrap gap-2 pt-1">
                             <span class="fft-label-sm text-fft-outline">Pantry Check:</span>
                             <span v-for="ing in entry.recipe.ingredients.filter((i) => i.inPantry).slice(0, 4)"
                               :key="ing.name" class="fft-label-sm text-fft-primary d-flex align-items-center">
-                              <span class="material-symbols-outlined" style="font-size: 14px">check</span> {{ ing.name }}
+                              <span class="material-symbols-outlined" style="font-size: 14px">check</span> {{ ing.name
+                              }}
                             </span>
                             <span v-if="entry.recipe.ingredients.some((i) => !i.inPantry)"
                               class="fft-label-sm text-fft-secondary">
-                              {{ entry.recipe.ingredients.filter((i) => !i.inPantry).length }} missing
+                              {{entry.recipe.ingredients.filter((i) => !i.inPantry).length}} missing
                             </span>
                           </div>
                         </div>
 
-                        <div class="d-flex flex-md-column align-items-stretch justify-content-end flex-wrap gap-2 flex-shrink-0">
+                        <div
+                          class="d-flex flex-md-column align-items-stretch justify-content-end flex-wrap gap-2 flex-shrink-0">
                           <!-- Status + meal time -->
                           <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row fft-controls-row--stacked">
                             <!-- Status -->
-                            <div class="fft-picker" :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
-                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                            <div class="fft-picker"
+                              :class="[`fft-picker--${statusMeta(entry.status).tone}`, { 'is-disabled': saving }]">
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{
+                                statusMeta(entry.status).icon
+                                }}</span>
                               <span class="fft-picker-text">
                                 <span class="fft-picker-label">Status</span>
                                 <span class="fft-picker-value">{{ statusMeta(entry.status).label }}</span>
                               </span>
-                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
-                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status" :disabled="saving"
-                                @change="changeStatus(entry, $event.target.value)">
-                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                              <span class="material-symbols-outlined fft-picker-chevron"
+                                aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal status" :value="entry.status"
+                                :disabled="saving" @change="changeStatus(entry, $event.target.value)">
+                                <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}
+                                </option>
                               </select>
                             </div>
 
                             <!-- Meal time -->
                             <div class="fft-picker" :class="{ 'is-disabled': saving }"
                               title="Moving to a meal time that's already taken swaps the two meals">
-                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{
+                                slotMeta(entry.slotKey).icon
+                                }}</span>
                               <span class="fft-picker-text">
                                 <span class="fft-picker-label">Meal time</span>
                                 <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
                               </span>
-                              <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
-                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey" :disabled="saving"
-                                @change="changeMealTime(entry, $event.target.value)">
+                              <span class="material-symbols-outlined fft-picker-chevron"
+                                aria-hidden="true">expand_more</span>
+                              <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey"
+                                :disabled="saving" @change="changeMealTime(entry, $event.target.value)">
                                 <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
                               </select>
                             </div>
@@ -746,8 +790,8 @@ function sendToGrocery() {
                   :recipes="recipeOptions" @close="addTarget = null" @add="addMealToPlan" />
                 <viewRecipeModal v-if="selectedEntry" :entry="selectedEntry" @close="selectedEntry = null"
                   @update-status="onStatusChange" />
-                <swapRecipeModal v-if="swapEntry" :entry="swapEntry" :recipes="recipeOptions"
-                  @close="swapEntry = null" @swap="swapMeal" />
+                <swapRecipeModal v-if="swapEntry" :entry="swapEntry" :recipes="recipeOptions" @close="swapEntry = null"
+                  @swap="swapMeal" />
               </div>
             </div>
 
@@ -1462,6 +1506,7 @@ function sendToGrocery() {
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .foodforthought .fft-controls-row--stacked {
   flex-direction: column;
 }
@@ -1474,7 +1519,8 @@ function sendToGrocery() {
   --tone-icon: var(--fft-outline, #727972);
   --tone-border: rgba(194, 200, 192, 0.6);
 
-  position: relative; /* the invisible <select> is stretched over this */
+  position: relative;
+  /* the invisible <select> is stretched over this */
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1486,9 +1532,11 @@ function sendToGrocery() {
   color: var(--tone-fg);
   transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
+
 .foodforthought .fft-picker:hover {
   background: var(--tone-bg-hover);
 }
+
 /* keyboard focus lands on the hidden <select>, so show the ring on the pill */
 .foodforthought .fft-picker:focus-within {
   border-color: var(--fft-primary, #32533c);
@@ -1503,6 +1551,7 @@ function sendToGrocery() {
   --tone-icon: var(--fft-tertiary, #6b4400);
   --tone-border: rgba(107, 68, 0, 0.18);
 }
+
 .foodforthought .fft-picker--cooked {
   --tone-bg: #e6f4e8;
   --tone-bg-hover: #d5ecd8;
@@ -1510,6 +1559,7 @@ function sendToGrocery() {
   --tone-icon: var(--fft-primary, #32533c);
   --tone-border: rgba(50, 83, 60, 0.2);
 }
+
 .foodforthought .fft-picker--skipped {
   --tone-bg: #fdece6;
   --tone-bg-hover: #fadfd5;
@@ -1524,6 +1574,7 @@ function sendToGrocery() {
   color: var(--tone-icon);
   flex-shrink: 0;
 }
+
 .foodforthought .fft-picker-text {
   display: flex;
   flex-direction: column;
@@ -1531,24 +1582,28 @@ function sendToGrocery() {
   flex: 1;
   line-height: 1.15;
 }
+
 .foodforthought .fft-picker-label {
   font: 600 10px/12px 'Inter', sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fft-outline, #727972);
 }
+
 .foodforthought .fft-picker-value {
   font: 600 13px/18px 'Inter', sans-serif;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .foodforthought .fft-picker-chevron {
   font-size: 18px;
   color: var(--tone-icon);
   flex-shrink: 0;
   transition: transform 0.15s;
 }
+
 .foodforthought .fft-picker:hover .fft-picker-chevron {
   transform: translateY(1px);
 }
@@ -1561,13 +1616,15 @@ function sendToGrocery() {
   height: 100%;
   opacity: 0;
   cursor: pointer;
-  font-size: 16px; /* stops iOS zooming in when the picker opens */
+  font-size: 16px;
+  /* stops iOS zooming in when the picker opens */
 }
 
 /* ---------- Disabled while saving ---------- */
 .foodforthought .fft-picker.is-disabled {
   opacity: 0.6;
 }
+
 .foodforthought .fft-picker.is-disabled .fft-picker-select {
   cursor: progress;
 }
@@ -1576,6 +1633,37 @@ function sendToGrocery() {
   .foodforthought .fft-controls-row:not(.fft-controls-row--stacked) .fft-picker {
     flex: 1 1 100%;
   }
+}
+
+/* ===== "Go to shopping list" link ===== */
+.foodforthought .fft-inline-link {
+  align-self: flex-start;
+  margin-top: 2px;
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  color: var(--fft-primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.foodforthought .fft-inline-link:hover {
+  color: var(--fft-primary-container);
+  border-bottom-color: currentColor;
+}
+
+.foodforthought .fft-inline-link:hover .material-symbols-outlined {
+  transform: translateX(2px);
+}
+
+.foodforthought .fft-inline-link .material-symbols-outlined {
+  transition: transform 0.15s;
+}
+
+.foodforthought .fft-inline-link:focus-visible {
+  outline: 2px solid var(--fft-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .foodforthought .fft-spin {

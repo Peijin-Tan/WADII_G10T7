@@ -6,7 +6,7 @@
  * field added here has a default, so old documents still load.
  */
 const mongoose = require('mongoose');
-const { CATEGORIES, normalizeName } = require('../services/shoppingListBuilder');
+const { CATEGORIES, normalizeName } = require('../src/services/shoppinglistbuilder');
 
 const { Schema } = mongoose;
 

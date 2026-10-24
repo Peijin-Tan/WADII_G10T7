@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
 /* ---------- API ---------- */
-// All planner requests go to the Express router mounted at /planner.
+// All shopping-list requests go to the Express router mounted at /shoppinglist.
 const api = axios.create({ baseURL: 'http://localhost:8000/shoppinglist' })
 
 // The login page saves the JWT in the auth store (persisted in localStorage as 'foodforthought_auth').
@@ -13,7 +15,7 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-// send the login token with every planner request
+// send the login token with every shopping-list request
 api.interceptors.request.use((config) => {
   if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
   return config
@@ -98,7 +100,7 @@ async function loadList() {
   loading.value = true
   error.value = ''
   try {
-    const { data } = await api.get('/shopping-list', { params: { start: weekStart.value } })
+    const { data } = await api.get('/', { params: { start: weekStart.value } })
     list.value = data
   } catch (err) {
     error.value = errorMessage(err)
@@ -112,7 +114,7 @@ async function generateList() {
   generating.value = true
   error.value = ''
   try {
-    const { data } = await api.post('/shopping-list/generate', { start: weekStart.value })
+    const { data } = await api.post('/generate', { start: weekStart.value })
     list.value = data
   } catch (err) {
     error.value = errorMessage(err)
@@ -177,14 +179,6 @@ const sections = computed(() =>
   }).filter((s) => s.visible.length > 0),
 )
 
-// Right-hand "Shopping order" card: only sections that still have things to buy.
-const routeSteps = computed(() =>
-  CATEGORY_META.map((cat) => ({
-    ...cat,
-    remaining: toBuyItems.value.filter((it) => (it.category || 'other') === cat.id && !it.purchased).length,
-  })).filter((s) => s.remaining > 0),
-)
-
 /* ---------------------------------------------------------------
    Formatting
 ---------------------------------------------------------------- */
@@ -211,7 +205,7 @@ async function togglePurchased(it) {
   const next = !it.purchased
   it.purchased = next
   try {
-    const { data } = await api.patch(`/shopping-list/items/${it._id}`, { purchased: next })
+    const { data } = await api.patch(`/items/${it._id}`, { purchased: next })
     Object.assign(it, data)
   } catch (err) {
     it.purchased = !next
@@ -231,7 +225,7 @@ async function addItem() {
   adding.value = true
   error.value = ''
   try {
-    const { data } = await api.post('/shopping-list/items', { start: weekStart.value, ...newItem.value, name })
+    const { data } = await api.post('/items', { start: weekStart.value, ...newItem.value, name })
     if (!list.value) list.value = { items: [], generatedAt: null }
     list.value.items.push(data)
     newItem.value = { ...newItem.value, name: '', quantity: 1 }
@@ -246,14 +240,13 @@ async function removeItem(it) {
   const index = list.value.items.indexOf(it)
   list.value.items.splice(index, 1)
   try {
-    await api.delete(`/shopping-list/items/${it._id}`)
+    await api.delete(`/items/${it._id}`)
   } catch (err) {
     list.value.items.splice(index, 0, it) // put it back
     error.value = errorMessage(err)
   }
 }
 
-const printList = () => window.print()
 </script>
 
 <template>
@@ -271,7 +264,7 @@ const printList = () => window.print()
                 <span class="sw-dot sw-dot--primary"></span>
                 From {{ recipeTitles.length }} {{ recipeTitles.length === 1 ? 'recipe' : 'recipes' }} in your meal plan
               </span>
-              <div class="sw-weeknav sw-no-print" role="group" aria-label="Choose week">
+              <div class="sw-weeknav" role="group" aria-label="Choose week">
                 <button type="button" class="sw-iconbtn" aria-label="Previous week" @click="shiftWeek(-1)">
                   <span class="material-symbols-outlined sw-ico-18">chevron_left</span>
                 </button>
@@ -280,7 +273,6 @@ const printList = () => window.print()
                   <span class="material-symbols-outlined sw-ico-18">chevron_right</span>
                 </button>
               </div>
-              <span class="sw-label-md sw-text-tertiary sw-print-only">Week of {{ weekLabel }}</span>
             </div>
             <h1 class="sw-headline-lg">Shopping List</h1>
             <p class="sw-body-md sw-text-variant">
@@ -312,11 +304,7 @@ const printList = () => window.print()
               </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2 sw-no-print">
-              <button type="button" class="btn sw-btn sw-btn-highest shadow-sm flex-fill flex-sm-grow-0" @click="printList">
-                <span class="material-symbols-outlined sw-ico-18">print</span>
-                <span>Print</span>
-              </button>
+            <div class="d-flex align-items-center gap-2">
               <button
                 type="button"
                 class="btn sw-btn sw-btn-secondary shadow-sm flex-fill flex-sm-grow-0"
@@ -332,7 +320,7 @@ const printList = () => window.print()
         </div>
 
         <!-- Quick filter bar -->
-        <div v-if="items.length" class="sw-filterbar d-flex flex-wrap align-items-center justify-content-between gap-3 sw-no-print">
+        <div v-if="items.length" class="sw-filterbar d-flex flex-wrap align-items-center justify-content-between gap-3">
           <div class="d-flex align-items-center flex-wrap gap-2">
             <button
               v-for="f in filters"
@@ -355,7 +343,7 @@ const printList = () => window.print()
     </section>
 
     <!-- Error banner -->
-    <div v-if="error" class="sw-alert sw-no-print" role="alert">
+    <div v-if="error" class="sw-alert" role="alert">
       <span class="material-symbols-outlined sw-ico-20">error</span>
       <span class="sw-body-sm flex-grow-1">{{ error }}</span>
       <button type="button" class="sw-iconbtn" aria-label="Dismiss" @click="error = ''">
@@ -390,7 +378,7 @@ const printList = () => window.print()
       <div class="col-12 col-lg-8">
         <div class="d-flex flex-column gap-4">
           <!-- Quick add -->
-          <form class="sw-card sw-addform p-3 sw-no-print" @submit.prevent="addItem">
+          <form class="sw-card sw-addform p-3" @submit.prevent="addItem">
             <div class="sw-addbox">
               <span class="material-symbols-outlined sw-ico-20 sw-text-outline">add_circle</span>
               <input
@@ -474,7 +462,7 @@ const printList = () => window.print()
                     <span class="sw-pill">Added by you</span>
                     <button
                       type="button"
-                      class="sw-iconbtn sw-no-print"
+                      class="sw-iconbtn"
                       :aria-label="`Remove ${it.name}`"
                       @click.prevent="removeItem(it)"
                     >
@@ -498,36 +486,9 @@ const printList = () => window.print()
         </div>
       </div>
 
-      <!-- ---------- Right: shopping order + pantry ---------- -->
-      <div class="col-12 col-lg-4 sw-no-print">
+      <!-- ---------- Right: pantry ---------- -->
+      <div class="col-12 col-lg-4">
         <div class="d-flex flex-column gap-4">
-          <!-- Shopping order -->
-          <section class="sw-card d-flex flex-column gap-3 p-4">
-            <div class="d-flex align-items-center gap-1">
-              <span class="material-symbols-outlined sw-ico-22 sw-text-primary">route</span>
-              <h3 class="sw-headline-sm">Shopping Order</h3>
-            </div>
-            <p class="sw-body-sm sw-text-variant">
-              Shelf-stable items first, chilled and frozen items last so they stay cold on the way home.
-            </p>
-
-            <div v-if="routeSteps.length" class="sw-timeline">
-              <div v-for="(step, i) in routeSteps" :key="step.id" class="sw-step">
-                <span class="sw-step-dot" :class="i === 0 ? 'sw-step-dot--primary' : step.chilled && 'sw-step-dot--secondary'"></span>
-                <div class="d-flex flex-column">
-                  <span class="sw-label-md">{{ i + 1 }}. {{ step.title }}</span>
-                  <span class="sw-body-sm" :class="step.chilled ? 'sw-text-secondary' : 'sw-text-outline'">
-                    {{ step.remaining }} left to buy{{ step.chilled ? ' · keep chilled' : '' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <p v-else class="sw-label-md sw-text-primary m-0 d-flex align-items-center gap-1">
-              <span class="material-symbols-outlined sw-ico-18">check_circle</span>
-              Everything's bought for this week.
-            </p>
-          </section>
-
           <!-- Pantry cross-check -->
           <section class="sw-card sw-card--low d-flex flex-column gap-3 p-4">
             <div class="d-flex align-items-center justify-content-between">
@@ -756,14 +717,6 @@ const printList = () => window.print()
   --bs-btn-disabled-color: var(--sw-on-secondary);
   --bs-btn-disabled-bg: var(--sw-secondary);
 }
-.sw-btn-highest {
-  --bs-btn-color: var(--sw-on-surface);
-  --bs-btn-bg: var(--sw-surface-highest);
-  --bs-btn-hover-color: var(--sw-on-surface);
-  --bs-btn-hover-bg: var(--sw-surface-dim);
-  --bs-btn-active-color: var(--sw-on-surface);
-  --bs-btn-active-bg: var(--sw-surface-dim);
-}
 .sw-btn-tonal {
   --bs-btn-color: var(--sw-on-surface);
   --bs-btn-bg: var(--sw-surface);
@@ -887,28 +840,10 @@ const printList = () => window.print()
 .sw-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.25rem; padding-left: 2.25rem; }
 @media (min-width: 576px) { .sw-tags { padding-left: 0; } }
 
-/* ---------- Shopping order timeline ---------- */
-.sw-timeline { position: relative; display: flex; flex-direction: column; gap: 1rem; margin-top: 0.25rem; padding-left: 1.5rem; }
-.sw-timeline::before { content: ''; position: absolute; left: 6px; top: 0.5rem; bottom: 0.5rem; width: 2px; background: var(--sw-surface-highest); }
-.sw-step { position: relative; display: flex; align-items: flex-start; gap: 0.5rem; }
-.sw-step-dot { position: absolute; left: -1.5rem; top: 0.25rem; width: 14px; height: 14px; border-radius: 50%; background: var(--sw-surface-variant); box-shadow: 0 0 0 4px var(--sw-surface-lowest); }
-.sw-step-dot--primary   { background: var(--sw-primary); }
-.sw-step-dot--secondary { background: var(--sw-secondary); }
-
 /* ---------- Pantry list ---------- */
 .sw-saving { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem; background: var(--sw-surface-lowest); border-radius: var(--sw-radius); }
 .sw-saving-text { min-width: 0; }
 .sw-saving-text .sw-label-md { display: block; }
-
-/* ---------- Print: just the list ---------- */
-.sw-print-only { display: none; }
-@media print {
-  .sw-no-print { display: none !important; }
-  .sw-print-only { display: inline; }
-  .sw-hero, .sw-card { box-shadow: none; }
-  .sw-blob { display: none; }
-  .col-lg-8 { width: 100%; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .sw-spin { animation: none; }
