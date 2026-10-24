@@ -12,36 +12,33 @@ const images = {
   dinner: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBrBiTZwMj93RE5tKown8jikEfqDVBC-G24ZpeJGfw5PGVPq41_ZHqO1M9Id9fP4D0mNnZaSvv6B3Fi7mIoCV_bBhAeO6JAyR9bhktig1xa8cG3k7-TLWYJPjSNlncajfar5e6ZzBY52npTG8rV6043bpuyHab5x3Ir9X3V3KWEoiHaazRIDlUDQP7U1XCr9K9f1Yohht5l2iXJD9OnRyIuJaWccRf72WxWCqxMNNk',
 }
 
-const url = "http://localhost:8000"
-const weekPlan = ref([])
-async function getWeeklyPlan() {
-  try {
-    const res = await axios.get(`${url}/`, { params: { start } })
-    weekPlan.value = res.data
-    /*
-    {
-        "_id": "66f200000000000000000001",
-        "userId": "66f000000000000000000002",
-        "weekStart": "2026-09-27T16:00:00.000Z",
-        "entries": [
-            {
-                "recipeId": "66f100000000000000000001",
-                "dayOfWeek": 0,
-                "mealSlot": "dinner",
-                "servings": 2,
-                "status": "Cooked",
-                "cookedAt": "2026-09-28T11:00:00.000Z",
-                "_id": "66f400000000000000000001"
-            },
-        ],
-        "createdAt": "2026-09-25T16:00:00.000Z",
-        "updatedAt": "2026-10-04T08:00:00.000Z"
-    },
-    */
-  } catch (error) {
-    console.log(error)
+/* ---------- API ---------- */
+// All planner requests go to the Express router mounted at /planner.
+const api = axios.create({ baseURL: 'http://localhost:8000/planner' })
+
+// The login page saves the JWT in the auth store (persisted in localStorage as 'foodforthought_auth').
+// We only send the token: the server works out the userId from it (requireAuth -> req.user),
+// so the page never needs to know or send the userId itself.
+const auth = useAuthStore()
+const router = useRouter()
+
+// send the login token with every planner request
+api.interceptors.request.use((config) => {
+  if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
+  return config
+})
+
+// no token / expired token (they last 1h) -> log out and go to the login page
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      auth.logout()
+      router.push('/login')
+    }
+    return Promise.reject(err)
   }
-}
+)
 
 /* ---------- Control bar ---------- */
 const metrics = computed(() => [

@@ -60,6 +60,11 @@ const router = createRouter({
       component: () => import('../views/Planner.vue')
     },
     {
+      path: '/shoppinglist',
+      name: 'shoppinglist',
+      component: () => import('../views/ShoppingList.vue')
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('../components/Auth/login.vue')
