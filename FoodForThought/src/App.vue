@@ -15,7 +15,7 @@ const menuOpen = ref(false)
 function handleLogout() {
   auth.logout()
   menuOpen.value = false
-  router.push('/login')
+  router.push('/home')
 }
 </script>
 
