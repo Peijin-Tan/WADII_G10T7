@@ -3,7 +3,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const router = useRouter()
 
 const title = ref('')
@@ -81,7 +83,11 @@ async function createRecipe() {
       sourceUrl: ''
     }
 
-    await axios.post('/api/recipes', recipeData)
+    await axios.post('/api/recipes', recipeData, {
+  headers: {
+    Authorization: `Bearer ${auth.token}`
+  }
+})
 
     success.value = 'Recipe created successfully!'
     await router.push('/recipes')

@@ -198,6 +198,7 @@ router.get('/', async (req, res) => {
     }
 
     const recipes = await Recipe.find(filter)
+      .populate('createdBy', 'name')
 
     res.status(200).json({
       count: recipes.length,
@@ -324,14 +325,15 @@ router.get('/:id', async (req, res) => {
 
 // POST /recipes
 // Create a recipe (useful for development and testing)
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const recipeData = {
-  ...req.body,
-  source: 'user'
-}
+      ...req.body,
+      source: 'user',
+      createdBy: req.user._id
+    }
 
-const recipe = await Recipe.create(recipeData)
+    const recipe = await Recipe.create(recipeData)
 
     res.status(201).json({
       message: 'Recipe created successfully',

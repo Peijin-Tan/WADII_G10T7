@@ -35,6 +35,11 @@ const router = createRouter({
       component: Pantry
     },
     {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('../views/Profile.vue')
+    },
+    {
       path: '/recipes',
       name: 'recipes',
       component: Recipes
@@ -47,6 +52,11 @@ const router = createRouter({
     {
       path: '/recipes/create',
       component: () => import('../views/CreateRecipe.vue')
+    },
+    {
+      path: '/preferences',
+      name: 'dietary-preferences',
+      component: () => import('../views/DietaryPreferences.vue')
     },
     {
       path: '/planner',

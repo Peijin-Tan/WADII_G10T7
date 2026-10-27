@@ -280,6 +280,15 @@ onMounted(() => {
               Cuisine: {{ recipe.cuisine.join(', ') }}
             </p>
 
+            <p v-if="recipe.source !== 'spoonacular'" class="text-muted">
+              <i class="bi bi-person-circle me-1"></i>
+              Created by: {{ recipe.createdBy?.name || 'Unknown' }}
+            </p>
+
+            <p v-else class="text-muted">
+              Source: Spoonacular
+            </p>
+
             <a
               v-if="recipe.source === 'spoonacular' && recipe.sourceUrl"
               :href="recipe.sourceUrl"

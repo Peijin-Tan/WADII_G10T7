@@ -67,14 +67,20 @@ function handleLogout() {
 
             <div class="app-user-controls">
               <div class="d-flex align-items-center gap-3">
-                <img class="app-avatar" alt="Profile"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30" />
-                <span class="d-inline d-xl-none d-xxl-inline text-success">{{ displayName }}</span>
+                <RouterLink
+                  to="/profile"
+                  class="app-profile-link"
+                  aria-label="View profile"
+                  @click="menuOpen = false"
+                >
+                  <img
+                    class="app-avatar"
+                    alt="Profile"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30"
+                  />
+                </RouterLink>
+                <span class="d-none d-md-inline text-success">{{ displayName }}</span>
               </div>
-              <button type="button" class="btn app-logout-button" @click="handleLogout">
-                <span class="material-symbols-outlined" aria-hidden="true">logout</span>
-                Logout
-              </button>
             </div>
           </div>
         </div>
@@ -394,5 +400,20 @@ body {
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.03em;
   color: #727972;
+}
+
+.app-profile-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.app-profile-link:hover .app-avatar {
+  transform: scale(1.08);
+}
+
+.app-avatar {
+  transition: transform 0.2s ease;
 }
 </style>

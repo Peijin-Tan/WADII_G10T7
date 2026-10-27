@@ -8,6 +8,14 @@ const recipeSchema = new mongoose.Schema(
       default: undefined
     },
 
+    createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function () {
+      return this.source === 'user'
+    }
+    },
+
     title: {
       type: String,
       required: true

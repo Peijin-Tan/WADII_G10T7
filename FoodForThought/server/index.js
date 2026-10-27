@@ -22,6 +22,7 @@ const shoppinglistRouter = require('./src/router/shoppinglist')
 const recipeRouter = require('./src/router/recipe')
 const dashboardRouter = require('./src/router/analytics')
 const activityRouter = require('./src/router/activity')
+const preferencesRouter = require('./src/router/preferences')
 
 const app = express()
 app.use(cors({
@@ -55,6 +56,8 @@ app.use('/shoppinglist', shoppinglistRouter)
 app.use('/recipes', recipeRouter)
 app.use('/analytics', dashboardRouter)
 app.use('/activity', activityRouter)
+app.use('/preferences', preferencesRouter)
+
 
 app.get('/admin/stats', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
