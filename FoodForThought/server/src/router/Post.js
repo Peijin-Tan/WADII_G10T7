@@ -1,54 +1,95 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const Post = require('../../models/Post')
 const Like = require('../../models/Like')
 const User = require('../../models/User')
+const Recipe = require('../../models/Recipe')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
 router.get('/', async (req, res) => {
-  
   try {
+    const posts = await Post.find()
+      .populate('userId', 'name')
+      .populate('recipeId')
+      .sort({ createdAt: -1 })
 
-    const posts = await Post.find().populate('userId', 'name').sort({ createdAt: -1 })
-    res.json(posts)
+    const results = []
+
+    for (const post of posts) {
+      const likeCount = await Like.countDocuments({
+        postId: post._id
+      })
+
+      const postData = post.toObject()
+      postData.likeCount = likeCount
+
+      results.push(postData)
+    }
+
+    res.json(results)
   } catch (err) {
     console.error(err)
-    res.status(500).json({ message: 'Failed to retrieve posts' })
+    res.status(500).json({
+      message: 'Failed to retrieve posts'
+    })
+  }
+})
+
+router.delete('/:id', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      message: 'Admin access required to delete posts'
+    })
+  }
+
+  const { id } = req.params
+
+  if (!mongoose.isObjectIdOrHexString(id)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const deletedPost = await Post.findByIdAndDelete(id)
+
+    if (!deletedPost) {
+      return res.status(404).json({
+        message: 'Post not found'
+      })
+    }
+
+    return res.json({
+      message: 'Post deleted successfully',
+      postId: id
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({
+      message: 'Unable to delete post'
+    })
   }
 })
 
 router.post('/', requireAuth, async (req, res) => {
-  // 1. Read the submitted fields
   const body = req.body || {}
 
   const content = body.content
-  const image = body.image === undefined ? '' : body.image
-  const recipeId = body.recipeId === undefined ? null : body.recipeId
   const tags = body.tags === undefined ? [] : body.tags
+  const recipe = body.recipe
 
-  // 2. Validate content
-  if (typeof content !== 'string') {
-    return res.status(400).json({
-      message: 'Content must be text'
-    })
-  }
-
-  const cleanedContent = content.trim()
-
-  if (cleanedContent.length === 0 || cleanedContent.length > 2000) {
+  // Validate the post
+  if (
+    typeof content !== 'string' ||
+    content.trim() === '' ||
+    content.trim().length > 2000
+  ) {
     return res.status(400).json({
       message: 'Post content must contain 1–2000 characters'
     })
   }
 
-  // 3. Validate image
-  if (typeof image !== 'string') {
-    return res.status(400).json({
-      message: 'Image must be a URL or file path'
-    })
-  }
-
-  // 4. Validate tags
   if (!Array.isArray(tags)) {
     return res.status(400).json({
       message: 'Tags must be an array'
@@ -71,49 +112,402 @@ router.post('/', requireAuth, async (req, res) => {
     }
   }
 
-  try {
-    // 5. Check the optional recipe link
-    if (recipeId !== null) {
-      if (!mongoose.isObjectIdOrHexString(recipeId)) {
-        return res.status(400).json({
-          message: 'Invalid recipe ID'
-        })
-      }
+  // Validate the recipe
+  if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
+    return res.status(400).json({
+      message: 'Recipe details are required'
+    })
+  }
 
-      const recipe = await Recipe.findById(recipeId)
+  const requiredTextFields = ['title', 'summary', 'image']
 
-      if (!recipe) {
-        return res.status(404).json({
-          message: 'Recipe not found'
-        })
-      }
+  for (const field of requiredTextFields) {
+    if (
+      typeof recipe[field] !== 'string' ||
+      recipe[field].trim() === ''
+    ) {
+      return res.status(400).json({
+        message: `Recipe ${field} is required`
+      })
+    }
+  }
+
+  if (!Number.isInteger(recipe.servings) || recipe.servings < 1) {
+    return res.status(400).json({
+      message: 'Servings must be a positive whole number'
+    })
+  }
+
+  if (
+    !Number.isFinite(recipe.prepTime) ||
+    recipe.prepTime < 0 ||
+    !Number.isFinite(recipe.cookingTime) ||
+    recipe.cookingTime < 0
+  ) {
+    return res.status(400).json({
+      message: 'Preparation and cooking times must be non-negative numbers'
+    })
+  }
+
+  if (
+    !Array.isArray(recipe.ingredients) ||
+    recipe.ingredients.length === 0
+  ) {
+    return res.status(400).json({
+      message: 'Add at least one ingredient'
+    })
+  }
+
+  const cleanedIngredients = []
+
+  for (const ingredient of recipe.ingredients) {
+    if (
+      !ingredient ||
+      typeof ingredient.name !== 'string' ||
+      ingredient.name.trim() === '' ||
+      !Number.isFinite(ingredient.amount) ||
+      ingredient.amount <= 0 ||
+      typeof ingredient.unit !== 'string' ||
+      ingredient.unit.trim() === ''
+    ) {
+      return res.status(400).json({
+        message: 'Each ingredient needs a name, positive amount, and unit'
+      })
     }
 
-    // 6. Save the post using the verified user's ID
-    const post = await Post.create({
-      userId: req.user._id,
-      content: cleanedContent,
-      image: image.trim(),
-      recipeId: recipeId,
-      tags: cleanedTags
+    cleanedIngredients.push({
+      name: ingredient.name.trim(),
+      amount: ingredient.amount,
+      unit: ingredient.unit.trim()
+    })
+  }
+
+  if (
+    !Array.isArray(recipe.instructions) ||
+    recipe.instructions.length === 0
+  ) {
+    return res.status(400).json({
+      message: 'Add at least one instruction'
+    })
+  }
+
+  const cleanedInstructions = []
+
+  for (let i = 0; i < recipe.instructions.length; i++) {
+    const instruction = recipe.instructions[i]
+
+    if (
+      !instruction ||
+      typeof instruction.description !== 'string' ||
+      instruction.description.trim() === ''
+    ) {
+      return res.status(400).json({
+        message: 'Each instruction needs a description'
+      })
+    }
+
+    cleanedInstructions.push({
+      step: i + 1,
+      description: instruction.description.trim()
+    })
+  }
+
+  if (
+    !Array.isArray(recipe.cuisine) ||
+    recipe.cuisine.length === 0
+  ) {
+    return res.status(400).json({
+      message: 'Select at least one cuisine'
+    })
+  }
+
+  const cleanedCuisine = []
+
+  for (const cuisine of recipe.cuisine) {
+    if (
+      typeof cuisine !== 'string' ||
+      cuisine.trim() === ''
+    ) {
+      return res.status(400).json({
+        message: 'Each cuisine must be non-empty text'
+      })
+    }
+
+    const cuisineName = cuisine.trim()
+
+    if (!cleanedCuisine.includes(cuisineName)) {
+      cleanedCuisine.push(cuisineName)
+    }
+  }
+
+  try {
+    let createdPost
+
+    // Both documents save together, or neither saves
+    await mongoose.connection.transaction(async (session) => {
+      const newRecipe = new Recipe({
+        source: 'user',
+        createdBy: req.user._id,
+        title: recipe.title.trim(),
+        summary: recipe.summary.trim(),
+        image: recipe.image.trim(),
+        servings: recipe.servings,
+        prepTime: recipe.prepTime,
+        cookingTime: recipe.cookingTime,
+        totalTime: recipe.prepTime + recipe.cookingTime,
+        cuisine: cleanedCuisine,
+        dietaryCategories: [],
+        allergens: [],
+        nutrition: [],
+        ingredients: cleanedIngredients,
+        instructions: cleanedInstructions
+      })
+
+      await newRecipe.save({ session })
+
+      createdPost = new Post({
+        userId: req.user._id,
+        content: content.trim(),
+        tags: cleanedTags,
+        recipeId: newRecipe._id
+      })
+
+      await createdPost.save({ session })
     })
 
-    // 7. Include the author's name in the response
-    await post.populate('userId', 'name')
+    await createdPost.populate([
+      { path: 'userId', select: 'name' },
+      { path: 'recipeId' }
+    ])
 
-    return res.status(201).json(post)
+    return res.status(201).json(createdPost)
   } catch (err) {
     console.error(err)
 
     if (err.name === 'ValidationError') {
       return res.status(400).json({
-        message: 'Invalid post data'
+        message: 'Invalid post or recipe data'
       })
     }
 
     return res.status(500).json({
-      message: 'Failed to create post'
+      message: 'Failed to create the recipe post'
     })
+  }
+})
+router.delete('/:id', requireAuth, async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'This post is no longer available'
+      })
+    }
+
+    if (post.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        message: 'You can only delete your own posts'
+      })
+    }
+
+    // Delete the post and its likes together.
+    await mongoose.connection.transaction(async (session) => {
+      await Post.deleteOne(
+        {
+          _id: postId,
+          userId: req.user._id
+        },
+        { session }
+      )
+
+      await Like.deleteMany(
+        { postId: postId },
+        { session }
+      )
+    })
+
+    return res.json({
+      message: 'Post deleted successfully'
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to delete post'
+    })
+  }
+})
+
+// GET /posts/liked — posts the logged-in user has liked
+router.get('/liked', requireAuth, async (req, res) => {
+  try {
+    const likes = await Like.find({
+      userId: req.user._id
+    })
+
+    const postIds = []
+
+    for (const like of likes) {
+      postIds.push(like.postId.toString())
+    }
+
+    res.json(postIds)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      message: 'Failed to retrieve your likes'
+    })
+  }
+})
+
+// POST /posts/:id/like — like a post
+router.post('/:id/like', requireAuth, async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isObjectIdOrHexString(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'Post not found'
+      })
+    }
+
+    try {
+      await Like.create({
+        userId: req.user._id,
+        postId: postId
+      })
+    } catch (err) {
+      // Already liked: keep the existing like
+      if (err.code !== 11000) {
+        throw err
+      }
+    }
+
+    const likeCount = await Like.countDocuments({
+      postId: postId
+    })
+
+    res.json({
+      liked: true,
+      likeCount: likeCount
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      message: 'Failed to like post'
+    })
+  }
+})
+
+// DELETE /posts/:id/like — unlike a post
+router.delete('/:id/like', requireAuth, async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isObjectIdOrHexString(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'Post not found'
+      })
+    }
+
+    await Like.deleteOne({
+      userId: req.user._id,
+      postId: postId
+    })
+
+    const likeCount = await Like.countDocuments({
+      postId: postId
+    })
+
+    res.json({
+      liked: false,
+      likeCount: likeCount
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      message: 'Failed to unlike post'
+    })
+  }
+})
+
+// Get one community post and its recipe.
+router.get('/:id', async (req, res) => {
+  const postId = req.params.id
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({
+      message: 'Invalid post ID'
+    })
+  }
+
+  try {
+    const post = await Post.findById(postId)
+      .populate('userId', 'name')
+      .populate('recipeId')
+
+    if (!post) {
+      return res.status(404).json({
+        message: 'This post is no longer available'
+      })
+    }
+
+    return res.json(post)
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Failed to retrieve recipe post'
+    })
+  }
+})
+
+router.delete('/:id', requireAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required to delete posts.' })
+  }
+
+  try {
+    const { id } = req.params
+
+    const deletedPost = await Post.findByIdAndDelete(id)
+
+    if (!deletedPost) {
+      return res.status(404).json({ message: 'Post not found.' })
+    }
+
+    return res.status(200).json({
+      message: 'Post deleted successfully.',
+      deletedPost
+    })
+  } catch (err) {
+    console.error('Delete post error:', err)
+    return res.status(500).json({ message: 'Server error while deleting post.' })
   }
 })
 

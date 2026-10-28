@@ -1,0 +1,72 @@
+.fft-page {
+  --fft-background: #FAFAF3;
+  --fft-surface-low: #F4F4ED;
+  --fft-surface-high: #E8E9E2;
+  --fft-card: #FFFFFF;
+
+  --fft-text: #1A1C18;
+  --fft-secondary-text: #424842;
+  --fft-muted: #727972;
+  --fft-border: #C2C8C0;
+
+  --fft-primary: #32533C;
+  --fft-primary-hover: #4A6B53;
+  --fft-primary-light: #C7ECCE;
+  --fft-primary-dark: #01210F;
+
+  --fft-peach: #FFDBCF;
+  --fft-peach-text: #390C00;
+
+  flex: 1;
+  width: 100%;
+  background-color: var(--fft-background);
+  color: var(--fft-text);
+
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  line-height: 24px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.fft-page h1 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.fft-page h2,
+.fft-page h3,
+.fft-page h4 {
+  font-family: 'Outfit', sans-serif;
+}
+
+.fft-page .btn {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 8px 16px;
+  border-radius: 8px;
+}
+
+.fft-page .text-muted {
+  color: var(--fft-muted) !important;
+}
+
+.fft-page .bg-light {
+  background-color: var(--fft-surface-low) !important;
+}
+
+.fft-page .form-control {
+  font-family: 'Inter', sans-serif;
+  color: var(--fft-text);
+  border-color: var(--fft-border);
+}
+
+.fft-page .form-control:focus {
+  border-color: var(--fft-primary);
+  box-shadow: 0 0 0 3px rgb(50 83 60 / 12%);
+}
