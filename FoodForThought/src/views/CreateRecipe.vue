@@ -7,7 +7,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
-const auth = useAuthStore()
 
 const title = ref('')
 const image = ref('')
