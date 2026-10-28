@@ -121,4 +121,55 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user })
 })
 
+// PATCH /auth/change-password
+router.patch('/change-password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body || {}
+
+  if (
+    typeof currentPassword !== 'string' || !currentPassword.trim() ||
+    typeof newPassword !== 'string' || newPassword.length < 8 ||
+    typeof confirmPassword !== 'string' || confirmPassword.length < 8
+  ) {
+    return res.status(400).json({
+      message: 'Current password, a new password with at least 8 characters, and confirmation are required.'
+    })
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({
+      message: 'New password and confirmation password do not match.'
+    })
+  }
+
+  try {
+    const user = await User.findById(req.user._id).select('+password')
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found.'
+      })
+    }
+
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword)
+
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        message: 'Current password is incorrect.'
+      })
+    }
+
+    user.password = newPassword
+    await user.save()
+
+    return res.json({
+      message: 'Password updated successfully.'
+    })
+  } catch (error) {
+    console.error('Change password error:', error)
+    return res.status(500).json({
+      message: 'Unable to update password.'
+    })
+  }
+})
+
 module.exports = router;

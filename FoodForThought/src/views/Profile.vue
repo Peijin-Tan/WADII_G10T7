@@ -52,6 +52,22 @@ function handleLogout() {
 
             <span class="option-arrow">›</span>
           </RouterLink>
+
+          <RouterLink
+            to="/change-password"
+            class="profile-option"
+          >
+            <div class="option-icon">🔒</div>
+
+            <div class="option-content">
+              <h2>Change Password</h2>
+              <p>
+                Update your account password with a current and new password confirmation.
+              </p>
+            </div>
+
+            <span class="option-arrow">›</span>
+          </RouterLink>
         </div>
 
         <button
