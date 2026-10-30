@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const ShoppingList = require("./ShoppingList");
 
 const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
 const ENTRY_STATUS = ["Planned", "Cooked", "Skipped"];

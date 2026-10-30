@@ -6,7 +6,7 @@
  * return plain objects out, which is why they're easy to unit-test
  * (see tests/shoppingListBuilder.test.js).
  *
- * Pipeline used by POST /shopping-list/generate:
+ * Pipeline used by POST /shoppinglist/generate:
  *   meals ──► scale by servings ──► merge duplicates ──► subtract pantry
  *         ──► round ──► sort by shopping order ──► reconcile with old list
  */
@@ -39,11 +39,17 @@ const SHOPPING_ORDER = [
 /* ---------------------------------------------------------------
    Names
 ---------------------------------------------------------------- */
+const { normalizeIngredient } = require('./ingredientnames');
 
-// "  Spring  Onion " -> "spring onion", so "Garlic" and "garlic" merge.
-// Known limitation: plurals are NOT merged ("egg" vs "eggs").
-function normalizeName(name) {
-  return String(name ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+// Ingredient names use the SAME rule as the pantry, so list items and
+// pantry items match: "Eggs" -> "egg", "Cherry Tomatoes" -> "cherry tomato".
+// This also merges plurals across recipes ("2 egg" + "3 eggs" = 5).
+const normalizeName = normalizeIngredient;
+
+// Lowercase + tidy spaces only. For units, aisles and statuses, where
+// plurals and punctuation matter ("tbsp.", "Milk, Eggs").
+function cleanText(text) {
+  return String(text ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
 // "chicken thigh" -> "Chicken thigh" (for display only).
@@ -79,7 +85,7 @@ for (const [unit, factor, ...spellings] of UNIT_ALIASES) {
 
 // Unknown units (e.g. "can", "pack") pass through unchanged.
 function normalizeUnit(unit) {
-  const key = normalizeName(unit).replace(/\.$/, ''); // "tbsp." -> "tbsp"
+  const key = cleanText(unit).replace(/\.$/, ''); // "tbsp." -> "tbsp"
   return UNIT_LOOKUP[key] || { unit: key, factor: 1 };
 }
 
@@ -110,7 +116,7 @@ const AISLE_KEYWORDS = [
 
 function categorize(ingredient) {
   if (CATEGORIES.includes(ingredient.category)) return ingredient.category;
-  const aisle = normalizeName(ingredient.aisle);
+  const aisle = cleanText(ingredient.aisle);
   for (const [category, words] of AISLE_KEYWORDS) {
     if (words.some((w) => aisle.includes(w))) return category;
   }
@@ -125,7 +131,7 @@ function categorize(ingredient) {
    they regenerate it mid-week.
 ---------------------------------------------------------------- */
 function countsTowardList(status) {
-  return normalizeName(status) !== 'skipped';
+  return cleanText(status) !== 'skipped';
 }
 
 function sortItems(items) {
@@ -230,9 +236,12 @@ function buildShoppingItems(meals, pantry = []) {
      and stays ticked, unless the plan now needs MORE of it than
      was bought, in which case it is unticked so the user buys the rest.
    - Auto items no longer needed by any meal disappear.
+   - "Added to pantry" stays with a ticked item, so it can't be added twice.
 ---------------------------------------------------------------- */
 function reconcileItems(oldItems, freshItems) {
-  const keyOf = (i) => `${i.normalizedName || normalizeName(i.name)}|${normalizeUnit(i.unit).unit}`;
+  // Recomputed from the name (not the stored normalizedName), so lists saved
+  // before the naming rule changed still match up.
+  const keyOf = (i) => `${normalizeName(i.name)}|${normalizeUnit(i.unit).unit}`;
   const isManual = (i) => i.source === 'manual';
 
   const previous = new Map(oldItems.filter((i) => !isManual(i)).map((i) => [keyOf(i), i]));
@@ -246,10 +255,67 @@ function reconcileItems(oldItems, freshItems) {
       _id: old._id,
       purchased: keepTicked,
       purchasedAt: keepTicked ? old.purchasedAt : null,
+      addedToPantry: keepTicked && Boolean(old.addedToPantry),
     };
   });
 
   return sortItems([...merged, ...oldItems.filter(isManual)]);
+}
+
+/* ---------------------------------------------------------------
+   Pantry conversion (for "Add bought items to pantry")
+   The pantry model only accepts units g, kg, ml, l, pcs, tsp, tbsp, cup
+   and its own category names, so list items are translated here.
+---------------------------------------------------------------- */
+const PANTRY_UNIT = { g: 'g', ml: 'ml', piece: 'pcs', clove: 'pcs', tsp: 'tsp', tbsp: 'tbsp', cup: 'cup' };
+
+const PANTRY_CATEGORY = {
+  produce: 'produce',
+  'dairy-eggs': 'dairy',
+  'grains-noodles': 'grains',
+  'canned-sauces': 'canned',
+  'spices-condiments': 'condiments',
+  frozen: 'frozen',
+  other: 'other',
+  // 'meat-seafood' is split into meat / seafood below
+};
+const SEAFOOD_WORDS = ['fish', 'prawn', 'shrimp', 'salmon', 'tuna', 'squid', 'crab', 'clam', 'mussel', 'scallop', 'cod', 'anchovy'];
+
+// True if the pantry has a unit for this item (e.g. not "bottle" or "pack").
+// Used by both the server and the page to decide what the pantry button counts.
+function canGoInPantry(item) {
+  return Boolean(PANTRY_UNIT[item.unit]);
+}
+
+function pantryCategory(item) {
+  if (item.category === 'meat-seafood') {
+    const words = normalizeName(item.name).split(' ');
+    return words.some((w) => SEAFOOD_WORDS.includes(w)) ? 'seafood' : 'meat';
+  }
+  return PANTRY_CATEGORY[item.category] || 'other';
+}
+
+/* pantryAmount(item, existingUnit)
+   How much to add to the pantry, in the pantry's units.
+   existingUnit = unit of the pantry row for this ingredient, or null if
+   the user doesn't have it yet.
+   Returns { quantity, unit } or { skip: 'reason' }.
+
+   Examples:
+     300 g chicken, pantry has it in kg  -> { quantity: 0.3, unit: 'kg' }
+     2 piece egg,   pantry has none      -> { quantity: 2,   unit: 'pcs' }
+     1 bottle soap                       -> { skip: ... } (pantry has no "bottle")
+     200 g rice,    pantry has it in cup -> { skip: ... } (can't convert g to cups) */
+function pantryAmount(item, existingUnit) {
+  const pantryUnit = PANTRY_UNIT[item.unit];
+  if (!pantryUnit) return { skip: `the pantry can't store "${item.unit}"` };
+  if (!existingUnit) return { quantity: item.quantity, unit: pantryUnit };
+
+  const existing = normalizeUnit(existingUnit); // kg -> { unit: 'g', factor: 1000 }, pcs -> piece
+  const mine = item.unit === 'clove' ? 'piece' : item.unit;
+  if (existing.unit !== mine) return { skip: `your pantry stores it in ${existingUnit}` };
+
+  return { quantity: Math.round((item.quantity / existing.factor) * 1000) / 1000, unit: existingUnit };
 }
 
 module.exports = {
@@ -263,4 +329,7 @@ module.exports = {
   sortItems,
   buildShoppingItems,
   reconcileItems,
+  canGoInPantry,
+  pantryCategory,
+  pantryAmount,
 };

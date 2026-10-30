@@ -153,6 +153,39 @@ const recipeTitles = computed(() => {
 const hasAutoItems = computed(() => items.value.some((it) => it.source !== 'manual'))
 
 /* ---------------------------------------------------------------
+   "Add bought items to pantry"
+   Units the pantry can store (must match PANTRY_UNIT in
+   backend/services/shoppingListBuilder.js). Items in other units,
+   like "1 bottle dish soap", stay on the list only.
+---------------------------------------------------------------- */
+const PANTRY_UNITS = ['g', 'ml', 'piece', 'clove', 'tsp', 'tbsp', 'cup']
+const readyForPantry = computed(() =>
+  items.value.filter((it) => it.purchased && !it.addedToPantry && it.quantity > 0 && PANTRY_UNITS.includes(it.unit)),
+)
+const addingToPantry = ref(false)
+const notice = ref('') // green success message
+
+async function addBoughtToPantry() {
+  if (addingToPantry.value || readyForPantry.value.length === 0) return
+  addingToPantry.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const { data } = await api.post('/add-to-pantry', { start: weekStart.value })
+    list.value = data.list // server sends back the list with addedToPantry set
+    notice.value = `Added ${data.added} ${data.added === 1 ? 'item' : 'items'} to your pantry.`
+    if (data.skipped.length) {
+      // e.g. "Rice (your pantry stores it in cup)"
+      error.value = `Not added: ${data.skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}`
+    }
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    addingToPantry.value = false
+  }
+}
+
+/* ---------------------------------------------------------------
    Filters
 ---------------------------------------------------------------- */
 const filter = ref('all') // 'all' | 'tobuy' | 'pantry'
@@ -301,10 +334,34 @@ async function removeItem(it) {
               <div class="d-flex flex-column">
                 <span class="sw-label-lg">{{ bought }} of {{ total }} bought</span>
                 <span class="sw-label-sm sw-text-outline">{{ pantryItems.length }} covered by your pantry</span>
+                <router-link to="/pantry" class="sw-inline-link">
+                  Go to pantry
+                  <span class="material-symbols-outlined sw-ico-16">arrow_forward</span>
+                </router-link>
               </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              <button
+                type="button"
+                class="btn sw-btn sw-btn-primary shadow-sm flex-fill flex-sm-grow-0"
+                :disabled="addingToPantry || readyForPantry.length === 0"
+                title="Add the items you've ticked as bought to your pantry"
+                @click="addBoughtToPantry"
+              >
+                <span class="material-symbols-outlined sw-ico-18" :class="{ 'sw-spin': addingToPantry }">
+                  {{ addingToPantry ? 'refresh' : 'kitchen' }}
+                </span>
+                <span>
+                  {{
+                    addingToPantry
+                      ? 'Adding…'
+                      : readyForPantry.length
+                        ? `Add ${readyForPantry.length} bought to pantry`
+                        : 'Add bought items to pantry'
+                  }}
+                </span>
+              </button>
               <button
                 type="button"
                 class="btn sw-btn sw-btn-secondary shadow-sm flex-fill flex-sm-grow-0"
@@ -341,6 +398,15 @@ async function removeItem(it) {
         </div>
       </div>
     </section>
+
+    <!-- Success banner -->
+    <div v-if="notice" class="sw-alert sw-alert--ok" role="status">
+      <span class="material-symbols-outlined sw-ico-20">check_circle</span>
+      <span class="sw-body-sm flex-grow-1">{{ notice }}</span>
+      <button type="button" class="sw-iconbtn" aria-label="Dismiss" @click="notice = ''">
+        <span class="material-symbols-outlined sw-ico-18">close</span>
+      </button>
+    </div>
 
     <!-- Error banner -->
     <div v-if="error" class="sw-alert" role="alert">
@@ -387,7 +453,7 @@ async function removeItem(it) {
                 class="form-control sw-bare-input"
                 placeholder="Add your own item (e.g. dish soap, oat milk)"
                 aria-label="Item name"
-                maxlength="80"
+                maxlength="60"
               />
             </div>
             <div class="d-flex align-items-center flex-wrap gap-1">
@@ -444,7 +510,7 @@ async function removeItem(it) {
                     type="checkbox"
                     class="form-check-input sw-check"
                     :checked="it.purchased || isStocked(it)"
-                    :disabled="isStocked(it)"
+                    :disabled="isStocked(it) || it.addedToPantry"
                     :aria-label="`Bought ${it.name}`"
                     @change="togglePurchased(it)"
                   />
@@ -452,6 +518,7 @@ async function removeItem(it) {
                     <div class="d-flex align-items-center flex-wrap gap-1">
                       <span class="sw-item-name">{{ it.name }}</span>
                       <span v-if="isStocked(it)" class="sw-badge-stock">In Pantry</span>
+                      <span v-else-if="it.addedToPantry" class="sw-badge-stock">Added to pantry</span>
                     </div>
                     <span class="sw-meta">{{ itemMeta(it) }}</span>
                   </div>
@@ -733,6 +800,20 @@ async function removeItem(it) {
 .sw-ring-bar { fill: none; stroke: var(--sw-primary); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dasharray 0.5s ease-out; }
 .sw-ring-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 
+/* "Go to pantry" link in the summary card */
+.sw-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+  color: var(--sw-primary);
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.sw-inline-link:hover { text-decoration: underline; }
+.sw-inline-link:focus-visible { outline: 2px solid var(--sw-primary); outline-offset: 2px; border-radius: 2px; }
+
 /* ---------- Filter bar ---------- */
 .sw-filterbar {
   margin-top: 1.5rem;
@@ -767,6 +848,7 @@ async function removeItem(it) {
   background: var(--sw-error-container);
   color: var(--sw-error);
 }
+.sw-alert--ok { background: var(--sw-primary-fixed); color: var(--sw-on-primary-fixed); }
 .sw-empty {
   display: flex;
   flex-direction: column;
