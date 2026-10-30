@@ -19,6 +19,7 @@ function handleLogout() {
 </script>
 
 <template>
+    <div class="fft-page">
   <main class="profile-page">
     <div class="profile-container">
       <RouterLink to="/home" class="profile-back">
@@ -64,6 +65,7 @@ function handleLogout() {
       </section>
     </div>
   </main>
+  </div>
 </template>
 
 <style scoped>

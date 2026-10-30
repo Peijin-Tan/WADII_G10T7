@@ -109,6 +109,7 @@ onMounted(loadPreferences)
 </script>
 
 <template>
+    <div class="fft-page">
   <div class="container py-5">
     <div class="mb-4">
       <h1>Dietary Preferences</h1>
@@ -204,6 +205,7 @@ onMounted(loadPreferences)
       </form>
     </template>
   </div>
+</div>
 </template>
 
 <style scoped>

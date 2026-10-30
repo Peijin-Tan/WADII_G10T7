@@ -103,6 +103,7 @@ async function createRecipe() {
 </script>
 
 <template>
+  <div class="fft-page">
   <div class="container mt-5 mb-5" style="max-width: 800px">
     <h1>Create a Recipe</h1>
     <p class="text-muted">
@@ -318,5 +319,6 @@ async function createRecipe() {
         </button>
       </div>
     </form>
+  </div>
   </div>
 </template>
