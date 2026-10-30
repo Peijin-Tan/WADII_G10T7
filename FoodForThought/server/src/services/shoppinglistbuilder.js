@@ -6,7 +6,7 @@
  * return plain objects out, which is why they're easy to unit-test
  * (see tests/shoppingListBuilder.test.js).
  *
- * Pipeline used by POST /shopping-list/generate:
+ * Pipeline used by POST /shoppinglist/generate:
  *   meals ──► scale by servings ──► merge duplicates ──► subtract pantry
  *         ──► round ──► sort by shopping order ──► reconcile with old list
  */
@@ -39,11 +39,18 @@ const SHOPPING_ORDER = [
 /* ---------------------------------------------------------------
    Names
 ---------------------------------------------------------------- */
+const { normalizeIngredient, ingredientMatches } = require('./ingredientnames');
+const { convertAmount } = require('./units');
 
-// "  Spring  Onion " -> "spring onion", so "Garlic" and "garlic" merge.
-// Known limitation: plurals are NOT merged ("egg" vs "eggs").
-function normalizeName(name) {
-  return String(name ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+// Ingredient names use the SAME rule as the pantry, so list items and
+// pantry items match: "Eggs" -> "egg", "Cherry Tomatoes" -> "cherry tomato".
+// This also merges plurals across recipes ("2 egg" + "3 eggs" = 5).
+const normalizeName = normalizeIngredient;
+
+// Lowercase + tidy spaces only. For units, aisles and statuses, where
+// plurals and punctuation matter ("tbsp.", "Milk, Eggs").
+function cleanText(text) {
+  return String(text ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
 // "chicken thigh" -> "Chicken thigh" (for display only).
@@ -64,8 +71,8 @@ const UNIT_ALIASES = [
   ['g', 1000, 'kg', 'kilogram', 'kilograms'],
   ['ml', 1, 'ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres'],
   ['ml', 1000, 'l', 'liter', 'liters', 'litre', 'litres'],
-  ['tsp', 1, 'tsp', 'teaspoon', 'teaspoons'],
-  ['tbsp', 1, 'tbsp', 'tablespoon', 'tablespoons', 'tbs'],
+  ['tsp', 1, 'tsp', 'tsps', 'teaspoon', 'teaspoons'],
+  ['tbsp', 1, 'tbsp', 'tbsps', 'tablespoon', 'tablespoons', 'tbs'],
   ['cup', 1, 'cup', 'cups'],
   ['clove', 1, 'clove', 'cloves'],
   ['piece', 1, '', 'piece', 'pieces', 'pc', 'pcs', 'whole', 'small', 'medium', 'large'],
@@ -79,14 +86,26 @@ for (const [unit, factor, ...spellings] of UNIT_ALIASES) {
 
 // Unknown units (e.g. "can", "pack") pass through unchanged.
 function normalizeUnit(unit) {
-  const key = normalizeName(unit).replace(/\.$/, ''); // "tbsp." -> "tbsp"
+  const key = cleanText(unit).replace(/\.$/, ''); // "tbsp." -> "tbsp"
   return UNIT_LOOKUP[key] || { unit: key, factor: 1 };
+}
+
+// An amount in one unit, expressed in another: 2 tbsp -> 29.58 ml, 1 kg -> 1000 g.
+// Uses the shared converter (services/units.js); units it doesn't know ("can", "pack")
+// only match the exact same unit. Returns null if they can't be compared.
+function amountIn(amount, fromUnit, toUnit) {
+  const converted = convertAmount(amount, fromUnit, toUnit);
+  if (converted !== null) return converted;
+  const from = normalizeUnit(fromUnit);
+  const to = normalizeUnit(toUnit);
+  return from.unit === to.unit ? (amount * from.factor) / to.factor : null;
 }
 
 // You can't buy 0.5 of an egg, so countable units round UP.
 // Weights/volumes round to whole numbers, anything else to 2 d.p.
 function roundQuantity(quantity, unit) {
-  if (unit === 'piece' || unit === 'clove') return Math.ceil(quantity - 1e-9); // 1e-9 absorbs float error
+  // 1e-9 absorbs float error; Math.max turns Math.ceil's "-0" into a plain 0
+  if (unit === 'piece' || unit === 'clove') return Math.max(0, Math.ceil(quantity - 1e-9));
   if (unit === 'g' || unit === 'ml') return Math.round(quantity);
   return Math.round(quantity * 100) / 100;
 }
@@ -110,7 +129,7 @@ const AISLE_KEYWORDS = [
 
 function categorize(ingredient) {
   if (CATEGORIES.includes(ingredient.category)) return ingredient.category;
-  const aisle = normalizeName(ingredient.aisle);
+  const aisle = cleanText(ingredient.aisle);
   for (const [category, words] of AISLE_KEYWORDS) {
     if (words.some((w) => aisle.includes(w))) return category;
   }
@@ -125,7 +144,7 @@ function categorize(ingredient) {
    they regenerate it mid-week.
 ---------------------------------------------------------------- */
 function countsTowardList(status) {
-  return normalizeName(status) !== 'skipped';
+  return cleanText(status) !== 'skipped';
 }
 
 function sortItems(items) {
@@ -192,19 +211,42 @@ function buildShoppingItems(meals, pantry = []) {
     }
   }
 
-  // 2. Total up the pantry with the same name+unit keys.
-  const stock = new Map();
-  for (const p of pantry) {
-    const amount = Number(p.quantity);
-    if (!p.name || !(amount > 0)) continue;
-    const { unit, factor } = normalizeUnit(p.unit);
-    const key = `${normalizeName(p.name)}|${unit}`;
-    stock.set(key, (stock.get(key) || 0) + amount * factor);
+  // 2. The pantry as rows we can take from. `left` goes down as rows cover needs,
+  //    so one "1 kg chicken" can't cover 800 g of breast AND 800 g of thigh.
+  const stock = pantry
+    .filter((p) => p.name && Number(p.quantity) > 0)
+    .map((p) => ({ name: normalizeName(p.name), unit: p.unit, left: Number(p.quantity) }));
+
+  // 3. Work out how much of each need the pantry covers, using the SAME rules as cooking
+  //    in Planner.js (deductFromPantry), so the two features always agree:
+  //    - names: exact name first, then a whole-word match ("chicken" covers "chicken breast")
+  //    - units: converted within weight / volume / count ("500 ml milk" covers "1 cup milk")
+  //    Exact names go first across ALL needs, so a whole-word match never takes stock an exact one needed.
+  const needList = [...needs.values()];
+  const covered = new Map(needList.map((need) => [need.key, 0]));
+
+  const takeFromPantry = (need, rows) => {
+    for (const row of rows) {
+      const stillNeeded = need.needed - covered.get(need.key);
+      if (stillNeeded <= 1e-9) return;
+      const available = amountIn(row.left, row.unit, need.unit); // the row's stock, in the need's unit
+      if (!(available > 0)) continue; // empty, or units that can't be compared (cups vs g)
+      const take = Math.min(stillNeeded, available);
+      covered.set(need.key, covered.get(need.key) + take);
+      row.left -= amountIn(take, need.unit, row.unit);
+    }
+  };
+  for (const need of needList) {
+    takeFromPantry(need, stock.filter((row) => row.name === need.normalizedName));
+  }
+  for (const need of needList) {
+    takeFromPantry(need, stock.filter((row) => row.name !== need.normalizedName && ingredientMatches(row.name, need.normalizedName)));
   }
 
-  // 3. Subtract what the pantry covers, then round.
-  const items = [...needs.values()].map((need) => {
-    const covered = Math.min(need.needed, stock.get(need.key) || 0);
+  // 4. Subtract what the pantry covers, then round.
+  const items = needList.map((need) => {
+    let toBuy = need.needed - covered.get(need.key);
+    if (toBuy < 1e-6) toBuy = 0; // float leftovers from unit conversion, e.g. 0.0000001 cups
     return {
       name: need.name,
       normalizedName: need.normalizedName,
@@ -212,8 +254,8 @@ function buildShoppingItems(meals, pantry = []) {
       category: need.category,
       usedIn: need.usedIn,
       source: 'auto',
-      quantity: roundQuantity(need.needed - covered, need.unit),
-      pantryQuantity: Math.round(covered * 100) / 100,
+      quantity: roundQuantity(toBuy, need.unit),
+      pantryQuantity: Math.round(covered.get(need.key) * 100) / 100,
       purchased: false,
     };
   });
@@ -230,9 +272,12 @@ function buildShoppingItems(meals, pantry = []) {
      and stays ticked, unless the plan now needs MORE of it than
      was bought, in which case it is unticked so the user buys the rest.
    - Auto items no longer needed by any meal disappear.
+   - "Added to pantry" stays with a ticked item, so it can't be added twice.
 ---------------------------------------------------------------- */
 function reconcileItems(oldItems, freshItems) {
-  const keyOf = (i) => `${i.normalizedName || normalizeName(i.name)}|${normalizeUnit(i.unit).unit}`;
+  // Recomputed from the name (not the stored normalizedName), so lists saved
+  // before the naming rule changed still match up.
+  const keyOf = (i) => `${normalizeName(i.name)}|${normalizeUnit(i.unit).unit}`;
   const isManual = (i) => i.source === 'manual';
 
   const previous = new Map(oldItems.filter((i) => !isManual(i)).map((i) => [keyOf(i), i]));
@@ -246,10 +291,67 @@ function reconcileItems(oldItems, freshItems) {
       _id: old._id,
       purchased: keepTicked,
       purchasedAt: keepTicked ? old.purchasedAt : null,
+      addedToPantry: keepTicked && Boolean(old.addedToPantry),
     };
   });
 
   return sortItems([...merged, ...oldItems.filter(isManual)]);
+}
+
+/* ---------------------------------------------------------------
+   Pantry conversion (for "Add bought items to pantry")
+   The pantry model only accepts units g, kg, ml, l, pcs, tsp, tbsp, cup
+   and its own category names, so list items are translated here.
+---------------------------------------------------------------- */
+const PANTRY_UNIT = { g: 'g', ml: 'ml', piece: 'pcs', clove: 'pcs', tsp: 'tsp', tbsp: 'tbsp', cup: 'cup' };
+
+const PANTRY_CATEGORY = {
+  produce: 'produce',
+  'dairy-eggs': 'dairy',
+  'grains-noodles': 'grains',
+  'canned-sauces': 'canned',
+  'spices-condiments': 'condiments',
+  frozen: 'frozen',
+  other: 'other',
+  // 'meat-seafood' is split into meat / seafood below
+};
+const SEAFOOD_WORDS = ['fish', 'prawn', 'shrimp', 'salmon', 'tuna', 'squid', 'crab', 'clam', 'mussel', 'scallop', 'cod', 'anchovy'];
+
+// True if the pantry has a unit for this item (e.g. not "bottle" or "pack").
+// Used by both the server and the page to decide what the pantry button counts.
+function canGoInPantry(item) {
+  return Boolean(PANTRY_UNIT[item.unit]);
+}
+
+function pantryCategory(item) {
+  if (item.category === 'meat-seafood') {
+    const words = normalizeName(item.name).split(' ');
+    return words.some((w) => SEAFOOD_WORDS.includes(w)) ? 'seafood' : 'meat';
+  }
+  return PANTRY_CATEGORY[item.category] || 'other';
+}
+
+/* pantryAmount(item, existingUnit)
+   How much to add to the pantry, in the pantry's units.
+   existingUnit = unit of the pantry row for this ingredient, or null if
+   the user doesn't have it yet.
+   Returns { quantity, unit } or { skip: 'reason' }.
+
+   Examples:
+     300 g chicken, pantry has it in kg  -> { quantity: 0.3, unit: 'kg' }
+     2 piece egg,   pantry has none      -> { quantity: 2,   unit: 'pcs' }
+     1 bottle soap                       -> { skip: ... } (pantry has no "bottle")
+     200 g rice,    pantry has it in cup -> { skip: ... } (can't convert g to cups) */
+function pantryAmount(item, existingUnit) {
+  const pantryUnit = PANTRY_UNIT[item.unit];
+  if (!pantryUnit) return { skip: `the pantry can't store "${item.unit}"` };
+  if (!existingUnit) return { quantity: item.quantity, unit: pantryUnit };
+
+  // Same converter as cooking and list-building: 300 g -> 0.3 kg, 2 tbsp -> 29.58 ml
+  const converted = amountIn(item.quantity, item.unit, existingUnit);
+  if (converted === null) return { skip: `your pantry stores it in ${existingUnit}` };
+
+  return { quantity: Math.round(converted * 1000) / 1000, unit: existingUnit };
 }
 
 module.exports = {
@@ -263,4 +365,7 @@ module.exports = {
   sortItems,
   buildShoppingItems,
   reconcileItems,
+  canGoInPantry,
+  pantryCategory,
+  pantryAmount,
 };

@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const ShoppingList = require("./ShoppingList");
 
 const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
 const ENTRY_STATUS = ["Planned", "Cooked", "Skipped"];
@@ -62,6 +61,16 @@ const entrySchema = new mongoose.Schema({
   cookedAt: {
     type: Date, // only set while status is Cooked
   },
+  // What cooking this meal took from the pantry, so "undo" can give back exactly that amount
+  pantryDeductions: [
+    {
+      _id: false,
+      pantryItemId: { type: mongoose.Schema.Types.ObjectId, ref: "Pantry" },
+      name: String,
+      quantity: Number,
+      unit: String,
+    },
+  ],
 });
 
 // keeps cookedAt consistent with status when saving via doc.save()

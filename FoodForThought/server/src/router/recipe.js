@@ -305,7 +305,6 @@ router.get('/:id', async (req, res) => {
     }
 
     const recipe = await Recipe.findById(id)
-      .populate('createdBy', 'name')
 
     if (!recipe) {
       return res.status(404).json({
@@ -354,10 +353,9 @@ router.post('/', requireAuth, async (req, res) => {
       })
     }
 
-    console.error('Create recipe error:', error)
-
     res.status(500).json({
-      message: 'Failed to create recipe'
+      message: 'Failed to create recipe',
+      error: error.message
     })
   }
 })
