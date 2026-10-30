@@ -14,6 +14,9 @@ const mongoose = require('mongoose')
 const MealPlan = require('../../models/MealPlan')
 const Recipe = require('../../models/Recipe')
 const requireAuth = require('../middleware/auth')
+const Pantry = require('../../models/Pantry')
+// James's pantry helpers: names the user has + whole-word ingredient matching ("egg" != "eggplant")
+const { getPantryNames, ingredientMatches, normalizeIngredient } = require('./pantry')
 
 const { normalizeWeekStart, isValidId, MEAL_SLOTS, ENTRY_STATUS } = MealPlan
 
@@ -60,10 +63,111 @@ function parseWeekStart(start) {
   return weekStart
 }
 
-// TODO(James): replace with the real pantry lookup once the Pantry model is ready.
-// Should return a Set of lower-case ingredient names the user has, e.g. new Set(['eggs', 'garlic'])
-async function getPantryNames(userId) {
-  return new Set()
+/* ---------- Pantry integration ---------- */
+// getPantryNames(userId) comes from pantry.js: an array of normalized names the user has (quantity > 0).
+
+// True if the user has this recipe ingredient in their pantry
+function isInPantry(pantryNames, ingredientName) {
+  return pantryNames.some((p) => ingredientMatches(p, ingredientName))
+}
+
+// Recipe units (from Spoonacular or users) -> the units the pantry allows (Pantry.UNITS)
+const UNIT_ALIASES = {
+  g: 'g', gram: 'g', grams: 'g',
+  kg: 'kg', kilogram: 'kg', kilograms: 'kg',
+  ml: 'ml', milliliter: 'ml', milliliters: 'ml', millilitre: 'ml', millilitres: 'ml',
+  l: 'l', liter: 'l', liters: 'l', litre: 'l', litres: 'l',
+  tsp: 'tsp', tsps: 'tsp', teaspoon: 'tsp', teaspoons: 'tsp',
+  tbsp: 'tbsp', tbsps: 'tbsp', tbs: 'tbsp', tablespoon: 'tbsp', tablespoons: 'tbsp',
+  cup: 'cup', cups: 'cup',
+  // anything counted one by one ("2 eggs", "3 cloves garlic") is treated as pieces
+  '': 'pcs', pc: 'pcs', pcs: 'pcs', piece: 'pcs', pieces: 'pcs', whole: 'pcs',
+  small: 'pcs', medium: 'pcs', large: 'pcs', clove: 'pcs', cloves: 'pcs', slice: 'pcs', slices: 'pcs',
+}
+
+// How each pantry unit converts to a base unit within its group (weight, volume, count)
+const UNIT_BASE = {
+  g: ['weight', 1], kg: ['weight', 1000],
+  ml: ['volume', 1], l: ['volume', 1000], tsp: ['volume', 4.93], tbsp: ['volume', 14.79], cup: ['volume', 240],
+  pcs: ['count', 1],
+}
+
+// Converts an amount from a recipe unit into a pantry item's unit.
+// Returns null when they can't be compared (e.g. "2 cups" of rice vs a pantry stored in g).
+function convertAmount(amount, recipeUnit, pantryUnit) {
+  const from = UNIT_ALIASES[String(recipeUnit || '').trim().toLowerCase()]
+  const fromInfo = UNIT_BASE[from]
+  const toInfo = UNIT_BASE[pantryUnit]
+  if (!fromInfo || !toInfo || fromInfo[0] !== toInfo[0]) return null
+  return (amount * fromInfo[1]) / toInfo[1]
+}
+
+const round2 = (n) => Math.round(n * 100) / 100
+
+// Best pantry row for a recipe ingredient: an exact name first, otherwise a whole-word match
+function findPantryItem(items, ingredientName) {
+  const wanted = normalizeIngredient(ingredientName)
+  return items.find((i) => i.normalizedName === wanted) ||
+    items.find((i) => ingredientMatches(i.normalizedName, ingredientName))
+}
+
+// Meal marked Cooked: subtract its ingredients (scaled to the planned servings) from the pantry.
+// Returns what was taken, so it can be saved on the entry and given back exactly if the user undoes it.
+async function deductFromPantry(userId, entry) {
+  const result = { deducted: [], skipped: [] }
+  if (!entry.recipeId) return result // custom meals have no ingredients
+
+  const recipe = await Recipe.findById(entry.recipeId).select('servings ingredients').lean()
+  const ingredients = (recipe && Array.isArray(recipe.ingredients) ? recipe.ingredients : [])
+    .filter((ing) => ing && ing.name && Number(ing.amount) > 0)
+  if (!ingredients.length) return result
+
+  const scale = entry.servings / (recipe.servings || entry.servings) // e.g. 4-serving recipe planned for 2 -> 0.5
+  const items = await Pantry.find({ user: userId, quantity: { $gt: 0 } })
+  const changed = new Set()
+
+  for (const ing of ingredients) {
+    const item = findPantryItem(items, ing.name)
+    if (!item || item.quantity <= 0) {
+      result.skipped.push({ name: ing.name, reason: 'not in pantry' })
+      continue
+    }
+    const needed = convertAmount(Number(ing.amount) * scale, ing.unit, item.unit)
+    if (needed === null) {
+      result.skipped.push({ name: ing.name, reason: `can't convert ${ing.unit || 'pieces'} to ${item.unit}` })
+      continue
+    }
+    const taken = round2(Math.min(item.quantity, needed)) // never below 0
+    if (taken <= 0) continue
+    item.quantity = round2(item.quantity - taken)
+    changed.add(item)
+    result.deducted.push({ pantryItemId: item._id, name: item.name, quantity: taken, unit: item.unit })
+  }
+
+  await Promise.all([...changed].map((item) => item.save()))
+  return result
+}
+
+// Cooked meal undone (back to In Progress / Skipped, or swapped): give back exactly what was taken
+async function restoreToPantry(userId, entry) {
+  const result = { restored: [] }
+  for (const d of entry.pantryDeductions || []) {
+    // the row may have been deleted and re-added since, so fall back to matching by name
+    let item = await Pantry.findOne({ _id: d.pantryItemId, user: userId })
+    if (!item) item = await Pantry.findOne({ user: userId, normalizedName: normalizeIngredient(d.name) })
+
+    if (item && item.unit === d.unit) {
+      item.quantity = round2(item.quantity + d.quantity)
+      await item.save()
+    } else if (!item) {
+      await Pantry.create({ user: userId, name: d.name, quantity: d.quantity, unit: d.unit })
+    } else {
+      continue // the user changed this item's unit since; don't guess a conversion
+    }
+    result.restored.push({ name: d.name, quantity: d.quantity, unit: d.unit })
+  }
+  entry.pantryDeductions = []
+  return result
 }
 
 /* ---------- Converting DB documents into the shape the Vue modals expect ---------- */
@@ -95,7 +199,7 @@ function toRecipeCard(recipe, pantryNames) {
     .map((ing) => ({
       name: String(ing.name),
       quantity: formatQuantity(Number(ing.amount), ing.unit),
-      inPantry: pantryNames.has(String(ing.name).toLowerCase()),
+      inPantry: isInPantry(pantryNames, ing.name),
     }))
   const inPantryCount = ingredients.filter((i) => i.inPantry).length
 
@@ -301,6 +405,7 @@ router.post('/entries', handle(async (req, res) => {
 router.patch('/entries/:entryId', handle(async (req, res) => {
   const { plan, entry } = await findUserEntry(req.userId, req.params.entryId)
   const { status, recipeId, servings, dayOfWeek, mealSlot } = req.body
+  const wasCooked = entry.status === 'Cooked'
 
   if (status !== undefined) {
     if (!ENTRY_STATUS.includes(status)) throw httpError(400, `status must be one of ${ENTRY_STATUS.join(', ')}`)
@@ -342,9 +447,20 @@ router.patch('/entries/:entryId', handle(async (req, res) => {
     entry.mealSlot = newSlot
   }
 
+  // Pantry: only act when the meal moves INTO or OUT OF Cooked, so ingredients are never taken twice
+  await plan.validate() // reject bad input before touching the pantry
+  const isCooked = entry.status === 'Cooked'
+  let pantryUpdate = null
+  if (!wasCooked && isCooked) {
+    pantryUpdate = await deductFromPantry(req.userId, entry)
+    entry.pantryDeductions = pantryUpdate.deducted // remembered so an undo gives back exactly this
+  } else if (wasCooked && !isCooked) {
+    pantryUpdate = await restoreToPantry(req.userId, entry)
+  }
+
   // one save() updates both meals together, so a swap can never be half-done
   await plan.save()
-  res.json(await loadWeek(req.userId, plan.weekStart))
+  res.json({ ...(await loadWeek(req.userId, plan.weekStart)), pantryUpdate })
 }))
 
 // DELETE /api/planner/entries/:entryId
