@@ -1,4 +1,4 @@
-// models/PantryItem.js
+// models/Pantry.js
 // One document per pantry ingredient per user.
 // Kept as its own collection (instead of an array inside User) so that
 // add/edit/delete of a single item is a simple CRUD call, and so the
