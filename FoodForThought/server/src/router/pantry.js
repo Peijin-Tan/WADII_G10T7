@@ -21,42 +21,56 @@ const requireAuth = require('../middleware/auth') // same path as Planner.js
 const router = express.Router()
 
 /* ------------------------------------------------------------------ */
-/* Ingredient names                                                    */
+/* Ingredient names + units                                            */
 /* ------------------------------------------------------------------ */
-// Turns user-typed names into one consistent form, so "Eggs", " egg " and "EGGS" are the same thing.
+// normalizeIngredient: "Eggs", " egg " and "EGGS" all become "egg".
+// ingredientMatches:   whole-word match, "chicken" matches "chicken breast" but "egg" doesn't match "eggplant".
+// Both live in services/ingredientnames.js so the planner and shopping list use exactly the same rule.
+const { normalizeIngredient, ingredientMatches } = require('../services/ingredientnames')
+const { convertAmount } = require('../services/units')
+const UserPreference = require('../../models/UserPreference')
 
-// very small plural -> singular rule set, for one word
-function singular(word) {
-  if (word.length <= 3) return word
-  if (word.endsWith('ies')) return word.slice(0, -3) + 'y' // berries -> berry
-  if (word.endsWith('oes')) return word.slice(0, -2) // tomatoes -> tomato
-  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1) // eggs -> egg
-  return word
+/* ------------------------------------------------------------------ */
+/* Saved dietary preferences -> Spoonacular filters                    */
+/* ------------------------------------------------------------------ */
+// The Dietary Preferences page saves labels like "Pescatarian" or "Tree Nuts",
+// but Spoonacular only understands its own words, so translate them here.
+// Docs: https://spoonacular.com/food-api/docs#Diets and #Intolerances
+const DIET_TO_SPOONACULAR = {
+  vegetarian: { diet: 'vegetarian' },
+  vegan: { diet: 'vegan' },
+  'gluten-free': { diet: 'gluten free' },
+  pescatarian: { diet: 'pescetarian' }, // Spoonacular spells it with an "e"
+  keto: { diet: 'ketogenic' },
+  'dairy-free': { intolerance: 'dairy' }, // Spoonacular treats dairy-free as an intolerance, not a diet
+}
+const ALLERGEN_TO_SPOONACULAR = {
+  peanuts: 'peanut',
+  'tree nuts': 'tree nut',
+  milk: 'dairy',
+  eggs: 'egg',
+  soy: 'soy',
+  wheat: 'wheat',
+  fish: 'seafood',
+  shellfish: 'shellfish',
+  sesame: 'sesame',
 }
 
-function normalizeIngredient(name) {
-  return String(name)
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, ' ') // drop punctuation and numbers
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(singular)
-    .join(' ')
-}
-
-// True if a pantry name and a recipe ingredient name are the same thing.
-// Matches WHOLE WORDS: every word of the shorter name must be in the longer one.
-//   "chicken" vs "chicken breast"  -> true
-//   "egg"     vs "eggplant"        -> false
-//   "salt"    vs "unsalted butter" -> false
-function ingredientMatches(pantryName, recipeName) {
-  const a = normalizeIngredient(pantryName).split(' ').filter(Boolean)
-  const b = normalizeIngredient(recipeName).split(' ').filter(Boolean)
-  if (!a.length || !b.length) return false
-  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a]
-  const longerSet = new Set(longer)
-  return shorter.every((w) => longerSet.has(w))
+// Returns { diets: ['vegetarian'], intolerances: ['peanut', 'dairy'] } for the logged-in user
+async function getSavedPreferences(userId) {
+  const saved = await UserPreference.findOne({ userId }).lean()
+  const diets = []
+  const intolerances = []
+  for (const label of saved?.dietaryPreferences || []) {
+    const mapped = DIET_TO_SPOONACULAR[label.toLowerCase()]
+    if (mapped?.diet) diets.push(mapped.diet)
+    if (mapped?.intolerance) intolerances.push(mapped.intolerance)
+  }
+  for (const label of saved?.allergens || []) {
+    const mapped = ALLERGEN_TO_SPOONACULAR[label.toLowerCase()]
+    if (mapped) intolerances.push(mapped)
+  }
+  return { diets, intolerances }
 }
 
 /* ------------------------------------------------------------------ */
@@ -239,10 +253,15 @@ router.get('/suggestions', handle(async (req, res) => {
     return res.json({ recipes: [], pantryCount: 0, message: 'Add some pantry items to get suggestions.' })
   }
 
-  const profile = req.user.preferences || {} // TODO: confirm field names with Pei Jin
+  // Saved preferences come from Pei Jin's UserPreference collection (the Dietary Preferences page).
+  // - diet: a diet picked in the modal replaces the saved ones ("My profile" sends no diet, so the saved ones apply)
+  // - intolerances: the saved allergens ALWAYS apply, plus any extra ones picked in the modal,
+  //   so someone with a peanut allergy never sees peanut recipes just because they clicked "dairy"
+  const profile = await getSavedPreferences(req.userId)
+  const picked = req.query.intolerances ? req.query.intolerances.split(',').map((s) => s.trim()).filter(Boolean) : []
   const prefs = {
-    diet: req.query.diet || profile.diet,
-    intolerances: req.query.intolerances ? req.query.intolerances.split(',') : profile.allergens || [],
+    diet: req.query.diet || profile.diets.join(',') || undefined, // comma = recipe must fit ALL of them
+    intolerances: [...new Set([...profile.intolerances, ...picked])],
     maxReadyTime: req.query.maxReadyTime ? Number(req.query.maxReadyTime) : undefined,
   }
 
@@ -267,13 +286,20 @@ router.post('/', handle(async (req, res) => {
   const { name } = req.body
   if (!name || !String(name).trim()) throw httpError(400, 'Ingredient name is required')
   const normalizedName = normalizeIngredient(name)
+  const quantity = Number(req.body.quantity ?? 1)
+  if (!Number.isFinite(quantity) || quantity <= 0) throw httpError(400, 'Quantity must be more than 0')
 
   const existing = await Pantry.findOne({ user: req.userId, normalizedName })
 
   if (existing) {
-    // Already in the pantry -> add to the quantity instead of making a duplicate
-    // TODO: if units differ (e.g. g vs kg) convert before adding
-    existing.quantity += Number(req.body.quantity ?? 1)
+    // Already in the pantry -> add to the quantity instead of making a duplicate.
+    // Convert to the unit the pantry already uses first, so 500 g added to "1 kg rice" gives 1.5 kg (not 501 kg).
+    const unit = req.body.unit || existing.unit
+    const added = convertAmount(quantity, unit, existing.unit)
+    if (added === null) {
+      throw httpError(409, `You already have ${existing.name} in ${existing.unit}. Add it in a matching unit, or edit the item instead.`)
+    }
+    existing.quantity = Math.round((existing.quantity + added) * 1000) / 1000
     if (req.body.expiryDate) existing.expiryDate = req.body.expiryDate
     await existing.save()
     return res.json({ items: await loadPantry(req.userId) })
@@ -315,3 +341,4 @@ module.exports.ingredientMatches = ingredientMatches
 module.exports.normalizeIngredient = normalizeIngredient
 module.exports.scoreRecipe = scoreRecipe
 module.exports.rankRecipes = rankRecipes
+module.exports.getSavedPreferences = getSavedPreferences

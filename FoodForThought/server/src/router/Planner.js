@@ -15,8 +15,12 @@ const MealPlan = require('../../models/MealPlan')
 const Recipe = require('../../models/Recipe')
 const requireAuth = require('../middleware/auth')
 const Pantry = require('../../models/Pantry')
-// James's pantry helpers: names the user has + whole-word ingredient matching ("egg" != "eggplant")
-const { getPantryNames, ingredientMatches, normalizeIngredient } = require('./pantry')
+// James's pantry helper: names the user has (quantity > 0)
+const { getPantryNames } = require('./pantry')
+// Shared naming rules, also used by the shopping list: "Eggs" -> "egg", and "egg" != "eggplant"
+const { ingredientMatches, normalizeIngredient } = require('../services/ingredientnames')
+// Spoonacular search (Add Meal modal) and saving a chosen Spoonacular recipe into our Recipe collection
+const { searchRecipes, importRecipe } = require('../services/spoonacular')
 
 const { normalizeWeekStart, isValidId, MEAL_SLOTS, ENTRY_STATUS } = MealPlan
 
@@ -71,36 +75,9 @@ function isInPantry(pantryNames, ingredientName) {
   return pantryNames.some((p) => ingredientMatches(p, ingredientName))
 }
 
-// Recipe units (from Spoonacular or users) -> the units the pantry allows (Pantry.UNITS)
-const UNIT_ALIASES = {
-  g: 'g', gram: 'g', grams: 'g',
-  kg: 'kg', kilogram: 'kg', kilograms: 'kg',
-  ml: 'ml', milliliter: 'ml', milliliters: 'ml', millilitre: 'ml', millilitres: 'ml',
-  l: 'l', liter: 'l', liters: 'l', litre: 'l', litres: 'l',
-  tsp: 'tsp', tsps: 'tsp', teaspoon: 'tsp', teaspoons: 'tsp',
-  tbsp: 'tbsp', tbsps: 'tbsp', tbs: 'tbsp', tablespoon: 'tbsp', tablespoons: 'tbsp',
-  cup: 'cup', cups: 'cup',
-  // anything counted one by one ("2 eggs", "3 cloves garlic") is treated as pieces
-  '': 'pcs', pc: 'pcs', pcs: 'pcs', piece: 'pcs', pieces: 'pcs', whole: 'pcs',
-  small: 'pcs', medium: 'pcs', large: 'pcs', clove: 'pcs', cloves: 'pcs', slice: 'pcs', slices: 'pcs',
-}
-
-// How each pantry unit converts to a base unit within its group (weight, volume, count)
-const UNIT_BASE = {
-  g: ['weight', 1], kg: ['weight', 1000],
-  ml: ['volume', 1], l: ['volume', 1000], tsp: ['volume', 4.93], tbsp: ['volume', 14.79], cup: ['volume', 240],
-  pcs: ['count', 1],
-}
-
-// Converts an amount from a recipe unit into a pantry item's unit.
-// Returns null when they can't be compared (e.g. "2 cups" of rice vs a pantry stored in g).
-function convertAmount(amount, recipeUnit, pantryUnit) {
-  const from = UNIT_ALIASES[String(recipeUnit || '').trim().toLowerCase()]
-  const fromInfo = UNIT_BASE[from]
-  const toInfo = UNIT_BASE[pantryUnit]
-  if (!fromInfo || !toInfo || fromInfo[0] !== toInfo[0]) return null
-  return (amount * fromInfo[1]) / toInfo[1]
-}
+// convertAmount(2, 'tbsp', 'ml') -> 29.58, or null if the units can't be compared (cups vs g).
+// Shared with the pantry and shopping list (services/units.js) so all three convert the same way.
+const { convertAmount } = require('../services/units')
 
 const round2 = (n) => Math.round(n * 100) / 100
 
@@ -369,18 +346,86 @@ router.get('/recipe-options', handle(async (req, res) => {
   res.json(recipes.map((r) => toRecipeCard(r, pantryNames)))
 }))
 
+// Turns a Spoonacular failure into a message the user can act on
+function spoonacularError(err) {
+  const status = err.response && err.response.status
+  if (status === 402) return httpError(503, 'Spoonacular\'s daily recipe limit has been reached. Try again tomorrow, or pick one of your saved recipes.')
+  if (status === 404) return httpError(404, 'That recipe is no longer available on Spoonacular.')
+  if (status === 401) return httpError(502, 'Spoonacular is not set up on the server (check SPOONACULAR_API_KEY).')
+  return httpError(502, 'Could not reach Spoonacular. Please try again.')
+}
+
+// GET /planner/recipe-search?search=chicken
+// Used by the Add Meal modal while the user types.
+// Returns { saved: [...], online: [...], warning }:
+//   saved  = matching recipes already in our database (created by users, or added from Spoonacular before)
+//   online = new matches from Spoonacular, not saved yet (id "spoonacular-<id>"); saved when added to the plan
+//   warning = set if Spoonacular couldn't be searched (e.g. quota), so the modal can still show saved results
+router.get('/recipe-search', handle(async (req, res) => {
+  const search = String(req.query.search || '').trim()
+  if (search.length < 2) throw httpError(400, 'Type at least 2 letters to search')
+  const safe = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // so a search like "c++" doesn't crash
+
+  const [savedRecipes, pantryNames] = await Promise.all([
+    Recipe.find({ title: { $regex: safe, $options: 'i' } }).sort({ title: 1 }).limit(10).lean(),
+    getPantryNames(req.userId),
+  ])
+
+  let online = []
+  let warning = null
+  try {
+    const found = await searchRecipes(search)
+    // A Spoonacular recipe someone already added is in our database: show that saved copy instead
+    const alreadySaved = await Recipe.find({ externalId: { $in: found.map((r) => r.externalId) } }).lean()
+    const savedIds = new Set(savedRecipes.map((r) => String(r._id)))
+    alreadySaved.forEach((r) => {
+      if (!savedIds.has(String(r._id))) savedRecipes.push(r)
+    })
+    const savedExternalIds = new Set(alreadySaved.map((r) => r.externalId))
+    online = found
+      .filter((r) => !savedExternalIds.has(r.externalId))
+      .map((r) => ({
+        ...toRecipeCard(r, pantryNames),
+        id: `spoonacular-${r.externalId}`, // not in our database yet, so no MongoDB id
+        externalId: r.externalId,
+        source: 'spoonacular',
+      }))
+  } catch (err) {
+    console.error('Spoonacular search failed:', err.message)
+    warning = spoonacularError(err).message
+  }
+
+  res.json({
+    saved: savedRecipes.map((r) => ({ ...toRecipeCard(r, pantryNames), source: r.source || 'user' })),
+    online,
+    warning,
+  })
+}))
+
 // POST /api/planner/entries
-// body: { start, dayOfWeek, mealSlot, servings, recipeId }                 <- recipe from the list
-//   or: { start, dayOfWeek, mealSlot, servings, customMeal: { title, calories, protein, carbs, fat } }
+// body: { start, dayOfWeek, mealSlot, servings, recipeId }        <- a recipe already in our database
+//   or: { start, dayOfWeek, mealSlot, servings, spoonacularId }   <- a Spoonacular search result (saved first)
+// (old plans may still contain customMeal entries; they still display, but the modal no longer creates them)
 router.post('/entries', handle(async (req, res) => {
-  const { start, dayOfWeek, mealSlot, servings, recipeId, customMeal } = req.body
+  const { start, dayOfWeek, mealSlot, servings, recipeId, spoonacularId, customMeal } = req.body
   const weekStart = parseWeekStart(start)
+  // check everything first, so a bad request never uses Spoonacular quota
   checkDay(dayOfWeek)
   checkSlot(mealSlot)
   checkServings(servings)
 
   const entry = { dayOfWeek, mealSlot, servings }
-  if (customMeal && customMeal.title && String(customMeal.title).trim()) {
+  if (spoonacularId !== undefined) {
+    if (!Number.isSafeInteger(spoonacularId) || spoonacularId < 1) throw httpError(400, 'Invalid Spoonacular recipe id')
+    let recipe
+    try {
+      recipe = await importRecipe(spoonacularId) // saves it as a Recipe (or reuses the saved copy)
+    } catch (err) {
+      if (err.response) throw spoonacularError(err) // the Spoonacular request failed
+      throw err // e.g. a validation error, handled by handle()
+    }
+    entry.recipeId = recipe._id
+  } else if (customMeal && customMeal.title && String(customMeal.title).trim()) {
     entry.customMeal = {
       title: String(customMeal.title).trim(),
       calories: customMeal.calories,

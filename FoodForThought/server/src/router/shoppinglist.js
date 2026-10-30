@@ -109,6 +109,19 @@ function mealsFromPlan(plan) {
     })
 }
 
+// A Cooked meal has already taken its ingredients out of the pantry (Planner.js deductFromPantry
+// saves what it took on entry.pantryDeductions). The list still counts Cooked meals, so ticked items
+// don't vanish mid-week. Without this, the same eggs would be counted twice: once as "needed" by the
+// cooked meal and again as "missing" from the pantry, and the list would ask you to buy them again.
+// So we add what cooking took back on top of the current pantry, i.e. the pantry as it was before cooking.
+function pantryBeforeCooking(pantry, plan) {
+  const taken = (plan ? plan.entries : [])
+    .filter((entry) => entry.status === 'Cooked')
+    .flatMap((entry) => entry.pantryDeductions || [])
+    .map((d) => ({ name: d.name, quantity: d.quantity, unit: d.unit }))
+  return [...pantry, ...taken]
+}
+
 /* ------------------------------------------------------------------ */
 /* Routes                                                              */
 /* ------------------------------------------------------------------ */
@@ -131,7 +144,7 @@ router.post('/generate', handle(async (req, res) => {
     ShoppingList.findOne({ userId: req.userId, weekStart }),
   ])
 
-  const freshItems = buildShoppingItems(mealsFromPlan(plan), pantry)
+  const freshItems = buildShoppingItems(mealsFromPlan(plan), pantryBeforeCooking(pantry, plan))
 
   const list = existing || new ShoppingList({ userId: req.userId, weekStart, items: [] })
   // Keeps manual items, and keeps ticks on items that are still needed
@@ -235,3 +248,5 @@ router.post('/add-to-pantry', handle(async (req, res) => {
 }))
 
 module.exports = router
+// For unit tests (tests/integration.test.js)
+module.exports.pantryBeforeCooking = pantryBeforeCooking

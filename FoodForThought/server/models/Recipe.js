@@ -74,6 +74,12 @@ const recipeSchema = new mongoose.Schema(
       unit: {
         type: String,
         required: true
+      },
+
+      // Optional supermarket aisle from Spoonacular (e.g. "Milk, Eggs, Other Dairy").
+      // The shopping list uses it to sort items into sections; without it they all go to "Other".
+      aisle: {
+        type: String
       }
     }],
 

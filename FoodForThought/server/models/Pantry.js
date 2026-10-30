@@ -74,25 +74,8 @@ const pantrySchema = new mongoose.Schema(
 // If they add "eggs" twice, the controller increases the quantity instead.
 pantrySchema.index({ user: 1, normalizedName: 1 }, { unique: true });
 
-// very small plural -> singular rule set, applied to one word
-function singular(word) {
-  if (word.length <= 3) return word;
-  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';     // berries -> berry
-  if (word.endsWith('oes')) return word.slice(0, -2);           // tomatoes -> tomato
-  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1); // eggs -> egg
-  return word;
-}
-
-function normalizeIngredient(name) {
-  return String(name)
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, ' ') // drop punctuation and numbers
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(singular)
-    .join(' ');
-}
+// Same naming rule as the planner and shopping list ("Eggs" -> "egg"), kept in one shared file
+const { normalizeIngredient } = require('../src/services/ingredientnames');
 
 pantrySchema.pre('validate', function () {
   if (this.name) this.normalizedName = normalizeIngredient(this.name)

@@ -263,6 +263,10 @@ onMounted(() => {
               {{ recipe.totalTime || 'N/A' }} minutes
             </p>
 
+            <p v-if="recipe.createdBy">
+            Created by: {{ recipe.createdBy.name }}
+            </p>
+
             <p>
               <span
                 class="badge"

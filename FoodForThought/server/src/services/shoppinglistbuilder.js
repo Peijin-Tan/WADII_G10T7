@@ -39,7 +39,8 @@ const SHOPPING_ORDER = [
 /* ---------------------------------------------------------------
    Names
 ---------------------------------------------------------------- */
-const { normalizeIngredient } = require('./ingredientnames');
+const { normalizeIngredient, ingredientMatches } = require('./ingredientnames');
+const { convertAmount } = require('./units');
 
 // Ingredient names use the SAME rule as the pantry, so list items and
 // pantry items match: "Eggs" -> "egg", "Cherry Tomatoes" -> "cherry tomato".
@@ -70,8 +71,8 @@ const UNIT_ALIASES = [
   ['g', 1000, 'kg', 'kilogram', 'kilograms'],
   ['ml', 1, 'ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres'],
   ['ml', 1000, 'l', 'liter', 'liters', 'litre', 'litres'],
-  ['tsp', 1, 'tsp', 'teaspoon', 'teaspoons'],
-  ['tbsp', 1, 'tbsp', 'tablespoon', 'tablespoons', 'tbs'],
+  ['tsp', 1, 'tsp', 'tsps', 'teaspoon', 'teaspoons'],
+  ['tbsp', 1, 'tbsp', 'tbsps', 'tablespoon', 'tablespoons', 'tbs'],
   ['cup', 1, 'cup', 'cups'],
   ['clove', 1, 'clove', 'cloves'],
   ['piece', 1, '', 'piece', 'pieces', 'pc', 'pcs', 'whole', 'small', 'medium', 'large'],
@@ -89,10 +90,22 @@ function normalizeUnit(unit) {
   return UNIT_LOOKUP[key] || { unit: key, factor: 1 };
 }
 
+// An amount in one unit, expressed in another: 2 tbsp -> 29.58 ml, 1 kg -> 1000 g.
+// Uses the shared converter (services/units.js); units it doesn't know ("can", "pack")
+// only match the exact same unit. Returns null if they can't be compared.
+function amountIn(amount, fromUnit, toUnit) {
+  const converted = convertAmount(amount, fromUnit, toUnit);
+  if (converted !== null) return converted;
+  const from = normalizeUnit(fromUnit);
+  const to = normalizeUnit(toUnit);
+  return from.unit === to.unit ? (amount * from.factor) / to.factor : null;
+}
+
 // You can't buy 0.5 of an egg, so countable units round UP.
 // Weights/volumes round to whole numbers, anything else to 2 d.p.
 function roundQuantity(quantity, unit) {
-  if (unit === 'piece' || unit === 'clove') return Math.ceil(quantity - 1e-9); // 1e-9 absorbs float error
+  // 1e-9 absorbs float error; Math.max turns Math.ceil's "-0" into a plain 0
+  if (unit === 'piece' || unit === 'clove') return Math.max(0, Math.ceil(quantity - 1e-9));
   if (unit === 'g' || unit === 'ml') return Math.round(quantity);
   return Math.round(quantity * 100) / 100;
 }
@@ -198,19 +211,42 @@ function buildShoppingItems(meals, pantry = []) {
     }
   }
 
-  // 2. Total up the pantry with the same name+unit keys.
-  const stock = new Map();
-  for (const p of pantry) {
-    const amount = Number(p.quantity);
-    if (!p.name || !(amount > 0)) continue;
-    const { unit, factor } = normalizeUnit(p.unit);
-    const key = `${normalizeName(p.name)}|${unit}`;
-    stock.set(key, (stock.get(key) || 0) + amount * factor);
+  // 2. The pantry as rows we can take from. `left` goes down as rows cover needs,
+  //    so one "1 kg chicken" can't cover 800 g of breast AND 800 g of thigh.
+  const stock = pantry
+    .filter((p) => p.name && Number(p.quantity) > 0)
+    .map((p) => ({ name: normalizeName(p.name), unit: p.unit, left: Number(p.quantity) }));
+
+  // 3. Work out how much of each need the pantry covers, using the SAME rules as cooking
+  //    in Planner.js (deductFromPantry), so the two features always agree:
+  //    - names: exact name first, then a whole-word match ("chicken" covers "chicken breast")
+  //    - units: converted within weight / volume / count ("500 ml milk" covers "1 cup milk")
+  //    Exact names go first across ALL needs, so a whole-word match never takes stock an exact one needed.
+  const needList = [...needs.values()];
+  const covered = new Map(needList.map((need) => [need.key, 0]));
+
+  const takeFromPantry = (need, rows) => {
+    for (const row of rows) {
+      const stillNeeded = need.needed - covered.get(need.key);
+      if (stillNeeded <= 1e-9) return;
+      const available = amountIn(row.left, row.unit, need.unit); // the row's stock, in the need's unit
+      if (!(available > 0)) continue; // empty, or units that can't be compared (cups vs g)
+      const take = Math.min(stillNeeded, available);
+      covered.set(need.key, covered.get(need.key) + take);
+      row.left -= amountIn(take, need.unit, row.unit);
+    }
+  };
+  for (const need of needList) {
+    takeFromPantry(need, stock.filter((row) => row.name === need.normalizedName));
+  }
+  for (const need of needList) {
+    takeFromPantry(need, stock.filter((row) => row.name !== need.normalizedName && ingredientMatches(row.name, need.normalizedName)));
   }
 
-  // 3. Subtract what the pantry covers, then round.
-  const items = [...needs.values()].map((need) => {
-    const covered = Math.min(need.needed, stock.get(need.key) || 0);
+  // 4. Subtract what the pantry covers, then round.
+  const items = needList.map((need) => {
+    let toBuy = need.needed - covered.get(need.key);
+    if (toBuy < 1e-6) toBuy = 0; // float leftovers from unit conversion, e.g. 0.0000001 cups
     return {
       name: need.name,
       normalizedName: need.normalizedName,
@@ -218,8 +254,8 @@ function buildShoppingItems(meals, pantry = []) {
       category: need.category,
       usedIn: need.usedIn,
       source: 'auto',
-      quantity: roundQuantity(need.needed - covered, need.unit),
-      pantryQuantity: Math.round(covered * 100) / 100,
+      quantity: roundQuantity(toBuy, need.unit),
+      pantryQuantity: Math.round(covered.get(need.key) * 100) / 100,
       purchased: false,
     };
   });
@@ -311,11 +347,11 @@ function pantryAmount(item, existingUnit) {
   if (!pantryUnit) return { skip: `the pantry can't store "${item.unit}"` };
   if (!existingUnit) return { quantity: item.quantity, unit: pantryUnit };
 
-  const existing = normalizeUnit(existingUnit); // kg -> { unit: 'g', factor: 1000 }, pcs -> piece
-  const mine = item.unit === 'clove' ? 'piece' : item.unit;
-  if (existing.unit !== mine) return { skip: `your pantry stores it in ${existingUnit}` };
+  // Same converter as cooking and list-building: 300 g -> 0.3 kg, 2 tbsp -> 29.58 ml
+  const converted = amountIn(item.quantity, item.unit, existingUnit);
+  if (converted === null) return { skip: `your pantry stores it in ${existingUnit}` };
 
-  return { quantity: Math.round((item.quantity / existing.factor) * 1000) / 1000, unit: existingUnit };
+  return { quantity: Math.round(converted * 1000) / 1000, unit: existingUnit };
 }
 
 module.exports = {
