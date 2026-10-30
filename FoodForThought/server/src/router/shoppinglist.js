@@ -8,6 +8,7 @@
 //   PATCH  /shoppinglist/items/:itemId  { purchased }   -> tick / untick an item
 //   POST   /shoppinglist/items  { start, name, quantity, unit, category }  -> add a manual item
 //   DELETE /shoppinglist/items/:itemId          -> remove a manual item
+//   POST   /shoppinglist/add-to-pantry  { start }    -> move ticked items into the pantry
 //
 // Same structure, auth and error handling as routes/planner/Planner.js.
 
@@ -21,7 +22,9 @@ const {
   normalizeUnit,
   buildShoppingItems,
   reconcileItems,
+  canGoInPantry,
 } = require('../services/shoppinglistbuilder')
+const { getPantry, addBoughtItemsToPantry } = require('../services/pantrysync')
 
 // Reuse the planner's helpers so both features agree on what a "week" is and what a valid id is
 const { normalizeWeekStart, isValidId } = MealPlan
@@ -77,13 +80,6 @@ function checkItemId(itemId) {
   if (!isValidId(itemId)) throw httpError(400, 'Invalid item id')
 }
 
-// TODO(James): replace with the real pantry lookup once the Pantry model is ready.
-// Unlike getPantryNames() in Planner.js, this needs AMOUNTS so they can be subtracted:
-// return [{ name: 'Milk', quantity: 500, unit: 'ml' }, ...]
-async function getPantry(userId) {
-  return []
-}
-
 /* ---------- Converting the meal plan into what the list builder expects ---------- */
 
 // Turns one MealPlan (with entries.recipeId populated) into a plain list of meals.
@@ -117,7 +113,7 @@ function mealsFromPlan(plan) {
 /* Routes                                                              */
 /* ------------------------------------------------------------------ */
 
-// GET /api/shopping-list?start=2026-10-19
+// GET /shoppinglist?start=2026-10-19
 router.get('/', handle(async (req, res) => {
   const weekStart = parseWeekStart(req.query.start)
   const list = await ShoppingList.findOne({ userId: req.userId, weekStart }).lean()
@@ -125,7 +121,7 @@ router.get('/', handle(async (req, res) => {
   res.json(list || { weekStart, items: [], generatedAt: null })
 }))
 
-// POST /api/shopping-list/generate   body: { start }
+// POST /shoppinglist/generate   body: { start }
 router.post('/generate', handle(async (req, res) => {
   const weekStart = parseWeekStart(req.body.start)
 
@@ -147,7 +143,7 @@ router.post('/generate', handle(async (req, res) => {
   res.json(list)
 }))
 
-// PATCH /api/shopping-list/items/:itemId   body: { purchased: true | false }
+// PATCH /shoppinglist/items/:itemId   body: { purchased: true | false }
 router.patch('/items/:itemId', handle(async (req, res) => {
   const { itemId } = req.params
   const { purchased } = req.body
@@ -155,18 +151,24 @@ router.patch('/items/:itemId', handle(async (req, res) => {
   if (typeof purchased !== 'boolean') throw httpError(400, 'purchased must be true or false')
 
   // Filtering on userId too means users can only tick items on their OWN lists.
+  // Items already moved to the pantry can't be unticked (the pantry would then be wrong).
   // "items.$" is MongoDB's positional operator: "the array element that matched".
+  const match = purchased ? { _id: itemId } : { _id: itemId, addedToPantry: { $ne: true } }
   const list = await ShoppingList.findOneAndUpdate(
-    { userId: req.userId, 'items._id': itemId },
+    { userId: req.userId, items: { $elemMatch: match } },
     { $set: { 'items.$.purchased': purchased, 'items.$.purchasedAt': purchased ? new Date() : null } },
     { returnDocument: 'after' }, // return the list AFTER the update
   )
-  if (!list) throw httpError(404, 'Item not found in your shopping list')
+  if (!list) {
+    const exists = await ShoppingList.exists({ userId: req.userId, 'items._id': itemId })
+    if (exists) throw httpError(400, 'This item is already in your pantry. Change it on the Pantry page instead.')
+    throw httpError(404, 'Item not found in your shopping list')
+  }
 
   res.json(list.items.id(itemId))
 }))
 
-// POST /api/shopping-list/items   body: { start, name, quantity?, unit?, category? }
+// POST /shoppinglist/items   body: { start, name, quantity?, unit?, category? }
 router.post('/items', handle(async (req, res) => {
   const weekStart = parseWeekStart(req.body.start)
 
@@ -174,7 +176,7 @@ router.post('/items', handle(async (req, res) => {
   const quantity = req.body.quantity === undefined ? 1 : Number(req.body.quantity)
   const category = CATEGORIES.includes(req.body.category) ? req.body.category : 'other'
   if (!name) throw httpError(400, 'Item name is required')
-  if (name.length > 80) throw httpError(400, 'Item name must be 80 characters or fewer')
+  if (name.length > 60) throw httpError(400, 'Item name must be 60 characters or fewer') // same limit as the pantry
   if (!(quantity > 0)) throw httpError(400, 'Quantity must be more than 0')
 
   const { unit, factor } = normalizeUnit(req.body.unit) // e.g. "kg" is stored as g
@@ -194,7 +196,7 @@ router.post('/items', handle(async (req, res) => {
   res.status(201).json(list.items[list.items.length - 1])
 }))
 
-// DELETE /api/shopping-list/items/:itemId
+// DELETE /shoppinglist/items/:itemId
 // Only manual items can be deleted; auto items would just come back on the next regenerate.
 router.delete('/items/:itemId', handle(async (req, res) => {
   const { itemId } = req.params
@@ -207,6 +209,29 @@ router.delete('/items/:itemId', handle(async (req, res) => {
   if (!list) throw httpError(404, 'Item not found, or it came from your meal plan')
 
   res.status(204).end()
+}))
+
+// POST /shoppinglist/add-to-pantry   body: { start }
+// Moves every ticked item that isn't in the pantry yet into the pantry.
+// Responds with the updated list, how many were added, and any that were skipped (with a reason).
+router.post('/add-to-pantry', handle(async (req, res) => {
+  const weekStart = parseWeekStart(req.body.start)
+  const list = await ShoppingList.findOne({ userId: req.userId, weekStart })
+  if (!list) throw httpError(404, 'There is no shopping list for this week')
+
+  // Ticked, not added yet, and in a unit the pantry can store (so "1 bottle dish soap" is left alone)
+  const toAdd = list.items.filter(
+    (item) => item.purchased && !item.addedToPantry && item.quantity > 0 && canGoInPantry(item),
+  )
+  if (toAdd.length === 0) throw httpError(400, 'Tick the items you bought first')
+
+  const { added, skipped } = await addBoughtItemsToPantry(req.userId, toAdd)
+  added.forEach((item) => {
+    item.addedToPantry = true
+  })
+  await list.save()
+
+  res.json({ list, added: added.length, skipped })
 }))
 
 module.exports = router

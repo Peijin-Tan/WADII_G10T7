@@ -37,6 +37,10 @@ const itemSchema = new Schema({
 
   purchased: { type: Boolean, default: false },
   purchasedAt: { type: Date, default: null },
+
+  // NEW: set once a bought item has been moved into the pantry, so the
+  // "Add bought items to pantry" button never adds the same item twice.
+  addedToPantry: { type: Boolean, default: false },
 });
 
 // Fill normalizedName automatically if it wasn't set.
