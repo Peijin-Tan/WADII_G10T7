@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import shoppingModeModal from '../components/Shopping/shoppingMode.vue'
 
 /* ---------- API ---------- */
 // All shopping-list requests go to the Express router mounted at /shoppinglist.
@@ -153,6 +154,45 @@ const recipeTitles = computed(() => {
 const hasAutoItems = computed(() => items.value.some((it) => it.source !== 'manual'))
 
 /* ---------------------------------------------------------------
+   "Add bought items to pantry"
+   Units the pantry can store (must match PANTRY_UNIT in
+   backend/services/shoppingListBuilder.js). Items in other units,
+   like "1 bottle dish soap", stay on the list only.
+---------------------------------------------------------------- */
+const PANTRY_UNITS = ['g', 'ml', 'piece', 'clove', 'tsp', 'tbsp', 'cup']
+// Same rule as the server (readyForPantry in router/shoppinglist.js):
+// bought, not added yet, and meant for the pantry (the basket's switch, or a unit the pantry can store)
+function goesToPantry(it) {
+  if (!it.purchased || it.addedToPantry) return false
+  if (it.basket) return it.basket.addToPantry !== false
+  return it.quantity > 0 && PANTRY_UNITS.includes(it.unit)
+}
+const readyForPantry = computed(() => items.value.filter(goesToPantry))
+const addingToPantry = ref(false)
+const notice = ref('') // green success message
+
+async function addBoughtToPantry() {
+  if (addingToPantry.value || readyForPantry.value.length === 0) return
+  addingToPantry.value = true
+  error.value = ''
+  shoppingError.value = ''
+  notice.value = ''
+  try {
+    const { data } = await api.post('/add-to-pantry', { start: weekStart.value })
+    list.value = data.list // server sends back the list with addedToPantry set
+    notice.value = `Added ${data.added} ${data.added === 1 ? 'item' : 'items'} to your pantry.`
+    if (data.skipped.length) {
+      // e.g. "Rice (your pantry stores it in cup)"
+      reportError(`Not added: ${data.skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}`)
+    }
+  } catch (err) {
+    reportError(errorMessage(err))
+  } finally {
+    addingToPantry.value = false
+  }
+}
+
+/* ---------------------------------------------------------------
    Filters
 ---------------------------------------------------------------- */
 const filter = ref('all') // 'all' | 'tobuy' | 'pantry'
@@ -187,14 +227,20 @@ function formatQty(qty, unit) {
   if (unit === 'clove') return qty === 1 ? '1 clove' : `${qty} cloves`
   return `${qty} ${unit}`
 }
-function itemMeta(it) {
-  if (isStocked(it)) return `In pantry (${formatQty(it.pantryQuantity, it.unit)} needed)`
-  const buy = formatQty(it.quantity, it.unit)
-  return it.pantryQuantity > 0 ? `Buy ${buy} · ${formatQty(it.pantryQuantity, it.unit)} from pantry` : buy
-}
 function recipeTags(it) {
   const titles = (it.usedIn || []).map((u) => u.title)
   return titles.length > 2 ? [...titles.slice(0, 2), `+${titles.length - 2} more`] : titles
+}
+
+// Small line under the item name, e.g. "200 g from pantry · for Prawn Laksa"
+function rowNote(it) {
+  if (it.source === 'manual') return 'Added by you'
+  const parts = []
+  if (isStocked(it)) parts.push(`${formatQty(it.pantryQuantity, it.unit)} needed, all in your pantry`)
+  else if (it.pantryQuantity > 0) parts.push(`${formatQty(it.pantryQuantity, it.unit)} from pantry`)
+  const recipes = recipeTags(it)
+  if (recipes.length) parts.push(`for ${recipes.join(', ')}`)
+  return parts.join(' · ')
 }
 
 /* ---------------------------------------------------------------
@@ -209,7 +255,46 @@ async function togglePurchased(it) {
     Object.assign(it, data)
   } catch (err) {
     it.purchased = !next
-    error.value = errorMessage(err)
+    reportError(errorMessage(err))
+  }
+}
+
+/* ---------------------------------------------------------------
+   Shopping mode (components/Shopping/shoppingMode.vue)
+   Tapping an item there ticks it (togglePurchased above); the server then
+   fills in its basket details, which the user can edit before adding to the pantry.
+---------------------------------------------------------------- */
+const showShopping = ref(false)
+const savingBasket = ref(false)
+const shoppingError = ref('')
+
+// Errors show inside the modal while it's open, otherwise on the page
+function reportError(message) {
+  if (showShopping.value) shoppingError.value = message
+  else error.value = message
+}
+
+function openShopping() {
+  shoppingError.value = ''
+  notice.value = ''
+  showShopping.value = true
+}
+function closeShopping() {
+  showShopping.value = false
+  shoppingError.value = ''
+}
+
+// basket: { name, quantity, unit, category, expiryDate: 'YYYY-MM-DD' or '', addToPantry }
+async function saveBasket({ item, basket }) {
+  savingBasket.value = true
+  shoppingError.value = ''
+  try {
+    const { data } = await api.patch(`/items/${item._id}/basket`, basket)
+    Object.assign(item, data)
+  } catch (err) {
+    shoppingError.value = errorMessage(err)
+  } finally {
+    savingBasket.value = false
   }
 }
 
@@ -250,6 +335,8 @@ async function removeItem(it) {
 </script>
 
 <template>
+  <!-- full-width page background, same colour as the planner and pantry -->
+  <div class="sw-shell">
   <main class="sw-page">
     <!-- ===================== Summary & control deck ===================== -->
     <section class="sw-hero">
@@ -275,16 +362,15 @@ async function removeItem(it) {
               </div>
             </div>
             <h1 class="sw-headline-lg">Shopping List</h1>
-            <p class="sw-body-md sw-text-variant">
-              Built from this week's meal plan: quantities scaled to your servings, duplicates combined and pantry
-              stock subtracted, ordered so chilled items go in your basket last.
+            <p class="sw-body-md sw-text-variant d-none d-md-block m-0">
+              Built from this week's meal plan, minus what's already in your pantry. Chilled items come last.
             </p>
           </div>
 
           <!-- Progress + actions -->
           <div
             v-if="hasList"
-            class="sw-hero-actions d-flex flex-column flex-sm-row flex-lg-column flex-xl-row align-items-stretch align-items-sm-center gap-3 w-100"
+            class="sw-hero-actions d-flex flex-column flex-sm-row flex-lg-column align-items-stretch align-items-sm-center align-items-lg-end gap-3 w-100"
           >
             <div class="sw-card d-flex align-items-center gap-3 p-3">
               <div class="sw-ring" role="img" :aria-label="`${percent}% bought`">
@@ -301,13 +387,49 @@ async function removeItem(it) {
               <div class="d-flex flex-column">
                 <span class="sw-label-lg">{{ bought }} of {{ total }} bought</span>
                 <span class="sw-label-sm sw-text-outline">{{ pantryItems.length }} covered by your pantry</span>
+                <router-link to="/pantry" class="sw-inline-link">
+                  Go to pantry
+                  <span class="material-symbols-outlined sw-ico-16">arrow_forward</span>
+                </router-link>
               </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center justify-content-lg-end flex-wrap gap-2">
               <button
                 type="button"
-                class="btn sw-btn sw-btn-secondary shadow-sm flex-fill flex-sm-grow-0"
+                class="btn sw-btn sw-btn-primary shadow-sm flex-fill flex-sm-grow-0"
+                :disabled="!items.length"
+                title="Open a checklist for the supermarket"
+                data-testid="start-shopping"
+                @click="openShopping"
+              >
+                <span class="material-symbols-outlined sw-ico-18">shopping_cart</span>
+                <span>Start shopping</span>
+              </button>
+              <button
+                v-if="readyForPantry.length"
+                type="button"
+                class="btn sw-btn sw-btn-tonal flex-fill flex-sm-grow-0"
+                :disabled="addingToPantry"
+                title="Add the items you've ticked as bought to your pantry"
+                @click="addBoughtToPantry"
+              >
+                <span class="material-symbols-outlined sw-ico-18" :class="{ 'sw-spin': addingToPantry }">
+                  {{ addingToPantry ? 'refresh' : 'kitchen' }}
+                </span>
+                <span>
+                  {{
+                    addingToPantry
+                      ? 'Adding…'
+                      : readyForPantry.length
+                        ? `Add ${readyForPantry.length} bought to pantry`
+                        : 'Add bought items to pantry'
+                  }}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="btn sw-btn sw-btn-outline flex-fill flex-sm-grow-0"
                 :disabled="generating"
                 title="Rebuild from your meal plan. Ticked and manually added items are kept."
                 @click="generateList"
@@ -321,7 +443,7 @@ async function removeItem(it) {
 
         <!-- Quick filter bar -->
         <div v-if="items.length" class="sw-filterbar d-flex flex-wrap align-items-center justify-content-between gap-3">
-          <div class="d-flex align-items-center flex-wrap gap-2">
+          <div class="sw-filter-chips" role="group" aria-label="Filter items">
             <button
               v-for="f in filters"
               :key="f.key"
@@ -341,6 +463,15 @@ async function removeItem(it) {
         </div>
       </div>
     </section>
+
+    <!-- Success banner -->
+    <div v-if="notice" class="sw-alert sw-alert--ok" role="status">
+      <span class="material-symbols-outlined sw-ico-20">check_circle</span>
+      <span class="sw-body-sm flex-grow-1">{{ notice }}</span>
+      <button type="button" class="sw-iconbtn" aria-label="Dismiss" @click="notice = ''">
+        <span class="material-symbols-outlined sw-ico-18">close</span>
+      </button>
+    </div>
 
     <!-- Error banner -->
     <div v-if="error" class="sw-alert" role="alert">
@@ -387,10 +518,10 @@ async function removeItem(it) {
                 class="form-control sw-bare-input"
                 placeholder="Add your own item (e.g. dish soap, oat milk)"
                 aria-label="Item name"
-                maxlength="80"
+                maxlength="60"
               />
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-1">
+            <div class="sw-add-controls">
               <input
                 v-model.number="newItem.quantity"
                 type="number"
@@ -405,7 +536,7 @@ async function removeItem(it) {
               <select v-model="newItem.category" class="form-select sw-select" aria-label="Section">
                 <option v-for="c in CATEGORY_META" :key="c.id" :value="c.id">{{ c.title }}</option>
               </select>
-              <button type="submit" class="btn sw-btn sw-btn-primary flex-shrink-0" :disabled="adding || !newItem.name.trim()">
+              <button type="submit" class="btn sw-btn sw-btn-primary sw-add-btn" :disabled="adding || !newItem.name.trim()">
                 Add
               </button>
             </div>
@@ -438,44 +569,37 @@ async function removeItem(it) {
                 :key="it._id"
                 class="sw-row"
                 :class="{ 'sw-row--stocked': isStocked(it), 'is-bought': it.purchased }"
+                data-testid="shopping-item"
               >
-                <div class="sw-row-main">
-                  <input
-                    type="checkbox"
-                    class="form-check-input sw-check"
-                    :checked="it.purchased || isStocked(it)"
-                    :disabled="isStocked(it)"
-                    :aria-label="`Bought ${it.name}`"
-                    @change="togglePurchased(it)"
-                  />
-                  <div class="sw-row-text">
-                    <div class="d-flex align-items-center flex-wrap gap-1">
-                      <span class="sw-item-name">{{ it.name }}</span>
-                      <span v-if="isStocked(it)" class="sw-badge-stock">In Pantry</span>
-                    </div>
-                    <span class="sw-meta">{{ itemMeta(it) }}</span>
+                <input
+                  type="checkbox"
+                  class="form-check-input sw-check"
+                  :checked="it.purchased || isStocked(it)"
+                  :disabled="isStocked(it) || it.addedToPantry"
+                  :aria-label="`Bought ${it.name}`"
+                  @change="togglePurchased(it)"
+                />
+                <div class="sw-row-text">
+                  <div class="d-flex align-items-center flex-wrap gap-1">
+                    <span class="sw-item-name">{{ it.name }}</span>
+                    <span v-if="it.addedToPantry" class="sw-badge-stock">Added to pantry</span>
                   </div>
+                  <span class="sw-meta">{{ rowNote(it) }}</span>
                 </div>
 
-                <div class="sw-tags">
-                  <template v-if="it.source === 'manual'">
-                    <span class="sw-pill">Added by you</span>
-                    <button
-                      type="button"
-                      class="sw-iconbtn"
-                      :aria-label="`Remove ${it.name}`"
-                      @click.prevent="removeItem(it)"
-                    >
-                      <span class="material-symbols-outlined sw-ico-18">delete</span>
-                    </button>
-                  </template>
-                  <template v-else>
-                    <span v-for="tag in recipeTags(it)" :key="tag" class="sw-pill">
-                      <span class="sw-dot sw-dot--primary"></span>
-                      {{ tag }}
-                    </span>
-                  </template>
-                </div>
+                <!-- what to put in the basket: the thing a shopper looks for first -->
+                <span class="sw-qty-col" :class="{ 'sw-qty-col--stocked': isStocked(it) }">
+                  {{ isStocked(it) ? 'In pantry' : formatQty(it.quantity, it.unit) }}
+                </span>
+                <button
+                  v-if="it.source === 'manual'"
+                  type="button"
+                  class="sw-iconbtn"
+                  :aria-label="`Remove ${it.name}`"
+                  @click.prevent="removeItem(it)"
+                >
+                  <span class="material-symbols-outlined sw-ico-18">delete</span>
+                </button>
               </label>
             </div>
           </section>
@@ -486,8 +610,8 @@ async function removeItem(it) {
         </div>
       </div>
 
-      <!-- ---------- Right: pantry ---------- -->
-      <div class="col-12 col-lg-4">
+      <!-- ---------- Right: pantry (desktop; on phones the "In Pantry" filter shows the same) ---------- -->
+      <div class="col-12 col-lg-4 d-none d-lg-block sw-sticky">
         <div class="d-flex flex-column gap-4">
           <!-- Pantry cross-check -->
           <section class="sw-card sw-card--low d-flex flex-column gap-3 p-4">
@@ -527,6 +651,22 @@ async function removeItem(it) {
       </div>
     </div>
   </main>
+
+  <!-- Shopping mode (teleported to <body>, so its position here doesn't matter) -->
+  <shoppingModeModal
+    v-if="showShopping"
+    :items="items"
+    :sections="CATEGORY_META"
+    :saving="savingBasket"
+    :adding="addingToPantry"
+    :error="shoppingError"
+    :notice="notice"
+    @toggle="togglePurchased"
+    @save-basket="saveBasket"
+    @add-to-pantry="addBoughtToPantry"
+    @close="closeShopping"
+  />
+  </div>
 </template>
 
 <style scoped>
@@ -573,7 +713,7 @@ async function removeItem(it) {
   --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
 
   width: 100%;
-  max-width: 80rem;
+  max-width: 1140px; /* same content width as the planner and pantry */
   margin: 0 auto;
   padding: 1rem;
   display: flex;
@@ -586,6 +726,9 @@ async function removeItem(it) {
   -webkit-font-smoothing: antialiased;
 }
 @media (min-width: 768px) { .sw-page { padding: 1.5rem; gap: 2.5rem; } }
+
+/* Edge-to-edge page background: same colour as the planner and pantry (#fafaf3) */
+.sw-shell { min-height: 100vh; background: #fafaf3; }
 
 /* ---------- Icons (Material Symbols) ---------- */
 .material-symbols-outlined { line-height: 1; vertical-align: middle; user-select: none; }
@@ -622,6 +765,7 @@ async function removeItem(it) {
   overflow: hidden;
   padding: 1.25rem;
   background: var(--sw-surface-low);
+  border: 1px solid rgba(194, 200, 192, 0.5); /* keeps the card distinct on the cream page */
   border-radius: var(--sw-radius-xl);
   box-shadow: var(--sw-shadow-sm);
 }
@@ -717,6 +861,18 @@ async function removeItem(it) {
   --bs-btn-disabled-color: var(--sw-on-secondary);
   --bs-btn-disabled-bg: var(--sw-secondary);
 }
+.sw-btn-outline {
+  --bs-btn-color: var(--sw-primary);
+  --bs-btn-bg: var(--sw-surface-lowest);
+  --bs-btn-border-color: rgba(50, 83, 60, 0.35);
+  --bs-btn-hover-color: var(--sw-primary);
+  --bs-btn-hover-bg: var(--sw-surface-low);
+  --bs-btn-hover-border-color: var(--sw-primary);
+  --bs-btn-active-color: var(--sw-primary);
+  --bs-btn-active-bg: var(--sw-surface-high);
+  --bs-btn-disabled-color: var(--sw-primary);
+  --bs-btn-disabled-bg: var(--sw-surface-lowest);
+}
 .sw-btn-tonal {
   --bs-btn-color: var(--sw-on-surface);
   --bs-btn-bg: var(--sw-surface);
@@ -732,6 +888,20 @@ async function removeItem(it) {
 .sw-ring-track { fill: none; stroke: var(--sw-surface-high); stroke-width: 3.5; }
 .sw-ring-bar { fill: none; stroke: var(--sw-primary); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dasharray 0.5s ease-out; }
 .sw-ring-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+/* "Go to pantry" link in the summary card */
+.sw-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+  color: var(--sw-primary);
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.sw-inline-link:hover { text-decoration: underline; }
+.sw-inline-link:focus-visible { outline: 2px solid var(--sw-primary); outline-offset: 2px; border-radius: 2px; }
 
 /* ---------- Filter bar ---------- */
 .sw-filterbar {
@@ -767,6 +937,7 @@ async function removeItem(it) {
   background: var(--sw-error-container);
   color: var(--sw-error);
 }
+.sw-alert--ok { background: var(--sw-primary-fixed); color: var(--sw-on-primary-fixed); }
 .sw-empty {
   display: flex;
   flex-direction: column;
@@ -782,6 +953,14 @@ async function removeItem(it) {
 @media (min-width: 768px) { .sw-addform { flex-direction: row; align-items: center; } }
 .sw-addbox { flex: 1; display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 1rem; background: var(--sw-surface-low); border-radius: var(--sw-radius); }
 .sw-addbox:focus-within { box-shadow: 0 0 0 2px var(--sw-primary); }
+/* quantity, unit, section and Add: one row on wider screens, a neat 2-column grid on phones */
+.sw-add-controls { display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.5rem; }
+.sw-add-controls > :nth-child(3), .sw-add-controls .sw-add-btn { grid-column: 1 / -1; }
+@media (min-width: 576px) {
+  .sw-add-controls { display: flex; align-items: center; gap: 0.25rem; }
+  .sw-add-controls .sw-qty { width: 4.5rem; }
+  .sw-add-btn { flex-shrink: 0; }
+}
 .form-control.sw-bare-input { padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--sw-on-surface); font: 400 13px/20px 'Inter', sans-serif; }
 .sw-bare-input::placeholder { color: var(--sw-outline); opacity: 1; }
 
@@ -803,7 +982,8 @@ async function removeItem(it) {
 
 /* ---------- Sections ---------- */
 .sw-aisle { overflow: hidden; }
-.sw-aisle-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.25rem; background: var(--sw-surface-low); }
+.sw-aisle-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--sw-surface-low); }
+.sw-aisle-head .sw-pill { white-space: nowrap; flex-shrink: 0; }
 .sw-aisle-icon { width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: var(--sw-radius); }
 .sw-aisle-icon--green   { background: var(--sw-primary-fixed);   color: var(--sw-on-primary-fixed); }
 .sw-aisle-icon--peach   { background: var(--sw-secondary-fixed); color: var(--sw-on-secondary-fixed); }
@@ -812,13 +992,22 @@ async function removeItem(it) {
 .sw-aisle-icon--neutral { background: var(--sw-surface-highest); color: var(--sw-on-surface-variant); }
 .sw-aisle-body { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem; }
 
-/* ---------- Grocery rows ---------- */
+/* ---------- Filter chips: one row, scrolls sideways on narrow phones ---------- */
+.sw-filter-chips { display: flex; align-items: center; gap: 0.5rem; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.sw-filter-chips::-webkit-scrollbar { display: none; }
+.sw-filter-chips .sw-btn { flex-shrink: 0; white-space: nowrap; }
+
+/* pantry sidebar follows you down the list on desktop */
+@media (min-width: 992px) { .sw-sticky { position: sticky; top: 1rem; } }
+
+/* ---------- Grocery rows: [checkbox] [name / note] [amount] [delete] ---------- */
+.sw-qty-col { flex-shrink: 0; font: 600 14px/20px 'Inter', sans-serif; color: var(--sw-on-surface); white-space: nowrap; text-align: right; }
+.sw-qty-col--stocked { font-weight: 500; font-size: 12px; color: var(--sw-primary); }
+.sw-row.is-bought .sw-qty-col { opacity: 0.5; }
 .sw-row {
   display: flex;
-  flex-wrap: wrap; /* tags drop under the name on narrow phones */
   align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem 0.75rem;
+  gap: 0.75rem;
   padding: 0.5rem;
   border-radius: var(--sw-radius);
   cursor: pointer;
@@ -828,8 +1017,7 @@ async function removeItem(it) {
 .sw-row:focus-within { outline: 2px solid rgba(50, 83, 60, 0.35); }
 .sw-row--stocked { background: rgba(244, 244, 237, 0.4); cursor: default; }
 
-.sw-row-main { display: flex; align-items: center; gap: 1rem; min-width: 0; flex: 1 1 14rem; }
-.sw-row-text { display: flex; flex-direction: column; min-width: 0; }
+.sw-row-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .sw-row--stocked .sw-row-text { opacity: 0.6; }
 
 .sw-item-name { font: 400 15px/24px 'Inter', sans-serif; color: var(--sw-on-surface); overflow-wrap: anywhere; transition: opacity 0.15s; }
@@ -837,8 +1025,6 @@ async function removeItem(it) {
 
 .sw-row.is-bought .sw-item-name { text-decoration: line-through; opacity: 0.5; }
 
-.sw-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.25rem; padding-left: 2.25rem; }
-@media (min-width: 576px) { .sw-tags { padding-left: 0; } }
 
 /* ---------- Pantry list ---------- */
 .sw-saving { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem; background: var(--sw-surface-lowest); border-radius: var(--sw-radius); }

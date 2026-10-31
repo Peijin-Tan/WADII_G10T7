@@ -292,6 +292,7 @@ function reconcileItems(oldItems, freshItems) {
       purchased: keepTicked,
       purchasedAt: keepTicked ? old.purchasedAt : null,
       addedToPantry: keepTicked && Boolean(old.addedToPantry),
+      basket: keepTicked ? old.basket : undefined, // what the user filled in while shopping
     };
   });
 
@@ -331,6 +332,24 @@ function pantryCategory(item) {
   return PANTRY_CATEGORY[item.category] || 'other';
 }
 
+/* defaultBasket(item)
+   Shopping mode: when an item goes into the basket, its pantry details start
+   pre-filled from the list, so the user only edits what's different
+   (a 2 kg bag instead of 600 g, a use-by date...).
+   Items the pantry can't store ("1 bottle dish soap") start with addToPantry off. */
+function defaultBasket(item) {
+  const pantryUnit = PANTRY_UNIT[item.unit];
+  const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+  return {
+    name: String(item.name || '').trim().slice(0, 60),
+    quantity: Math.round(quantity * 100) / 100,
+    unit: pantryUnit || 'pcs',
+    category: pantryCategory(item),
+    expiryDate: null,
+    addToPantry: Boolean(pantryUnit),
+  };
+}
+
 /* pantryAmount(item, existingUnit)
    How much to add to the pantry, in the pantry's units.
    existingUnit = unit of the pantry row for this ingredient, or null if
@@ -368,4 +387,5 @@ module.exports = {
   canGoInPantry,
   pantryCategory,
   pantryAmount,
+  defaultBasket,
 };

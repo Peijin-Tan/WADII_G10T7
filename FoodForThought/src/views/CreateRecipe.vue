@@ -1,12 +1,18 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+// Opened from the planner's Add Meal modal (/recipes/create?from=planner)?
+// Then Save and Cancel take the user back to the planner, where the new recipe
+// shows up in Add Meal, instead of the recipe list.
+const backTo = route.query.from === 'planner' ? '/planner' : '/recipes'
 
 const title = ref('')
 const image = ref('')
@@ -90,7 +96,7 @@ async function createRecipe() {
 })
 
     success.value = 'Recipe created successfully!'
-    await router.push('/recipes')
+    await router.push(backTo)
   } catch (err) {
     console.error(err)
     error.value =
@@ -312,7 +318,7 @@ async function createRecipe() {
         <button
           type="button"
           class="btn btn-secondary"
-          @click="router.push('/recipes')"
+          @click="router.push(backTo)"
         >
           Cancel
         </button>
