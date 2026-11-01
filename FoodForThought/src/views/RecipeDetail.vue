@@ -46,6 +46,7 @@ onMounted(fetchRecipe)
 </script>
 
 <template>
+    <div class="fft-page">
   <div class="container py-5">
     <button
       class="btn btn-outline-secondary mb-4"
@@ -242,6 +243,7 @@ onMounted(fetchRecipe)
         :recipe-id="recipe._id"
       />
     </div>
+  </div>
   </div>
 </template>
 
