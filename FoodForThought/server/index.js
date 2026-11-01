@@ -1,7 +1,11 @@
 const express = require('express')
 const mongoose = require('mongoose')
 const cors = require('cors')
-const dotenv = require('dotenv').config({ path: './config.env' })
+const path = require('node:path')
+const dotenv = require('dotenv')
+
+dotenv.config({ path: path.resolve(__dirname, 'config.env') })
+
 require('node:dns').setServers(['8.8.8.8', '1.1.1.1'])
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')

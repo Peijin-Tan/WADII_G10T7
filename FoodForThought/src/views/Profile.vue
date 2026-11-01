@@ -8,6 +8,8 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const displayName = computed(() => auth.user?.name || 'Guest')
+const profileBackRoute = computed(() => auth.user?.role === 'admin' ? '/admindashboard' : '/dashboard')
+const profileBackLabel = computed(() => auth.user?.role === 'admin' ? '← Back to Admin Dashboard' : '← Back to Dashboard')
 
 const profileImage =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30'
@@ -21,8 +23,8 @@ function handleLogout() {
 <template>
   <main class="profile-page">
     <div class="profile-container">
-      <RouterLink to="/home" class="profile-back">
-        ← Back to Home
+      <RouterLink :to="profileBackRoute" class="profile-back">
+        {{ profileBackLabel }}
       </RouterLink>
 
       <section class="profile-card">
