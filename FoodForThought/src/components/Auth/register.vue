@@ -1,88 +1,250 @@
 <template>
-  <!-- min-vh-100 and d-flex vertically center the form in the viewport -->
-  <div class="container min-vh-100 d-flex justify-content-center align-items-center py-4 content=width-device-width, intial scale=1.0">
-    <div class="row justify-content-center w-100">
-      <!-- Standardized form card widths across screen sizes -->
-      <div class="col-12 col-sm-10 col-md-8 col-lg-5 col-xl-4 ">
-        <div class="card shadow-sm border-0 rounded-3">
-          <div class="card-body p-4">
-            <h5 class="card-title text-center mb-4 fw-bold">Register</h5>
-
-            <div v-if="errorMessage" class="alert alert-danger py-2" role="alert">
-              {{ errorMessage }}
-            </div>
-            <div v-if="successMessage" class="alert alert-success py-2" role="alert">
-              {{ successMessage }}
-            </div>
-
-            <form @submit.prevent="handleSubmit" novalidate>
-              <div class="mb-3">
-                <label for="registerName" class="form-label text-secondary small fw-semibold">Name</label>
-                <input
-                  v-model.trim="form.name"
-                  type="text"
-                  class="form-control"
-                  id="registerName"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-
-              <div class="mb-3">
-                <label for="registerEmail" class="form-label text-secondary small fw-semibold">Email address</label>
-                <input
-                  v-model.trim="form.email"
-                  type="email"
-                  class="form-control"
-                  :class="{ 'is-invalid': form.email && !isEmailValid }"
-                  id="registerEmail"
-                  placeholder="name@example.com"
-                  required
-                />
-                <div v-if="form.email && !isEmailValid" class="invalid-feedback">
-                  Please enter a valid email address.
-                </div>
-              </div>
-
-              <div class="mb-3">
-                <label for="registerPassword" class="form-label text-secondary small fw-semibold">Password</label>
-                <input
-                  v-model="form.password"
-                  type="password"
-                  class="form-control"
-                  :class="{ 'is-invalid': form.password && !isPasswordValid }"
-                  id="registerPassword"
-                  placeholder="At least 8 characters"
-                  required
-                />
-                <div v-if="form.password && !isPasswordValid" class="invalid-feedback">
-                  Password must be at least 8 characters long.
-                </div>
-              </div>
-
-              <div class="mb-4">
-                <label for="registerRole" class="form-label text-secondary small fw-semibold">Role</label>
-                <select v-model="form.role" class="form-select" id="registerRole" required>
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                class="btn btn-primary w-100 py-2 fw-semibold"
-                :disabled="isLoading || !isFormValid"
-              >
-                <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                {{ isLoading ? 'Registering...' : 'Register' }}
-              </button>
-            </form>
-          </div>
+  <div class="fft-page register-page">
+    <div class="register-shell">
+      <div class="register-card">
+        <div class="register-brand" aria-label="FoodForThought brand">
+          <span class="brand-icon">🍽️</span>
         </div>
+
+        <h1>Create account</h1>
+        <p class="register-subtitle">Start planning meals with your own personalized dashboard.</p>
+
+        <div v-if="errorMessage" class="message-box error-box" role="alert">
+          {{ errorMessage }}
+        </div>
+        <div v-if="successMessage" class="message-box success-box" role="alert">
+          {{ successMessage }}
+        </div>
+
+        <form @submit.prevent="handleSubmit" novalidate class="register-form">
+          <div class="field-group">
+            <label for="registerName" class="field-label">Name</label>
+            <input
+              v-model.trim="form.name"
+              type="text"
+              class="form-control"
+              id="registerName"
+              placeholder="John Doe"
+              required
+            />
+          </div>
+
+          <div class="field-group">
+            <label for="registerEmail" class="field-label">Email address</label>
+            <input
+              v-model.trim="form.email"
+              type="email"
+              class="form-control"
+              :class="{ 'is-invalid': form.email && !isEmailValid }"
+              id="registerEmail"
+              placeholder="name@example.com"
+              required
+            />
+            <div v-if="form.email && !isEmailValid" class="invalid-feedback">
+              Please enter a valid email address.
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="registerPassword" class="field-label">Password</label>
+            <input
+              v-model="form.password"
+              type="password"
+              class="form-control"
+              :class="{ 'is-invalid': form.password && !isPasswordValid }"
+              id="registerPassword"
+              placeholder="At least 8 characters"
+              required
+            />
+            <div v-if="form.password && !isPasswordValid" class="invalid-feedback">
+              Password must be at least 8 characters long.
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="registerRole" class="field-label">Role</label>
+            <select v-model="form.role" class="form-select" id="registerRole" required>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            class="register-button"
+            :disabled="isLoading || !isFormValid"
+          >
+            <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
+            {{ isLoading ? 'Registering...' : 'Register' }}
+          </button>
+        </form>
+
+        <p class="register-footer">
+          Already have an account?
+          <router-link to="/login">Log in</router-link>
+        </p>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.register-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 32px 20px;
+  background: linear-gradient(180deg, var(--fft-background) 0%, #f2f5f0 100%);
+}
+
+.register-shell {
+  width: min(100%, 480px);
+}
+
+.register-card {
+  background: var(--fft-card);
+  border: 1px solid var(--fft-border);
+  border-radius: 24px;
+  box-shadow: 0 18px 40px rgba(18, 29, 20, 0.08);
+  padding: 32px 26px;
+}
+
+.register-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 18px;
+  background: var(--fft-primary-light);
+  border: 1px solid rgba(50, 83, 60, 0.15);
+}
+
+.brand-icon {
+  font-size: 30px;
+}
+
+.register-card h1 {
+  margin: 0;
+  text-align: center;
+  color: var(--fft-primary-dark);
+  font-size: clamp(28px, 4vw, 36px);
+  line-height: 1.2;
+}
+
+.register-subtitle {
+  margin: 10px 0 0;
+  text-align: center;
+  color: var(--fft-muted);
+  font-size: 15px;
+}
+
+.message-box {
+  margin-top: 20px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.error-box {
+  background: rgba(185, 28, 28, 0.08);
+  border: 1px solid rgba(185, 28, 28, 0.18);
+  color: #b91c1c;
+}
+
+.success-box {
+  background: rgba(22, 101, 52, 0.08);
+  border: 1px solid rgba(22, 101, 52, 0.18);
+  color: #166534;
+}
+
+.register-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fft-primary-dark);
+}
+
+.form-control,
+.form-select {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--fft-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--fft-text);
+  font-size: 15px;
+}
+
+.form-control::placeholder {
+  color: var(--fft-muted);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--fft-primary);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(50, 83, 60, 0.12);
+}
+
+.invalid-feedback {
+  margin-top: 6px;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.register-button {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  background: var(--fft-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.register-button:hover {
+  background: var(--fft-primary-hover);
+}
+
+.register-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.register-footer {
+  margin: 20px 0 0;
+  text-align: center;
+  color: var(--fft-secondary-text);
+  font-size: 14px;
+}
+
+.register-footer a {
+  color: var(--fft-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.register-footer a:hover {
+  text-decoration: underline;
+}
+</style>
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
