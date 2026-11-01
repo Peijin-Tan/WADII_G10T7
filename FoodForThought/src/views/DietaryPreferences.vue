@@ -111,6 +111,9 @@ onMounted(loadPreferences)
 <template>
   <div class="container py-5">
     <div class="mb-4">
+      <RouterLink to="/profile" class="back-link">
+        ← Back to Profile
+      </RouterLink>
       <h1>Dietary Preferences</h1>
       <p class="text-muted">
         Personalise your recipe experience by selecting your
@@ -207,6 +210,18 @@ onMounted(loadPreferences)
 </template>
 
 <style scoped>
+.back-link {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: #32533c;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
 .preference-option {
   padding: 12px;
   border: 1px solid #dee2e6;
