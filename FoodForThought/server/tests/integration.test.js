@@ -7,7 +7,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const { buildShoppingItems, pantryAmount } = require('../src/services/shoppinglistbuilder')
+const { buildShoppingItems, pantryAmount, reconcileItems } = require('../src/services/shoppinglistbuilder')
 const { convertAmount } = require('../src/services/units')
 const { ingredientMatches } = require('../src/services/ingredientnames')
 const { pantryBeforeCooking } = require('../src/router/shoppinglist')
@@ -141,4 +141,62 @@ test('saved preferences are translated into Spoonacular diets and intolerances',
 test('a user with no saved preferences gets no filters', async (t) => {
   t.mock.method(UserPreference, 'findOne', () => ({ lean: async () => null }))
   assert.deepEqual(await getSavedPreferences('someUserId'), { diets: [], intolerances: [] })
+})
+
+/* ---------- Same ingredient in different units ---------- */
+
+const amountsText = (item) =>
+  [{ quantity: item.quantity, unit: item.unit }, ...item.alsoNeed].map((a) => `${a.quantity} ${a.unit}`).join(' + ')
+
+test('the same ingredient in units that can\'t convert is ONE line with both amounts', () => {
+  const items = buildShoppingItems([
+    meal('Planned', [{ name: 'ginger', quantity: 1, unit: 'inch' }], { title: 'Beet Root Rice' }),
+    meal('Planned', [{ name: 'Ginger', quantity: 1, unit: '' }], { title: 'Pork Fried Rice' }),
+  ])
+  assert.equal(items.length, 1)
+  assert.equal(amountsText(items[0]), '1 piece + 1 inch') // the pantry can store pieces, so that's the main amount
+  assert.deepEqual(items[0].usedIn.map((u) => u.title), ['Beet Root Rice', 'Pork Fried Rice'])
+})
+
+test('units that convert are merged into one amount, in the smaller unit', () => {
+  const items = buildShoppingItems([
+    meal('Planned', [{ name: 'salt', quantity: 1, unit: 'tbsp' }, { name: 'milk', quantity: 1, unit: 'cup' }], { title: 'A' }),
+    meal('Planned', [{ name: 'salt', quantity: 1, unit: 'tsp' }, { name: 'milk', quantity: 200, unit: 'ml' }], { title: 'B' }),
+  ])
+  assert.equal(amountsText(items.find((i) => i.name === 'Salt')), '4 tsp') // 1 tbsp = 3 tsp
+  assert.equal(amountsText(items.find((i) => i.name === 'Milk')), '440 ml') // 1 cup = 240 ml
+})
+
+test('the main amount is one still to buy, so quantity > 0 means there is something to buy', () => {
+  // pantry covers the grams but not the "inch"
+  const items = buildShoppingItems(
+    [
+      meal('Planned', [{ name: 'ginger', quantity: 30, unit: 'g' }], { title: 'A' }),
+      meal('Planned', [{ name: 'ginger', quantity: 1, unit: 'inch' }], { title: 'B' }),
+    ],
+    [{ name: 'ginger', quantity: 100, unit: 'g' }],
+  )
+  assert.equal(items[0].quantity, 1)
+  assert.equal(items[0].unit, 'inch')
+  assert.deepEqual(items[0].alsoNeed, [{ quantity: 0, unit: 'g', pantryQuantity: 30 }])
+})
+
+test('regenerating: an old list with two ginger lines becomes one, keeping the ticked line', () => {
+  const old = [
+    { _id: 'a', name: 'Ginger', unit: 'inch', quantity: 1, purchased: false, source: 'auto' },
+    { _id: 'b', name: 'Ginger', unit: 'piece', quantity: 1, purchased: true, source: 'auto' },
+  ]
+  const fresh = buildShoppingItems([
+    meal('Planned', [{ name: 'ginger', quantity: 1, unit: 'inch' }], { title: 'A' }),
+    meal('Planned', [{ name: 'ginger', quantity: 1, unit: '' }], { title: 'B' }),
+  ])
+  const [line] = reconcileItems(old, fresh)
+  assert.equal(line._id, 'b')
+  assert.equal(line.unit, 'piece')
+  // the old ticked line only covered "1 piece", not the inch -> unticked so the rest gets bought
+  assert.equal(line.purchased, false)
+
+  // ticked line that already covered both amounts stays ticked
+  const both = [{ _id: 'c', name: 'Ginger', unit: 'inch', quantity: 1, alsoNeed: [{ quantity: 1, unit: 'piece' }], purchased: true, source: 'auto' }]
+  assert.equal(reconcileItems(both, fresh)[0].purchased, true)
 })

@@ -1,38 +1,20 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
-import shoppingModeModal from '../components/Shopping/shoppingMode.vue'
+import { createApi, errorMessage } from '@/services/api'
+import { toISODate, fromISODate, mondayOf } from '@/utils/dates'
+import { LIST_TO_PANTRY_UNIT, formatQty } from '@/constants/pantry'
+import { categoryStyle } from '@/constants/categoryColors'
+import ShoppingModeModal from '@/components/Shopping/ShoppingModeModal.vue'
+import AppAlert from '@/components/ui/AppAlert.vue'
+import PageIntro from '@/components/ui/PageIntro.vue'
 
 /* ---------- API ---------- */
 // All shopping-list requests go to the Express router mounted at /shoppinglist.
-const api = axios.create({ baseURL: 'http://localhost:8000/shoppinglist' })
-
-// The login page saves the JWT in the auth store (persisted in localStorage as 'foodforthought_auth').
-// We only send the token: the server works out the userId from it (requireAuth -> req.user),
-// so the page never needs to know or send the userId itself.
-const auth = useAuthStore()
+// createApi (services/api.js) sends the login token and logs out on 401.
+const api = createApi('/shoppinglist')
 const route = useRoute()
 const router = useRouter()
-
-// send the login token with every shopping-list request
-api.interceptors.request.use((config) => {
-  if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
-  return config
-})
-
-// no token / expired token (they last 1h) -> log out and go to the login page
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      auth.logout()
-      router.push('/login')
-    }
-    return Promise.reject(err)
-  }
-)
 
 /* ---------------------------------------------------------------
    Category display info, listed in SHOPPING ORDER (must match
@@ -40,38 +22,26 @@ api.interceptors.response.use(
    shelf-stable first, chilled and frozen last so they stay cold.
 ---------------------------------------------------------------- */
 const CATEGORY_META = [
-  { id: 'canned-sauces', title: 'Canned Goods & Sauces', icon: 'soup_kitchen', tone: 'neutral' },
-  { id: 'grains-noodles', title: 'Rice, Grains & Noodles', icon: 'rice_bowl', tone: 'neutral' },
-  { id: 'spices-condiments', title: 'Spices & Condiments', icon: 'grain', tone: 'neutral' },
-  { id: 'other', title: 'Other', icon: 'shopping_basket', tone: 'neutral' },
-  { id: 'produce', title: 'Fruit & Vegetables', icon: 'nutrition', tone: 'green' },
-  { id: 'dairy-eggs', title: 'Dairy & Eggs', icon: 'egg', tone: 'amber', chilled: true },
-  { id: 'meat-seafood', title: 'Meat & Seafood', icon: 'set_meal', tone: 'peach', chilled: true },
-  { id: 'frozen', title: 'Frozen', icon: 'ac_unit', tone: 'blue', chilled: true },
+  { id: 'canned-sauces', title: 'Canned Goods & Sauces', icon: 'soup_kitchen' },
+  { id: 'grains-noodles', title: 'Rice, Grains & Noodles', icon: 'rice_bowl' },
+  { id: 'spices-condiments', title: 'Spices & Condiments', icon: 'grain' },
+  { id: 'other', title: 'Other', icon: 'shopping_basket' },
+  { id: 'produce', title: 'Fruit & Vegetables', icon: 'nutrition' },
+  { id: 'dairy-eggs', title: 'Dairy & Eggs', icon: 'egg', chilled: true },
+  { id: 'meat-seafood', title: 'Meat & Seafood', icon: 'set_meal', chilled: true },
+  { id: 'frozen', title: 'Frozen', icon: 'ac_unit', chilled: true },
 ]
-const UNIT_OPTIONS = ['piece', 'g', 'kg', 'ml', 'l', 'tbsp', 'tsp', 'pack', 'bottle', 'can']
+const UNIT_OPTIONS = ['piece', 'g', 'kg', 'ml', 'l', 'tbsp', 'tsp', 'cup', 'pack', 'bottle', 'can']
 
 /* ---------------------------------------------------------------
    Week handling. The week lives in the URL (?start=2026-10-19) so the
    planner can link straight to the same week's list.
 ---------------------------------------------------------------- */
-function toISODate(d) {
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-function mondayOf(date) {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)) // getDay(): 0 = Sunday
-  return d
-}
-function fromISODate(s) {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
 const queryStart = /^\d{4}-\d{2}-\d{2}$/.test(route.query.start ?? '') ? route.query.start : null
 const weekStart = ref(toISODate(mondayOf(queryStart ? fromISODate(queryStart) : new Date())))
+
+const thisWeek = toISODate(mondayOf())
+const isThisWeek = computed(() => weekStart.value === thisWeek)
 
 function shiftWeek(weeks) {
   const d = fromISODate(weekStart.value)
@@ -95,19 +65,22 @@ const loading = ref(false)
 const generating = ref(false)
 const error = ref('')
 
-const errorMessage = (err) => err.response?.data?.message || 'Something went wrong. Please try again.'
+let latestLoad = 0 // ignore a slow response if the user already switched to another week
 
 async function loadList() {
+  const requestId = ++latestLoad
   loading.value = true
   error.value = ''
   try {
     const { data } = await api.get('/', { params: { start: weekStart.value } })
-    list.value = data
+    if (requestId === latestLoad) list.value = data
   } catch (err) {
-    error.value = errorMessage(err)
-    list.value = null
+    if (requestId === latestLoad) {
+      error.value = errorMessage(err)
+      list.value = null
+    }
   } finally {
-    loading.value = false
+    if (requestId === latestLoad) loading.value = false
   }
 }
 
@@ -141,9 +114,12 @@ const isStocked = (it) => it.quantity <= 0
 const toBuyItems = computed(() => items.value.filter((it) => !isStocked(it)))
 
 const total = computed(() => toBuyItems.value.length)
+const toBuyLeft = computed(() => toBuyItems.value.filter((it) => !it.purchased).length)
+
+
 const bought = computed(() => toBuyItems.value.filter((it) => it.purchased).length)
 const percent = computed(() => (total.value === 0 ? 0 : Math.round((bought.value / total.value) * 100)))
-const pantryItems = computed(() => items.value.filter((it) => it.pantryQuantity > 0))
+const pantryItems = computed(() => items.value.filter(fromPantry))
 
 // Unique recipes this week's list was built from.
 const recipeTitles = computed(() => {
@@ -159,17 +135,17 @@ const hasAutoItems = computed(() => items.value.some((it) => it.source !== 'manu
    backend/services/shoppingListBuilder.js). Items in other units,
    like "1 bottle dish soap", stay on the list only.
 ---------------------------------------------------------------- */
-const PANTRY_UNITS = ['g', 'ml', 'piece', 'clove', 'tsp', 'tbsp', 'cup']
 // Same rule as the server (readyForPantry in router/shoppinglist.js):
 // bought, not added yet, and meant for the pantry (the basket's switch, or a unit the pantry can store)
 function goesToPantry(it) {
   if (!it.purchased || it.addedToPantry) return false
   if (it.basket) return it.basket.addToPantry !== false
-  return it.quantity > 0 && PANTRY_UNITS.includes(it.unit)
+  return it.quantity > 0 && Boolean(LIST_TO_PANTRY_UNIT[it.unit])
 }
 const readyForPantry = computed(() => items.value.filter(goesToPantry))
 const addingToPantry = ref(false)
 const notice = ref('') // green success message
+const warning = ref('') // amber: done, but some items were left out (e.g. "Rice: your pantry stores it in cup")
 
 async function addBoughtToPantry() {
   if (addingToPantry.value || readyForPantry.value.length === 0) return
@@ -177,13 +153,16 @@ async function addBoughtToPantry() {
   error.value = ''
   shoppingError.value = ''
   notice.value = ''
+  warning.value = ''
   try {
     const { data } = await api.post('/add-to-pantry', { start: weekStart.value })
     list.value = data.list // server sends back the list with addedToPantry set
     notice.value = `Added ${data.added} ${data.added === 1 ? 'item' : 'items'} to your pantry.`
     if (data.skipped.length) {
       // e.g. "Rice (your pantry stores it in cup)"
-      reportError(`Not added: ${data.skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}`)
+      const text = `Not added: ${data.skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}. Add these on the Pantry page instead.`
+      if (showShopping.value) shoppingError.value = text
+      else warning.value = text
     }
   } catch (err) {
     reportError(errorMessage(err))
@@ -196,7 +175,9 @@ async function addBoughtToPantry() {
    Filters
 ---------------------------------------------------------------- */
 const filter = ref('all') // 'all' | 'tobuy' | 'pantry'
-const hidePantry = ref(false)
+// On by default: lines the pantry fully covers need no action, so they'd only make the list longer.
+// They're still listed under the "In Pantry" filter and in the "From Your Pantry" panel.
+const hidePantry = ref(true)
 
 const filters = computed(() => [
   { key: 'all', label: 'All Items', count: items.value.length },
@@ -205,9 +186,9 @@ const filters = computed(() => [
 ])
 
 function isVisible(it) {
-  if (hidePantry.value && isStocked(it)) return false
+  if (hidePantry.value && isStocked(it) && filter.value !== 'pantry') return false
   if (filter.value === 'tobuy') return !isStocked(it) && !it.purchased
-  if (filter.value === 'pantry') return it.pantryQuantity > 0
+  if (filter.value === 'pantry') return fromPantry(it)
   return true
 }
 
@@ -222,11 +203,19 @@ const sections = computed(() =>
 /* ---------------------------------------------------------------
    Formatting
 ---------------------------------------------------------------- */
-function formatQty(qty, unit) {
-  if (unit === 'piece') return qty === 1 ? '1 piece' : `${qty} pieces`
-  if (unit === 'clove') return qty === 1 ? '1 clove' : `${qty} cloves`
-  return `${qty} ${unit}`
+// Every amount on a line: the main one plus any in units that can't be converted to it.
+// Ginger planned as "1 piece" in one recipe and "1 inch" in another is one line: "1 piece + 1 inch".
+// (Amounts in units that DO convert are merged by the server: 1 tsp + 1 tbsp arrives as 4 tsp.)
+function amountsOf(it) {
+  return [{ quantity: it.quantity, unit: it.unit, pantryQuantity: it.pantryQuantity }, ...(it.alsoNeed || [])]
 }
+const joinAmounts = (list, field) => list.filter((a) => a[field] > 0).map((a) => formatQty(a[field], a.unit)).join(' + ')
+const buyText = (it) => joinAmounts(amountsOf(it), 'quantity')
+const pantryText = (it) => joinAmounts(amountsOf(it), 'pantryQuantity')
+function fromPantry(it) {
+  return amountsOf(it).some((a) => a.pantryQuantity > 0)
+}
+
 function recipeTags(it) {
   const titles = (it.usedIn || []).map((u) => u.title)
   return titles.length > 2 ? [...titles.slice(0, 2), `+${titles.length - 2} more`] : titles
@@ -236,8 +225,8 @@ function recipeTags(it) {
 function rowNote(it) {
   if (it.source === 'manual') return 'Added by you'
   const parts = []
-  if (isStocked(it)) parts.push(`${formatQty(it.pantryQuantity, it.unit)} needed, all in your pantry`)
-  else if (it.pantryQuantity > 0) parts.push(`${formatQty(it.pantryQuantity, it.unit)} from pantry`)
+  if (isStocked(it)) parts.push(`${pantryText(it)} needed, all in your pantry`)
+  else if (fromPantry(it)) parts.push(`${pantryText(it)} from pantry`)
   const recipes = recipeTags(it)
   if (recipes.length) parts.push(`for ${recipes.join(', ')}`)
   return parts.join(' · ')
@@ -359,11 +348,13 @@ async function removeItem(it) {
                 <button type="button" class="sw-iconbtn" aria-label="Next week" @click="shiftWeek(1)">
                   <span class="material-symbols-outlined sw-ico-18">chevron_right</span>
                 </button>
+                <button v-if="!isThisWeek" type="button" class="btn sw-btn sw-btn--sm sw-btn-tonal"
+                  @click="weekStart = thisWeek">This week</button>
               </div>
             </div>
             <h1 class="sw-headline-lg">Shopping List</h1>
             <p class="sw-body-md sw-text-variant d-none d-md-block m-0">
-              Built from this week's meal plan, minus what's already in your pantry. Chilled items come last.
+              Sections follow a walk through the shop: chilled and frozen items come last, so they stay cold on the way home.
             </p>
           </div>
 
@@ -394,18 +385,8 @@ async function removeItem(it) {
               </div>
             </div>
 
+
             <div class="d-flex align-items-center justify-content-lg-end flex-wrap gap-2">
-              <button
-                type="button"
-                class="btn sw-btn sw-btn-primary shadow-sm flex-fill flex-sm-grow-0"
-                :disabled="!items.length"
-                title="Open a checklist for the supermarket"
-                data-testid="start-shopping"
-                @click="openShopping"
-              >
-                <span class="material-symbols-outlined sw-ico-18">shopping_cart</span>
-                <span>Start shopping</span>
-              </button>
               <button
                 v-if="readyForPantry.length"
                 type="button"
@@ -464,23 +445,21 @@ async function removeItem(it) {
       </div>
     </section>
 
-    <!-- Success banner -->
-    <div v-if="notice" class="sw-alert sw-alert--ok" role="status">
-      <span class="material-symbols-outlined sw-ico-20">check_circle</span>
-      <span class="sw-body-sm flex-grow-1">{{ notice }}</span>
-      <button type="button" class="sw-iconbtn" aria-label="Dismiss" @click="notice = ''">
-        <span class="material-symbols-outlined sw-ico-18">close</span>
-      </button>
+    <PageIntro page="shopping" />
+
+    <!-- Messages -->
+    <div v-if="notice || warning || error">
+      <AppAlert v-if="notice" tone="success" title="Pantry updated" icon="kitchen" @dismiss="notice = ''">
+        {{ notice }} <router-link to="/pantry" class="sw-alert-link">See your pantry</router-link>
+      </AppAlert>
+      <AppAlert v-if="warning" tone="warning" title="Some items weren't added" @dismiss="warning = ''">
+        {{ warning }}
+      </AppAlert>
+      <AppAlert v-if="error" tone="error" title="That didn't work" @dismiss="error = ''">
+        {{ error }}
+      </AppAlert>
     </div>
 
-    <!-- Error banner -->
-    <div v-if="error" class="sw-alert" role="alert">
-      <span class="material-symbols-outlined sw-ico-20">error</span>
-      <span class="sw-body-sm flex-grow-1">{{ error }}</span>
-      <button type="button" class="sw-iconbtn" aria-label="Dismiss" @click="error = ''">
-        <span class="material-symbols-outlined sw-ico-18">close</span>
-      </button>
-    </div>
 
     <!-- Loading -->
     <div v-if="loading" class="sw-card sw-empty">
@@ -549,18 +528,21 @@ async function removeItem(it) {
           </p>
 
           <!-- Sections -->
-          <section v-for="section in sections" :key="section.id" class="sw-card sw-aisle">
+          <!-- each section is colour-coded by food type (constants/categoryColors.js, same colours as the Pantry) -->
+          <section v-for="section in sections" :key="section.id" class="sw-card sw-aisle" :style="categoryStyle(section.id)">
             <div class="sw-aisle-head">
               <div class="d-flex align-items-center gap-2">
-                <span class="sw-aisle-icon" :class="`sw-aisle-icon--${section.tone}`">
+                <span class="sw-aisle-icon">
                   <span class="material-symbols-outlined sw-ico-18">{{ section.icon }}</span>
                 </span>
                 <div>
                   <h2 class="sw-headline-sm">{{ section.title }}</h2>
-                  <span v-if="section.chilled" class="sw-label-sm sw-text-secondary">Keep chilled</span>
+                  <span v-if="section.chilled" class="sw-aisle-chilled">
+                    <span class="material-symbols-outlined" aria-hidden="true">ac_unit</span>Keep chilled
+                  </span>
                 </div>
               </div>
-              <span class="sw-pill">{{ section.count }} {{ section.count === 1 ? 'item' : 'items' }}</span>
+              <span class="sw-pill">{{ section.visible.length }} {{ section.visible.length === 1 ? 'item' : 'items' }}</span>
             </div>
 
             <div class="sw-aisle-body">
@@ -589,7 +571,7 @@ async function removeItem(it) {
 
                 <!-- what to put in the basket: the thing a shopper looks for first -->
                 <span class="sw-qty-col" :class="{ 'sw-qty-col--stocked': isStocked(it) }">
-                  {{ isStocked(it) ? 'In pantry' : formatQty(it.quantity, it.unit) }}
+                  {{ isStocked(it) ? 'In pantry' : buyText(it) }}
                 </span>
                 <button
                   v-if="it.source === 'manual'"
@@ -613,6 +595,28 @@ async function removeItem(it) {
       <!-- ---------- Right: pantry (desktop; on phones the "In Pantry" filter shows the same) ---------- -->
       <div class="col-12 col-lg-4 d-none d-lg-block sw-sticky">
         <div class="d-flex flex-column gap-4">
+          <!-- "Start shopping": sticky card at the top of the side column, so it stays in view while scrolling -->
+          <section class="sw-shop-cta sw-shop-cta--c" aria-labelledby="shop-cta-title-c">
+            <span class="sw-shop-cta-icon" aria-hidden="true">
+              <span class="material-symbols-outlined">shopping_cart</span>
+            </span>
+            <div class="sw-shop-cta-text">
+              <h2 id="shop-cta-title-c" class="sw-shop-cta-title">Going to the shops?</h2>
+              <p class="sw-shop-cta-desc">
+                Shopping mode turns this list into a big, phone-friendly checklist. Tap each item as it goes in your
+                basket, change the amount if you bought a different size, then add it all to your pantry at the end.
+              </p>
+            </div>
+            <button type="button" class="sw-shop-cta-btn" :disabled="!items.length" data-testid="start-shopping"
+              @click="openShopping">
+              <span class="material-symbols-outlined" aria-hidden="true">shopping_cart_checkout</span>
+              <span class="d-flex flex-column align-items-start">
+                <span>Start shopping</span>
+                <span class="sw-shop-cta-count">{{ toBuyLeft }} {{ toBuyLeft === 1 ? 'item' : 'items' }} to buy</span>
+              </span>
+            </button>
+          </section>
+
           <!-- Pantry cross-check -->
           <section class="sw-card sw-card--low d-flex flex-column gap-3 p-4">
             <div class="d-flex align-items-center justify-content-between">
@@ -632,12 +636,12 @@ async function removeItem(it) {
                     <div class="sw-saving-text">
                       <span class="sw-label-md text-truncate">{{ it.name }}</span>
                       <span class="sw-label-sm sw-text-outline">
-                        {{ isStocked(it) ? 'Fully covered' : `Still buy ${formatQty(it.quantity, it.unit)}` }}
+                        {{ isStocked(it) ? 'Fully covered' : `Still buy ${buyText(it)}` }}
                       </span>
                     </div>
                   </div>
                   <span class="sw-label-sm sw-text-primary fw-semibold flex-shrink-0">
-                    {{ formatQty(it.pantryQuantity, it.unit) }}
+                    {{ pantryText(it) }}
                   </span>
                 </div>
               </div>
@@ -650,10 +654,24 @@ async function removeItem(it) {
         </div>
       </div>
     </div>
+
+    <!-- "Start shopping" on phones: a bar fixed to the bottom of the screen, like a checkout button -->
+    <div v-if="hasList && !loading" class="sw-shop-bar d-lg-none">
+      <!-- (the spacer below stops the bar covering the last items) -->
+      <div class="sw-shop-bar-text">
+        <strong>{{ toBuyLeft }} {{ toBuyLeft === 1 ? 'item' : 'items' }} to buy</strong>
+        <span>Tap items off as they go in your basket</span>
+      </div>
+      <button type="button" class="sw-shop-cta-btn" :disabled="!items.length" @click="openShopping">
+        <span class="material-symbols-outlined" aria-hidden="true">shopping_cart_checkout</span>
+        Start shopping
+      </button>
+    </div>
+    <div v-if="hasList && !loading" class="sw-shop-bar-spacer d-lg-none" aria-hidden="true"></div>
   </main>
 
   <!-- Shopping mode (teleported to <body>, so its position here doesn't matter) -->
-  <shoppingModeModal
+  <ShoppingModeModal
     v-if="showShopping"
     :items="items"
     :sections="CATEGORY_META"
@@ -928,16 +946,87 @@ async function removeItem(it) {
 .form-check-input.sw-check--sm { width: 1rem; height: 1rem; border-radius: 0.25rem; }
 
 /* ---------- Alerts & empty states ---------- */
-.sw-alert {
+/* ===== "Start shopping" call-to-action ===== */
+/* tomato = the Shopping List's page colour (same as its page intro); set on both the card and the phone bar */
+.sw-shop-cta,
+.sw-shop-bar { --cta: #b23a2a; --cta-hover: #962d1f; --cta-soft: #f2c9bf; --cta-wash: #fbe4de; --cta-shadow: rgba(178, 58, 42, 0.25); }
+
+.sw-shop-cta {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
-  border-radius: var(--sw-radius);
-  background: var(--sw-error-container);
-  color: var(--sw-error);
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: #fff;
+  border: 2px solid var(--cta-soft);
+  box-shadow: 0 2px 10px var(--cta-shadow);
 }
-.sw-alert--ok { background: var(--sw-primary-fixed); color: var(--sw-on-primary-fixed); }
+.sw-shop-cta-icon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--cta-wash);
+  color: var(--cta);
+}
+.sw-shop-cta-icon .material-symbols-outlined { font-size: 28px; }
+.sw-shop-cta-text { flex: 1; min-width: 0; }
+.sw-shop-cta-title { margin: 0; font: 600 19px/26px 'Outfit', sans-serif; color: #1a1c18; }
+.sw-shop-cta-desc { margin: 2px 0 0; max-width: 60ch; font: 400 13.5px/20px 'Inter', sans-serif; color: #424842; }
+
+.sw-shop-cta-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 22px 8px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--cta);
+  color: #fff;
+  font: 600 16px/20px 'Inter', sans-serif;
+  box-shadow: 0 4px 12px var(--cta-shadow);
+  transition: background-color 0.15s, transform 0.1s;
+}
+.sw-shop-cta-btn .material-symbols-outlined { font-size: 26px; }
+.sw-shop-cta-btn:hover:not(:disabled) { background: var(--cta-hover); }
+.sw-shop-cta-btn:active:not(:disabled) { transform: translateY(1px); }
+.sw-shop-cta-btn:focus-visible { outline: 3px solid var(--cta-soft); outline-offset: 2px; }
+
+.sw-shop-cta-btn:disabled { opacity: 0.5; }
+.sw-shop-cta-count { font: 500 12px/16px 'Inter', sans-serif; opacity: 0.85; }
+
+/* C: side column, stacked */
+.sw-shop-cta--c { flex-direction: column; align-items: stretch; text-align: left; }
+.sw-shop-cta--c .sw-shop-cta-icon { display: none; }
+.sw-shop-cta--c .sw-shop-cta-btn { width: 100%; }
+
+/* C on phones: bar fixed to the bottom of the screen */
+.sw-shop-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1020;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 16px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(26, 28, 24, 0.22);
+}
+.sw-shop-bar-spacer { height: 88px; }
+.sw-shop-bar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font: 400 12px/16px 'Inter', sans-serif; color: #424842; }
+.sw-shop-bar-text strong { font: 600 15px/20px 'Outfit', sans-serif; color: #1a1c18; }
+.sw-shop-bar .sw-shop-cta-btn { min-height: 48px; padding: 8px 16px; font-size: 15px; }
+
+.sw-alert-link { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .sw-empty {
   display: flex;
   flex-direction: column;
@@ -981,20 +1070,20 @@ async function removeItem(it) {
 .form-control.sw-select:focus { box-shadow: 0 0 0 2px var(--sw-primary); }
 
 /* ---------- Sections ---------- */
-.sw-aisle { overflow: hidden; }
-.sw-aisle-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--sw-surface-low); }
-.sw-aisle-head .sw-pill { white-space: nowrap; flex-shrink: 0; }
-.sw-aisle-icon { width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: var(--sw-radius); }
-.sw-aisle-icon--green   { background: var(--sw-primary-fixed);   color: var(--sw-on-primary-fixed); }
-.sw-aisle-icon--peach   { background: var(--sw-secondary-fixed); color: var(--sw-on-secondary-fixed); }
-.sw-aisle-icon--amber   { background: var(--sw-tertiary-fixed);  color: var(--sw-on-tertiary-fixed); }
-.sw-aisle-icon--blue    { background: #d6e3ff;                   color: #001b3e; }
-.sw-aisle-icon--neutral { background: var(--sw-surface-highest); color: var(--sw-on-surface-variant); }
+.sw-aisle { overflow: hidden; border-left: 5px solid var(--cat-ink); }
+.sw-aisle-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--cat-wash); }
+.sw-aisle-head .sw-headline-sm { color: var(--cat-ink); }
+.sw-aisle-head .sw-pill { white-space: nowrap; flex-shrink: 0; background: #fff; color: var(--cat-ink); }
+.sw-aisle-icon { width: 2.25rem; height: 2.25rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 10px; background: var(--cat-ink); color: #fff; }
+.sw-aisle-chilled { display: inline-flex; align-items: center; gap: 3px; font: 600 11px/14px 'Inter', sans-serif; color: #1f7690; }
+.sw-aisle-chilled .material-symbols-outlined { font-size: 13px; }
+/* ticked boxes take the section's colour */
+.sw-aisle .sw-check:checked { background-color: var(--cat-ink); border-color: var(--cat-ink); }
 .sw-aisle-body { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem; }
 
 /* ---------- Filter chips: one row, scrolls sideways on narrow phones ---------- */
-.sw-filter-chips { display: flex; align-items: center; gap: 0.5rem; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
-.sw-filter-chips::-webkit-scrollbar { display: none; }
+/* wrap instead of a hidden horizontal scroll, so "In Pantry" is never cut off on phones */
+.sw-filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; max-width: 100%; }
 .sw-filter-chips .sw-btn { flex-shrink: 0; white-space: nowrap; }
 
 /* pantry sidebar follows you down the list on desktop */

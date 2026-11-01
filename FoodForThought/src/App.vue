@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import logo from '@/assets/foodforthought-logo-horizontal.svg'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -90,6 +91,9 @@ function handleLogout() {
 
   <RouterView />
 
+  <!-- themed "Are you sure?" popup, opened from any page with useConfirm() -->
+  <ConfirmDialog />
+
   <footer v-if="showMainNav" class="app-footer">
     <div
       class="container-fluid px-3 px-md-4 py-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 text-center text-md-start">
@@ -111,8 +115,6 @@ function handleLogout() {
 </template>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 /* Undo the Vue starter layout (main.css turns #app into a 2-column grid at >=1024px) */
 body {

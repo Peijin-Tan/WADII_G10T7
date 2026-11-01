@@ -1,7 +1,5 @@
 // Weekly shopping list API
-// Mount in server.js / app.js, next to the planner:
-//   app.use('/shoppinglist', require('./routes/shoppingList/ShoppingList'))
-// (the frontend calls http://localhost:8000/shoppinglist, the same way it calls /planner)
+// Mounted in server/index.js as app.use('/shoppinglist', shoppinglistRouter)
 //
 //   GET    /shoppinglist?start=YYYY-MM-DD       -> the logged-in user's list for that week
 //   POST   /shoppinglist/generate  { start }    -> build / refresh it from that week's meal plan
@@ -12,7 +10,7 @@
 //   DELETE /shoppinglist/items/:itemId          -> remove a manual item
 //   POST   /shoppinglist/add-to-pantry  { start }    -> move ticked items into the pantry
 //
-// Same structure, auth and error handling as routes/planner/Planner.js.
+// Same structure, auth and error handling as router/Planner.js.
 
 const express = require('express')
 const ShoppingList = require('../../models/ShoppingList')
@@ -39,30 +37,12 @@ const router = express.Router()
 /* Helpers (same as Planner.js)                                        */
 /* ------------------------------------------------------------------ */
 
-// Throw this inside a route to send a 4xx with a message
-function httpError(status, message) {
-  const err = new Error(message)
-  err.status = status
-  return err
-}
-
-// Wraps an async route so every error ends up in one place (Express 4 doesn't catch async errors)
-const handle = (fn) => async (req, res) => {
-  try {
-    await fn(req, res)
-  } catch (err) {
-    if (err.status) return res.status(err.status).json({ message: err.message })
-    if (err.name === 'ValidationError' || err.name === 'CastError') {
-      return res.status(400).json({ message: err.message })
-    }
-    if (err.code === 11000) {
-      // two requests created the same week's list at once; the unique index rejected one
-      return res.status(409).json({ message: 'Your list was just updated, please try again' })
-    }
-    console.error(err)
-    res.status(500).json({ message: 'Something went wrong with the shopping list' })
-  }
-}
+// Shared error helpers (utils/http.js). 11000 = two requests created the same week's list at once.
+const { httpError, makeHandler } = require('../utils/http')
+const handle = makeHandler({
+  fallback: 'Something went wrong with the shopping list',
+  duplicate: 'Your list was just updated, please try again',
+})
 
 // Every shopping-list route needs a logged-in user.
 // requireAuth (Kester's JWT middleware) puts the user from the database on req.user.

@@ -7,7 +7,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
-      exclude: [...configDefaults.exclude, 'e2e/**'],
+      // server/tests use Node's own test runner (cd server && npm test), not Vitest
+      exclude: [...configDefaults.exclude, 'e2e/**', 'server/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),
     },
   }),
