@@ -435,6 +435,28 @@ router.get('/search', async (req, res) => {
   }
 })
 
+// GET /recipes/mine
+// Retrieve recipes created by the logged-in user.
+router.get('/mine', requireAuth, async (req, res) => {
+  try {
+    const recipes = await Recipe.find({
+      createdBy: req.user._id,
+      source: 'user'
+    }).sort({ createdAt: -1 })
+
+    return res.status(200).json({
+      count: recipes.length,
+      data: recipes
+    })
+  } catch (error) {
+    console.error('Retrieve my recipes error:', error)
+
+    return res.status(500).json({
+      message: 'Failed to retrieve your recipes'
+    })
+  }
+})
+
 // GET /recipes/:id
 // Get one recipe by its MongoDB document ID
 router.get('/:id', async (req, res) => {
@@ -533,4 +555,112 @@ router.post(
     }
   }
 )
+
+// PUT /recipes/:id
+// Update a recipe created by the logged-in user.
+router.put('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        message: 'Invalid recipe ID'
+      })
+    }
+
+    const recipe = await Recipe.findOne({
+      _id: id,
+      createdBy: req.user._id,
+      source: 'user'
+    })
+
+    if (!recipe) {
+      return res.status(404).json({
+        message: 'Recipe not found or you do not have permission to edit it'
+      })
+    }
+
+    const allowedFields = [
+      'title',
+      'image',
+      'summary',
+      'cuisine',
+      'dietaryCategories',
+      'servings',
+      'prepTime',
+      'cookingTime',
+      'totalTime',
+      'ingredients',
+      'instructions',
+      'nutrition',
+      'allergens',
+      'sourceUrl'
+    ]
+
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        recipe[field] = req.body[field]
+      }
+    })
+
+    await recipe.save()
+
+    return res.status(200).json({
+      message: 'Recipe updated successfully',
+      data: recipe
+    })
+
+  } catch (error) {
+    console.error('Update recipe error:', error)
+
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        message: 'Recipe validation failed',
+        error: error.message
+      })
+    }
+
+    return res.status(500).json({
+      message: 'Failed to update recipe'
+    })
+  }
+})
+
+// DELETE /recipes/:id
+// Delete a recipe created by the logged-in user.
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        message: 'Invalid recipe ID'
+      })
+    }
+
+    const recipe = await Recipe.findOneAndDelete({
+      _id: id,
+      createdBy: req.user._id,
+      source: 'user'
+    })
+
+    if (!recipe) {
+      return res.status(404).json({
+        message: 'Recipe not found or you do not have permission to delete it'
+      })
+    }
+
+    return res.status(200).json({
+      message: 'Recipe deleted successfully'
+    })
+
+  } catch (error) {
+    console.error('Delete recipe error:', error)
+
+    return res.status(500).json({
+      message: 'Failed to delete recipe'
+    })
+  }
+})
+
 module.exports = router
