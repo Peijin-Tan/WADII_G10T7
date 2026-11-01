@@ -22,6 +22,53 @@ const ingredients = ref([
 
 const instructions = ref([''])
 
+// Dietary categories
+const dietaryOptions = [
+  'Vegetarian',
+  'Vegan',
+  'Gluten-Free',
+  'Dairy-Free',
+  'Pescatarian',
+  'Keto'
+]
+
+const dietaryCategories = ref([])
+
+// Allergens
+const allergenOptions = [
+  'Peanuts',
+  'Tree Nuts',
+  'Milk',
+  'Eggs',
+  'Soy',
+  'Wheat',
+  'Fish',
+  'Shellfish',
+  'Sesame'
+]
+
+const allergens = ref([])
+
+// Nutrition information
+const nutritionOptions = [
+  { name: 'Calories', unit: 'kcal' },
+  { name: 'Protein', unit: 'g' },
+  { name: 'Carbohydrates', unit: 'g' },
+  { name: 'Fat', unit: 'g' },
+  { name: 'Saturated Fat', unit: 'g' },
+  { name: 'Fiber', unit: 'g' },
+  { name: 'Sugar', unit: 'g' },
+  { name: 'Sodium', unit: 'mg' }
+]
+
+const nutrition = ref(
+  nutritionOptions.map(item => ({
+    name: item.name,
+    amount: '',
+    unit: item.unit
+  }))
+)
+
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
@@ -46,6 +93,7 @@ function removeInstruction(index) {
   instructions.value.splice(index, 1)
 }
 
+// Create recipe
 async function createRecipe() {
   loading.value = true
   error.value = ''
@@ -57,19 +105,24 @@ async function createRecipe() {
       image: image.value.trim(),
       summary: summary.value.trim(),
       cuisine: [cuisine.value.trim()],
-      dietaryCategories: [],
+
+      // Dietary categories
+      dietaryCategories: dietaryCategories.value,
+
       servings: Number(servings.value),
       prepTime: Number(prepTime.value),
       cookingTime: Number(cookingTime.value),
       totalTime:
         Number(prepTime.value) + Number(cookingTime.value),
 
+      // Ingredients
       ingredients: ingredients.value.map(item => ({
         name: item.name.trim(),
         amount: Number(item.amount),
         unit: item.unit.trim()
       })),
 
+      // Instructions
       instructions: instructions.value.map(
         (description, index) => ({
           step: index + 1,
@@ -77,25 +130,38 @@ async function createRecipe() {
         })
       ),
 
-      nutrition: [],
-      allergens: [],
+      // Nutrition information
+      nutrition: nutrition.value
+        .filter(item => item.amount !== '' && item.amount !== null)
+        .map(item => ({
+          name: item.name,
+          amount: Number(item.amount),
+          unit: item.unit
+        })),
+
+      // Allergens
+      allergens: allergens.value,
+
       source: 'user',
       sourceUrl: ''
     }
 
     await axios.post('/api/recipes', recipeData, {
-  headers: {
-    Authorization: `Bearer ${auth.token}`
-  }
-})
+      headers: {
+        Authorization: `Bearer ${auth.token}`
+      }
+    })
 
     success.value = 'Recipe created successfully!'
     await router.push('/recipes')
+
   } catch (err) {
     console.error(err)
+
     error.value =
       err.response?.data?.message ||
       'Failed to create recipe. Please try again.'
+
   } finally {
     loading.value = false
   }
@@ -251,6 +317,114 @@ async function createRecipe() {
       >
         + Add Ingredient
       </button>
+
+            
+      <hr class="mt-4" />
+
+      <h4>Dietary Categories</h4>
+
+      <p class="text-muted">
+        Select all dietary categories that apply to your recipe.
+      </p>
+
+      <div class="row mb-4">
+        <div
+          v-for="option in dietaryOptions"
+          :key="option"
+          class="col-md-4 col-6 mb-2"
+        >
+          <div class="form-check">
+            <input
+              :id="'diet-' + option"
+              v-model="dietaryCategories"
+              class="form-check-input"
+              type="checkbox"
+              :value="option"
+            />
+
+            <label
+              class="form-check-label"
+              :for="'diet-' + option"
+            >
+              {{ option }}
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <h4>Allergens</h4>
+
+      <p class="text-muted">
+        Select all allergens present in your recipe.
+      </p>
+
+      <div class="row mb-4">
+        <div
+          v-for="option in allergenOptions"
+          :key="option"
+          class="col-md-4 col-6 mb-2"
+        >
+          <div class="form-check">
+            <input
+              :id="'allergen-' + option"
+              v-model="allergens"
+              class="form-check-input"
+              type="checkbox"
+              :value="option"
+            />
+
+            <label
+              class="form-check-label"
+              :for="'allergen-' + option"
+            >
+              {{ option }}
+            </label>
+          </div>
+        </div>
+      </div>
+
+
+      <hr />
+
+      <h4>Nutrition Information</h4>
+
+      <p class="text-muted">
+        Enter the nutritional values per serving.
+        Leave fields blank if the information is unavailable.
+      </p>
+
+      <div class="row mb-4">
+        <div
+          v-for="(item, index) in nutrition"
+          :key="item.name"
+          class="col-md-6 mb-3"
+        >
+          <label
+            :for="'nutrition-' + index"
+            class="form-label"
+          >
+            {{ item.name }}
+          </label>
+
+          <div class="input-group">
+            <input
+              :id="'nutrition-' + index"
+              v-model="item.amount"
+              type="number"
+              min="0"
+              step="any"
+              class="form-control"
+              :placeholder="'Enter ' + item.name.toLowerCase()"
+            />
+
+            <span class="input-group-text">
+              {{ item.unit }}
+            </span>
+          </div>
+        </div>
+      </div>
 
       <hr class="mt-4" />
 

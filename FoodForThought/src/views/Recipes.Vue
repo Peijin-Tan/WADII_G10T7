@@ -21,7 +21,15 @@ async function fetchRecipes() {
   searchMode.value = false
 
   try {
-    const response = await axios.get('/api/recipes')
+    const config = auth.token
+      ? {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      : {}
+
+    const response = await axios.get('/api/recipes', config)
     recipes.value = response.data.data
   } catch (err) {
     console.error(err)
@@ -43,7 +51,14 @@ async function searchRecipes() {
 
   try {
     const [savedResponse, spoonacularResponse] = await Promise.all([
-      axios.get('/api/recipes'),
+      axios.get('/api/recipes', auth.token
+        ? {
+            headers: {
+              Authorization: `Bearer ${auth.token}`
+            }
+          }
+        : {}
+      ),
       axios.get('/api/recipes/search', {
         params: { query: search.value.trim() }
       })

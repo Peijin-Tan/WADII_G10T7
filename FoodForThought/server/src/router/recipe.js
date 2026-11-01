@@ -3,9 +3,20 @@ const express = require('express')
 const mongoose = require('mongoose')
 const Recipe = require('../../models/Recipe')
 const Like = require('../../models/Like')
+const UserPreference = require('../../models/UserPreference')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
+
+// Allow both logged-in and guest users to browse recipes.
+// If a token is provided, verify it before continuing.
+function optionalAuth(req, res, next) {
+  if (!req.get('Authorization')) {
+    return next()
+  }
+
+  return requireAuth(req, res, next)
+}
 
 async function findRecipeKey(value) {
   if (value.startsWith('recipe-')) {
@@ -149,9 +160,75 @@ router.delete('/:recipeKey/like', requireAuth, async (req, res) => {
   }
 })
 
+function normaliseValue(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[\s_-]/g, '')
+}
+
+const dietaryAliases = {
+  vegetarian: ['vegetarian'],
+  vegan: ['vegan'],
+  glutenfree: ['glutenfree'],
+  dairyfree: ['dairyfree'],
+  pescatarian: ['pescetarian', 'pescatarian'],
+  keto: ['ketogenic', 'keto']
+}
+
+function filterRecipesByPreferences(recipes, preferences) {
+  const selectedDiets = preferences?.dietaryPreferences || []
+  const selectedAllergens = preferences?.allergens || []
+
+  return recipes.filter(recipe => {
+
+    // 1. Dietary preference filtering
+    // Show recipes matching AT LEAST ONE selected dietary category.
+    if (selectedDiets.length > 0) {
+      const recipeDiets = (recipe.dietaryCategories || [])
+        .map(normaliseValue)
+
+      const matchesDiet = selectedDiets.some(preference => {
+        const normalisedPreference = normaliseValue(preference)
+
+        const aliases = dietaryAliases[normalisedPreference] || [
+          normalisedPreference
+        ]
+
+        return aliases.some(alias =>
+          recipeDiets.includes(normaliseValue(alias))
+        )
+      })
+
+      if (!matchesDiet) {
+        return false
+      }
+    }
+
+    // 2. Allergen filtering
+    // Exclude recipes containing ANY selected allergen.
+    if (selectedAllergens.length > 0) {
+      const recipeAllergens = (recipe.allergens || [])
+        .map(normaliseValue)
+
+      const containsAllergen = selectedAllergens.some(allergen =>
+        recipeAllergens.includes(normaliseValue(allergen))
+      )
+
+      if (containsAllergen) {
+        return false
+      }
+    }
+
+    // 3. If no restrictions, show the recipe.
+    return true
+  })
+}
+
+
 // GET /recipes
-// Get recipes with optional search and filters
-router.get('/', async (req, res) => {
+// Get recipes with optional search and filters.
+// Logged-in users also receive personalised recipe results.
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const {
       search,
@@ -197,20 +274,38 @@ router.get('/', async (req, res) => {
       filter.totalTime = { $lte: time }
     }
 
-    const recipes = await Recipe.find(filter)
+    let recipes = await Recipe.find(filter)
       .populate('createdBy', 'name')
 
-    res.status(200).json({
+    // Apply personalised filtering for logged-in users.
+    if (req.user) {
+      const preferences = await UserPreference.findOne({
+        userId: req.user._id
+      })
+
+      if (preferences) {
+        recipes = filterRecipesByPreferences(
+          recipes,
+          preferences
+        )
+      }
+    }
+
+    return res.status(200).json({
       count: recipes.length,
       data: recipes
     })
+
   } catch (error) {
-    res.status(500).json({
+    console.error('Retrieve recipes error:', error)
+
+    return res.status(500).json({
       message: 'Failed to retrieve recipes',
       error: error.message
     })
   }
 })
+
 
  // GET /recipes/search?query=chicken
  // Search recipes using Spoonacular
