@@ -109,6 +109,7 @@ onMounted(loadPreferences)
 </script>
 
 <template>
+    <div class="fft-page">
   <div class="container py-5">
     <div class="mb-4">
       <RouterLink to="/profile" class="back-link">
@@ -207,6 +208,7 @@ onMounted(loadPreferences)
       </form>
     </template>
   </div>
+</div>
 </template>
 
 <style scoped>
