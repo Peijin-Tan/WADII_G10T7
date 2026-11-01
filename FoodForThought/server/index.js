@@ -34,6 +34,11 @@ app.use(cors({
   origin: 'http://localhost:5173'
 }))
 
+// Serve uploaded recipe images from the frontend public/img folder
+app.use('/img', express.static(
+  path.join(__dirname, '../public/img')
+))
+
 // Basic security middlewares
 app.use(helmet())
 

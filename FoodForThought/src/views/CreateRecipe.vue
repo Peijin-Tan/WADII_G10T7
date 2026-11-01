@@ -10,6 +10,8 @@ const router = useRouter()
 
 const title = ref('')
 const image = ref('')
+const imagePreview = ref('')
+const imageUploading = ref(false)
 const summary = ref('')
 const cuisine = ref('Chinese')
 const servings = ref(2)
@@ -91,6 +93,67 @@ function addInstruction() {
 
 function removeInstruction(index) {
   instructions.value.splice(index, 1)
+}
+
+// Upload recipe image
+async function uploadImage(event) {
+  const file = event.target.files[0]
+
+  if (!file) return
+
+  const allowedTypes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp'
+  ]
+
+  if (!allowedTypes.includes(file.type)) {
+    error.value = 'Please upload a JPG, PNG or WebP image.'
+    event.target.value = ''
+    return
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    error.value = 'Image size must not exceed 5MB.'
+    event.target.value = ''
+    return
+  }
+
+  error.value = ''
+  imageUploading.value = true
+
+  // Show image preview
+  imagePreview.value = URL.createObjectURL(file)
+
+  const formData = new FormData()
+  formData.append('image', file)
+
+  try {
+    const response = await axios.post(
+      '/api/recipes/upload-image',
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${auth.token}`
+        }
+      }
+    )
+
+    image.value = response.data.imageUrl
+
+  } catch (err) {
+    console.error(err)
+
+    image.value = ''
+    imagePreview.value = ''
+
+    error.value =
+      err.response?.data?.message ||
+      'Failed to upload image. Please try again.'
+
+  } finally {
+    imageUploading.value = false
+  }
 }
 
 // Create recipe
@@ -189,14 +252,42 @@ async function createRecipe() {
       </div>
 
       <div class="mb-3">
-        <label class="form-label">Image URL</label>
+        <label class="form-label">Recipe Photo</label>
+
         <input
-          v-model="image"
-          type="url"
+          type="file"
           class="form-control"
-          required
-          placeholder="https://example.com/recipe.jpg"
+          accept="image/jpeg,image/png,image/webp"
+          @change="uploadImage"
+          :disabled="imageUploading"
         />
+
+        <small class="text-muted">
+          Upload a JPG, PNG or WebP image. Maximum size: 5MB.
+        </small>
+
+        <!-- Image preview -->
+        <div v-if="imagePreview" class="mt-3">
+          <img
+            :src="imagePreview"
+            alt="Recipe preview"
+            style="
+              width: 100%;
+              max-width: 300px;
+              height: 200px;
+              object-fit: cover;
+              border-radius: 12px;
+            "
+          />
+        </div>
+
+        <div v-if="imageUploading" class="mt-2 text-muted">
+          Uploading image...
+        </div>
+
+        <div v-if="image && !imageUploading" class="mt-2 text-success">
+          Image uploaded successfully!
+        </div>
       </div>
 
       <div class="mb-3">
@@ -479,7 +570,7 @@ async function createRecipe() {
         <button
           type="submit"
           class="btn btn-success"
-          :disabled="loading"
+          :disabled="loading || imageUploading || !image"
         >
           {{ loading ? 'Saving...' : 'Create Recipe' }}
         </button>
