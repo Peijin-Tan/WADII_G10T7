@@ -21,7 +21,15 @@ async function fetchRecipes() {
   searchMode.value = false
 
   try {
-    const response = await axios.get('/api/recipes')
+    const config = auth.token
+      ? {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      : {}
+
+    const response = await axios.get('/api/recipes', config)
     recipes.value = response.data.data
   } catch (err) {
     console.error(err)
@@ -43,7 +51,14 @@ async function searchRecipes() {
 
   try {
     const [savedResponse, spoonacularResponse] = await Promise.all([
-      axios.get('/api/recipes'),
+      axios.get('/api/recipes', auth.token
+        ? {
+            headers: {
+              Authorization: `Bearer ${auth.token}`
+            }
+          }
+        : {}
+      ),
       axios.get('/api/recipes/search', {
         params: { query: search.value.trim() }
       })
@@ -185,149 +200,147 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="container mt-5 mb-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h1>Recipes</h1>
-        <p class="text-muted">
-          Discover recipes or browse your saved recipes.
-        </p>
+  <div class="fft-page">
+    <div class="container mt-5 mb-5">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h1>Recipes</h1>
+          <p class="text-muted">
+            Discover recipes or browse your saved recipes.
+          </p>
+        </div>
+
+        <router-link
+          to="/recipes/create"
+          class="btn btn-success"
+        >
+          + Create Recipe
+        </router-link>
       </div>
 
-      <router-link
-        to="/recipes/create"
-        class="btn btn-success"
-      >
-        + Create Recipe
-      </router-link>
-    </div>
+      <form class="d-flex gap-2 mb-4" @submit.prevent="searchRecipes">
+        <input
+          v-model="search"
+          class="form-control"
+          placeholder="Search recipes, e.g. chicken..."
+        />
 
-    <form class="d-flex gap-2 mb-4" @submit.prevent="searchRecipes">
-      <input
-        v-model="search"
-        class="form-control"
-        placeholder="Search recipes, e.g. chicken..."
-      />
+        <button
+          type="submit"
+          class="btn btn-primary"
+          :disabled="loading"
+        >
+          Search
+        </button>
 
-      <button
-        type="submit"
-        class="btn btn-primary"
-        :disabled="loading"
-      >
-        Search
-      </button>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          @click="search = ''; fetchRecipes()"
+        >
+          Clear
+        </button>
+      </form>
 
-      <button
-        type="button"
-        class="btn btn-outline-secondary"
-        @click="search = ''; fetchRecipes()"
-      >
-        Clear
-      </button>
-    </form>
+      <div v-if="likeMessage" class="alert alert-info" role="alert">
+        {{ likeMessage }}
+      </div>
 
-    <div v-if="likeMessage" class="alert alert-info" role="alert">
-      {{ likeMessage }}
-    </div>
+      <div v-if="loading" class="text-center my-4">
+        Loading recipes...
+      </div>
 
-    <div v-if="loading" class="text-center my-4">
-      Loading recipes...
-    </div>
+      <div v-else-if="error" class="alert alert-danger">
+        {{ error }}
+      </div>
 
-    <div v-else-if="error" class="alert alert-danger">
-      {{ error }}
-    </div>
+      <div v-else-if="recipes.length === 0" class="alert alert-info">
+        No recipes found.
+      </div>
 
-    <div v-else-if="recipes.length === 0" class="alert alert-info">
-      No recipes found.
-    </div>
+      <div v-else class="row">
+        <div
+          v-for="recipe in recipes"
+          :key="recipe._id || recipe.externalId"
+          class="col-md-4 mb-4"
+        >
+          <div class="card h-100">
+            <img
+              :src="recipe.image"
+              :alt="recipe.title"
+              class="card-img-top"
+              style="height: 200px; object-fit: cover"
+            />
 
-    <div v-else class="row">
-      <div
-        v-for="recipe in recipes"
-        :key="recipe._id || recipe.externalId"
-        class="col-md-4 mb-4"
-      >
-        <div class="card h-100">
-          <img
-            :src="recipe.image"
-            :alt="recipe.title"
-            class="card-img-top"
-            style="height: 200px; object-fit: cover"
-          />
+            <div class="card-body d-flex flex-column">
+              <h5 class="card-title">{{ recipe.title }}</h5>
 
-          <div class="card-body d-flex flex-column">
-            <h5 class="card-title">{{ recipe.title }}</h5>
+              <p class="text-muted">
+                {{ recipe.totalTime || 'N/A' }} minutes
+              </p>
 
-            <p class="text-muted">
-              {{ recipe.totalTime || 'N/A' }} minutes
-            </p>
+              <p>
+                <span
+                  class="badge"
+                  :class="recipe.source === 'spoonacular'
+                    ? 'text-bg-primary'
+                    : 'text-bg-success'"
+                >
+                  {{ recipe.source === 'spoonacular'
+                    ? 'Spoonacular'
+                    : 'Community recipe' }}
+                </span>
+              </p>
 
-            <p v-if="recipe.createdBy">
-            Created by: {{ recipe.createdBy.name }}
-            </p>
+              <p v-if="recipe.cuisine?.length">
+                Cuisine: {{ recipe.cuisine.join(', ') }}
+              </p>
 
-            <p>
-              <span
-                class="badge"
-                :class="recipe.source === 'spoonacular'
-                  ? 'text-bg-primary'
-                  : 'text-bg-success'"
+              <p v-if="recipe.source !== 'spoonacular'" class="text-muted">
+                <i class="bi bi-person-circle me-1"></i>
+                Created by: {{ recipe.createdBy?.name || 'Unknown' }}
+              </p>
+
+              <p v-else class="text-muted">
+                Source: Spoonacular
+              </p>
+
+              <a
+                v-if="recipe.source === 'spoonacular' && recipe.sourceUrl"
+                :href="recipe.sourceUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn btn-outline-primary mt-auto"
               >
-                {{ recipe.source === 'spoonacular'
-                  ? 'Spoonacular'
-                  : 'Community recipe' }}
-              </span>
-            </p>
+                View Original Recipe
+              </a>
 
-            <p v-if="recipe.cuisine?.length">
-              Cuisine: {{ recipe.cuisine.join(', ') }}
-            </p>
-
-            <p v-if="recipe.source !== 'spoonacular'" class="text-muted">
-              <i class="bi bi-person-circle me-1"></i>
-              Created by: {{ recipe.createdBy?.name || 'Unknown' }}
-            </p>
-
-            <p v-else class="text-muted">
-              Source: Spoonacular
-            </p>
-
-            <a
-              v-if="recipe.source === 'spoonacular' && recipe.sourceUrl"
-              :href="recipe.sourceUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="btn btn-outline-primary mt-auto"
-            >
-              View Original Recipe
-            </a>
-
-            <div
-              v-if="recipe.source !== 'spoonacular'"
-              class="d-flex gap-2 mt-3"
-            >
-              <RouterLink
-                :to="getRecipeLink(recipe)"
-                class="btn btn-outline-success"
+              <div
+                v-if="recipe.source !== 'spoonacular'"
+                class="d-flex gap-2 mt-3"
               >
-                View Recipe
-              </RouterLink>
+                <RouterLink
+                  :to="getRecipeLink(recipe)"
+                  class="btn btn-outline-success"
+                >
+                  View Recipe
+                </RouterLink>
 
-              <button
-                type="button"
-                class="btn"
-                :class="isLiked(recipe)
-                  ? 'btn-success'
-                  : 'btn-outline-success'"
-                :disabled="
-                  loadingLikes ||
-                  likingRecipeIds.includes(getRecipeKey(recipe))
-                "
-                @click="toggleLike(recipe)"
-              >
-                {{ isLiked(recipe) ? 'Unlike' : 'Like' }}
-              </button>
+                <button
+                  type="button"
+                  class="btn"
+                  :class="isLiked(recipe)
+                    ? 'btn-success'
+                    : 'btn-outline-success'"
+                  :disabled="
+                    loadingLikes ||
+                    likingRecipeIds.includes(getRecipeKey(recipe))
+                  "
+                  @click="toggleLike(recipe)"
+                >
+                  {{ isLiked(recipe) ? 'Unlike' : 'Like' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>

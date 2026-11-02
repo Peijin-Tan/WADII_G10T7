@@ -45,6 +45,11 @@ const router = createRouter({
       component: Recipes
     },
     {
+      path: '/recipes/:id/edit',
+      name: 'edit-recipe',
+      component: () => import('../views/EditRecipe.vue')
+    },
+    {
       path: '/recipes/:id',
       name: 'recipe-detail',
       component: RecipeDetail
@@ -107,20 +112,18 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to) => {
   const auth = useAuthStore()
 
   if (to.meta.requiresAdmin) {
     if (!auth.user) {
-      return next('/login')
+      return '/login'
     }
 
     if (auth.user.role !== 'admin') {
-      return next('/home')
+      return '/home'
     }
   }
-
-  next()
 })
 
 export default router

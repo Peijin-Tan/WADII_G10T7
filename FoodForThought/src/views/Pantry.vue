@@ -21,7 +21,7 @@ function withAuth(instance) {
   instance.interceptors.response.use(
     (res) => res,
     (err) => {
-      if (err.response?.status === 401) {
+      if (err.response?.status === 401 && auth.token) {
         auth.logout()
         router.push('/login')
       }
@@ -103,7 +103,128 @@ async function loadPantry() {
     loading.value = false
   }
 }
-onMounted(loadPantry)
+const neighbours = ref([])
+const availableUsers = ref([])
+const selectedNeighbourId = ref('')
+const selectedNeighbour = ref(null)
+const neighbourPantry = ref([])
+const selectedBorrowItems = ref([])
+const neighbourNotice = ref('')
+const neighbourLoading = ref(false)
+const neighbourDebug = ref('')
+const pendingRequests = ref([])
+
+async function loadRequests() {
+  try {
+    const { data } = await api.get('/requests')
+    pendingRequests.value = (data.requests || []).filter((request) => (request.status || 'pending') === 'pending')
+  } catch (err) {
+    pendingRequests.value = []
+  }
+}
+
+async function updateRequestStatus(requestId, status) {
+  try {
+    const { data } = await api.patch(`/requests/${requestId}`, { status })
+    neighbourNotice.value = data.message
+    await loadRequests()
+  } catch (err) {
+    neighbourNotice.value = err.response?.data?.message || 'Could not update this request.'
+  }
+}
+
+async function loadNeighbours() {
+  neighbourDebug.value = ''
+  try {
+    const { data } = await api.get('/neighbours')
+    neighbours.value = data.friends || []
+    availableUsers.value = data.availableUsers || []
+    neighbourDebug.value = `Loaded neighbours: ${neighbours.value.length} friends, ${availableUsers.value.length} available users.`
+  } catch (err) {
+    neighbours.value = []
+    availableUsers.value = []
+    const message = err.response?.data?.message || 'Could not load your neighbour list.'
+    neighbourDebug.value = `Neighbour request failed: ${message}`
+    errorMsg.value = message
+  }
+}
+
+async function addNeighbour() {
+  if (!selectedNeighbourId.value) return
+
+  try {
+    const { data } = await api.post(`/friends/${selectedNeighbourId.value}`)
+    neighbourNotice.value = data.message
+    selectedNeighbourId.value = ''
+    await loadNeighbours()
+  } catch (err) {
+    neighbourNotice.value = err.response?.data?.message || 'Could not add this neighbour.'
+  }
+}
+
+async function viewNeighbour(friendId) {
+  selectedNeighbourId.value = friendId
+  selectedBorrowItems.value = []
+  neighbourLoading.value = true
+  neighbourNotice.value = ''
+
+  try {
+    const { data } = await api.get(`/neighbours/${friendId}`)
+    selectedNeighbour.value = data.friend
+    neighbourPantry.value = data.items || []
+  } catch (err) {
+    selectedNeighbour.value = null
+    neighbourPantry.value = []
+    neighbourNotice.value = err.response?.data?.message || 'Could not load this pantry.'
+  } finally {
+    neighbourLoading.value = false
+  }
+}
+
+function toggleBorrowItem(item) {
+  const id = item._id || item.id
+  const exists = selectedBorrowItems.value.some((selected) => (selected.itemId || selected._id || selected.id) === id)
+
+  if (exists) {
+    selectedBorrowItems.value = selectedBorrowItems.value.filter((selected) => (selected.itemId || selected._id || selected.id) !== id)
+    return
+  }
+
+  selectedBorrowItems.value.push({
+    itemId: id,
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+  })
+}
+
+async function requestNeighbourAction(type) {
+  if (!selectedNeighbourId.value) return
+
+  if (['borrow', 'takeover'].includes(type) && selectedBorrowItems.value.length === 0) {
+    neighbourNotice.value = 'Please select at least one item before sending this request.'
+    return
+  }
+
+  try {
+    const { data } = await api.post('/requests', {
+      friendId: selectedNeighbourId.value,
+      requestType: type,
+      items: selectedBorrowItems.value,
+      message: `Please approve a ${type} request.`,
+    })
+    neighbourNotice.value = data.message
+    selectedBorrowItems.value = []
+  } catch (err) {
+    neighbourNotice.value = err.response?.data?.message || 'Could not send the request.'
+  }
+}
+
+onMounted(() => {
+  loadPantry()
+  loadNeighbours()
+  loadRequests()
+})
 
 // Every write returns the whole updated pantry ({ items }), so we just replace our copy.
 // Returns true if it saved, so callers can reset their form.
@@ -303,6 +424,138 @@ async function onRemove(item) {
                 </div>
                 <div class="fft-round-icon" :class="m.bg">
                   <span class="material-symbols-outlined" style="font-size: 20px">{{ m.icon }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ NEIGHBOUR PANTRY ============ -->
+      <section class="px-4 pt-4">
+        <div class="container-fluid fft-container">
+          <div class="fft-card fft-card-bordered p-3 p-md-4">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-3">
+              <div>
+                <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Neighbour pantry</span>
+                <h2 class="fft-headline-sm m-0">Share your fridge with trusted neighbours</h2>
+              </div>
+              <div class="d-flex gap-2 w-100 w-md-auto">
+                <select v-model="selectedNeighbourId" class="fft-input flex-grow-1" aria-label="Choose a neighbour">
+                  <option value="">Add or view a neighbour</option>
+                  <option v-for="user in availableUsers" :key="user._id" :value="user._id">
+                    {{ user.name }}
+                  </option>
+                </select>
+                <button type="button" class="btn fft-btn-primary" :disabled="!selectedNeighbourId" @click="addNeighbour">
+                  Add
+                </button>
+              </div>
+            </div>
+
+            <div v-if="neighbourNotice" class="alert alert-info mb-3" role="status">
+              {{ neighbourNotice }}
+            </div>
+            <div v-if="neighbourDebug" class="alert alert-secondary mb-3" role="status">
+              {{ neighbourDebug }}
+            </div>
+
+            <div class="row g-3">
+              <div class="col-12 col-lg-5">
+                <div class="fft-card fft-card-light p-3 h-100">
+                  <p class="fft-label-sm fft-upper text-fft-muted mb-2">Your neighbours</p>
+                  <div v-if="neighbours.length === 0" class="text-fft-muted">No neighbours yet. Add one to start sharing.</div>
+                  <div v-else class="d-flex flex-column gap-2">
+                    <button v-for="friend in neighbours" :key="friend._id" type="button"
+                      class="btn d-flex justify-content-between align-items-center text-start"
+                      :class="selectedNeighbourId === friend._id ? 'fft-btn-primary' : 'btn-outline-secondary'"
+                      @click="viewNeighbour(friend._id)">
+                      <span>{{ friend.name || 'Neighbour' }}</span>
+                      <span class="material-symbols-outlined" style="font-size: 18px">arrow_forward</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-7">
+                <div class="fft-card fft-card-light p-3 h-100">
+                  <p class="fft-label-sm fft-upper text-fft-muted mb-2">Neighbour pantry</p>
+
+                  <div v-if="neighbourLoading" class="text-fft-muted">Loading pantry…</div>
+                  <div v-else-if="!selectedNeighbourId || !selectedNeighbour" class="text-fft-muted">
+                    Select a neighbour to view what they have in stock.
+                  </div>
+                  <div v-else>
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                      <h3 class="fft-headline-sm m-0">{{ selectedNeighbour.name }}'s pantry</h3>
+                      <div class="d-flex gap-2 flex-wrap">
+                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('buy')">Buy</button>
+                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('borrow')">Borrow</button>
+                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('takeover')">Takeover</button>
+                      </div>
+                    </div>
+
+                    <div v-if="neighbourPantry.length === 0" class="text-fft-muted">
+                      This pantry is empty right now.
+                    </div>
+                    <div v-else class="d-flex flex-column gap-2">
+                      <div v-for="item in neighbourPantry" :key="item._id || item.id" class="d-flex justify-content-between align-items-center border rounded p-2 gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                          <input type="checkbox" :checked="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))" @change="toggleBorrowItem(item)" />
+                          <div>
+                            <div class="fw-semibold">{{ item.name }}</div>
+                            <small class="text-fft-muted">{{ item.quantity }} {{ item.unit }} · {{ item.category }}</small>
+                          </div>
+                        </div>
+                        <span v-if="item.expiryDate" class="fft-pill fft-pill-gray">{{ item.expiryDate.slice(0,10) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ REQUESTS ============ -->
+      <section class="px-4 pt-4">
+        <div class="container-fluid fft-container">
+          <div class="fft-card fft-card-bordered p-3 p-md-4">
+            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+              <div>
+                <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Requests</span>
+                <h2 class="fft-headline-sm m-0">Borrow and pantry requests</h2>
+              </div>
+            </div>
+
+            <div v-if="pendingRequests.length === 0" class="text-fft-muted">
+              No pending requests yet.
+            </div>
+
+            <div v-else class="d-flex flex-column gap-3">
+              <div v-for="request in pendingRequests" :key="request._id" class="border rounded p-3">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                  <div>
+                    <div class="fw-semibold">{{ request.requester?.name || 'Neighbour' }} requested to {{ request.requestType }}</div>
+                    <small class="text-fft-muted">{{ new Date(request.createdAt).toLocaleString() }}</small>
+                  </div>
+                  <span class="fft-pill fft-pill-amber">{{ request.status }}</span>
+                </div>
+
+                <div v-if="request.items?.length" class="mt-3 d-flex flex-column gap-1">
+                  <div v-for="item in request.items" :key="item.itemId" class="small text-fft-muted">
+                    • {{ item.name }} · {{ item.quantity }} {{ item.unit }}
+                  </div>
+                </div>
+
+                <div v-if="request.message" class="mt-2 small text-fft-muted">
+                  {{ request.message }}
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                  <button type="button" class="btn btn-sm fft-btn-primary" @click="updateRequestStatus(request._id, 'approved')">Approve</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="updateRequestStatus(request._id, 'rejected')">Reject</button>
                 </div>
               </div>
             </div>
