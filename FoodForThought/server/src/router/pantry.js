@@ -16,6 +16,9 @@
 const express = require('express')
 const axios = require('axios')
 const Pantry = require('../../models/Pantry')
+const User = require('../../models/User')
+const PantryShare = require('../../models/PantryShare')
+const PantryRequest = require('../../models/PantryRequest')
 const requireAuth = require('../middleware/auth') // same path as Planner.js
 
 const router = express.Router()
@@ -278,6 +281,262 @@ router.get('/suggestions', handle(async (req, res) => {
 // GET /pantry
 router.get('/', handle(async (req, res) => {
   res.json({ items: await loadPantry(req.userId) })
+}))
+
+// GET /pantry/requests
+router.get('/requests', handle(async (req, res) => {
+  const requests = await PantryRequest.find({ owner: req.userId, status: 'pending' })
+    .populate('requester', '_id name email')
+    .sort({ createdAt: -1 })
+    .lean()
+
+  res.json({ requests })
+}))
+
+// PATCH /pantry/requests/:requestId
+router.patch('/requests/:requestId', handle(async (req, res) => {
+  const { status } = req.body || {}
+  if (!['approved', 'rejected', 'completed'].includes(status)) {
+    throw httpError(400, 'Status must be approved, rejected, or completed.')
+  }
+
+  const request = await PantryRequest.findOne({ _id: req.params.requestId, owner: req.userId })
+  if (!request) {
+    throw httpError(404, 'Request not found')
+  }
+
+  if (request.status !== 'pending') {
+    throw httpError(409, 'This request has already been resolved.')
+  }
+
+  if (status === 'approved') {
+    for (const item of request.items || []) {
+      if (!item?.itemId && !item?.name) continue
+
+      const normalizedName = normalizeIngredient(item.name || 'item')
+      const quantity = Number(item.quantity || 1)
+
+      if (!Number.isFinite(quantity) || quantity <= 0) continue
+
+      const existing = await Pantry.findOne({ user: request.requester, normalizedName })
+
+      if (existing) {
+        const currentQty = Number(existing.quantity || 0)
+        existing.quantity = Math.round((currentQty + quantity) * 1000) / 1000
+        if (item.unit) existing.unit = item.unit
+        if (item.name) existing.name = item.name
+        await existing.save()
+      } else {
+        await Pantry.create({
+          user: request.requester,
+          name: item.name || 'Item',
+          normalizedName,
+          quantity,
+          unit: item.unit || 'pcs',
+          category: 'other',
+        })
+      }
+    }
+  }
+
+  request.status = status
+  await request.save()
+
+  res.json({
+    message: `Request ${status}.`,
+    request,
+  })
+}))
+
+// GET /pantry/neighbours
+router.get('/neighbours', handle(async (req, res) => {
+  const users = await User.find({ _id: { $ne: req.userId }, role: { $ne: 'admin' } })
+    .select('_id name email')
+    .sort({ name: 1 })
+    .lean()
+
+  const shares = await PantryShare.find({
+    $or: [
+      { owner: req.userId },
+      { friend: req.userId }
+    ],
+    status: 'active',
+  })
+    .populate('owner friend', '_id name email')
+    .lean()
+
+  const friends = []
+  const friendsMap = new Map()
+
+  for (const share of shares) {
+    const ownerId = String(share.owner?._id || share.owner)
+    const friendId = String(share.friend?._id || share.friend)
+    const userId = ownerId === req.userId ? friendId : ownerId
+
+    if (userId === req.userId) continue
+
+    const existing = friendsMap.get(userId) || {
+      _id: userId,
+      name: null,
+      email: null,
+      canView: share.canView,
+      canBuy: share.canBuy,
+      canBorrow: share.canBorrow,
+      canTakeover: share.canTakeover,
+      status: share.status,
+    }
+
+    if (share.owner && String(share.owner._id) === req.userId) {
+      existing.name = share.friend?.name || existing.name
+      existing.email = share.friend?.email || existing.email
+    } else if (share.friend && String(share.friend._id) === req.userId) {
+      existing.name = share.owner?.name || existing.name
+      existing.email = share.owner?.email || existing.email
+    }
+
+    existing.canView = existing.canView || share.canView
+    existing.canBuy = existing.canBuy || share.canBuy
+    existing.canBorrow = existing.canBorrow || share.canBorrow
+    existing.canTakeover = existing.canTakeover || share.canTakeover
+
+    friendsMap.set(userId, existing)
+  }
+
+  for (const friend of friendsMap.values()) {
+    friends.push(friend)
+  }
+
+  const availableUsers = users.filter((user) => !friendsMap.has(String(user._id)))
+
+  res.json({ friends, availableUsers })
+}))
+
+// POST /pantry/friends/:friendId
+router.post('/friends/:friendId', handle(async (req, res) => {
+  const friendId = req.params.friendId
+  if (!friendId || friendId === req.userId) {
+    throw httpError(400, 'Choose another user to share your pantry with.')
+  }
+
+  const friend = await User.findById(friendId).select('_id name email')
+  if (!friend) throw httpError(404, 'Neighbour not found')
+
+  const permissions = {
+    canView: true,
+    canBuy: true,
+    canBorrow: true,
+    canTakeover: false,
+  }
+
+  await Promise.all([
+    PantryShare.findOneAndUpdate(
+      { owner: req.userId, friend: friendId },
+      { $set: { ...permissions, status: 'active' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ),
+    PantryShare.findOneAndUpdate(
+      { owner: friendId, friend: req.userId },
+      { $set: { ...permissions, status: 'active' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ),
+  ])
+
+  res.status(201).json({
+    message: `${friend.name} is now on your neighbour list.`,
+  })
+}))
+
+// GET /pantry/neighbours/:friendId
+router.get('/neighbours/:friendId', handle(async (req, res) => {
+  const friendId = req.params.friendId
+  const share = await PantryShare.findOne({
+    owner: friendId,
+    friend: req.userId,
+    status: 'active',
+  }).lean()
+
+  if (!share || !share.canView) {
+    throw httpError(403, 'This neighbour has not shared their pantry with you.')
+  }
+
+  const friend = await User.findById(friendId).select('_id name email').lean()
+  if (!friend) throw httpError(404, 'Neighbour not found')
+
+  const items = await Pantry.find({ user: friendId }).sort({ category: 1, name: 1 }).lean()
+
+  res.json({
+    friend,
+    access: {
+      canView: share.canView,
+      canBuy: share.canBuy,
+      canBorrow: share.canBorrow,
+      canTakeover: share.canTakeover,
+    },
+    items,
+  })
+}))
+
+// POST /pantry/requests
+router.post('/requests', handle(async (req, res) => {
+  const { friendId, requestType, message, items } = req.body || {}
+
+  if (!friendId || !requestType) {
+    throw httpError(400, 'Neighbour and request type are required.')
+  }
+
+  if (!['buy', 'borrow', 'takeover'].includes(requestType)) {
+    throw httpError(400, 'Request type must be buy, borrow, or takeover.')
+  }
+
+  const selectedItems = Array.isArray(items) ? items : []
+  const hasSelectedItems = selectedItems.length > 0
+
+  if (['borrow', 'takeover'].includes(requestType) && !hasSelectedItems) {
+    throw httpError(400, 'Please select at least one item to borrow or take over.')
+  }
+
+  const share = await PantryShare.findOne({
+    owner: friendId,
+    friend: req.userId,
+    status: 'active',
+  })
+
+  if (!share) {
+    throw httpError(403, 'You need an active neighbour connection before making a pantry request.')
+  }
+
+  if (requestType === 'buy' && !share.canBuy) {
+    throw httpError(403, 'This neighbour has disabled buy requests.')
+  }
+
+  if (requestType === 'borrow' && !share.canBorrow) {
+    throw httpError(403, 'This neighbour has disabled borrow requests.')
+  }
+
+  if (requestType === 'takeover' && !share.canTakeover) {
+    throw httpError(403, 'This neighbour has disabled takeover requests.')
+  }
+
+  const payload = {
+    requester: req.userId,
+    owner: friendId,
+    requestType,
+    items: selectedItems.map((item) => ({
+      itemId: item.itemId || item._id || String(item.id || ''),
+      name: item.name || 'Item',
+      quantity: Number(item.quantity || 1),
+      unit: item.unit || 'pcs',
+    })).filter((item) => item.itemId),
+    message: String(message || '').trim().slice(0, 500),
+    status: 'pending',
+  }
+
+  const request = await PantryRequest.create(payload)
+
+  res.status(201).json({
+    message: `Your ${requestType} request has been sent.`,
+    request,
+  })
 }))
 
 // POST /pantry
