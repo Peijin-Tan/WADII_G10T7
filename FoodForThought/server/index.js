@@ -14,10 +14,6 @@ const csrf = require('csurf')
 
 const authRouter = require('./src/router/auth')
 const requireAuth = require('./src/middleware/auth')
-const User = require('./models/User')
-const Recipe = require('./models/Recipe')
-const Post = require('./models/Post')
-const Comment = require('./models/Comment')
 const usersRouter = require('./src/router/users')
 const postsRouter = require('./src/router/Post')
 const pantryRouter = require('./src/router/pantry')
@@ -28,6 +24,7 @@ const recipeRouter = require('./src/router/recipe')
 const dashboardRouter = require('./src/router/analytics')
 const activityRouter = require('./src/router/activity')
 const preferencesRouter = require('./src/router/preferences')
+const adminRouter = require('./src/router/admin')
 
 const app = express()
 app.use(cors({
@@ -68,45 +65,7 @@ app.use('/recipes', recipeRouter)
 app.use('/analytics', dashboardRouter)
 app.use('/activity', activityRouter)
 app.use('/preferences', preferencesRouter)
-
-
-app.get('/admin/stats', requireAuth, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
-      message: 'Admin access required'
-    })
-  }
-
-  try {
-    const [totalRecipes, totalComments, roleBreakdown] = await Promise.all([
-      Recipe.countDocuments(),
-      Comment.countDocuments(),
-      User.aggregate([
-        { $match: { role: { $in: ['user', 'admin'] } } },
-        { $group: { _id: '$role', count: { $sum: 1 } } }
-      ])
-    ])
-
-    const totalAdmins = roleBreakdown.find(item => item._id === 'admin')?.count ?? 0
-    const totalRegularUsers = roleBreakdown.find(item => item._id === 'user')?.count ?? 0
-    const totalUsers = totalAdmins + totalRegularUsers
-
-    const summary = {
-      totalUsers,
-      totalRecipes,
-      totalComments,
-      totalAdmins,
-      totalRegularUsers
-    }
-
-    return res.json(summary)
-  } catch (error) {
-    console.error('Admin stats error:', error)
-    return res.status(500).json({
-      message: 'Unable to load admin statistics'
-    })
-  }
-})
+app.use('/admin', adminRouter)
 
 // Expose a simple CSRF token endpoint (uses csurf internally)
 const csrfProtection = csrf({ cookie: true })

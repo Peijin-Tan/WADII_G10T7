@@ -1,15 +1,19 @@
 <!--
   AddMealModal.vue
-  Adds a recipe (or a custom meal) to a day + meal slot in the weekly planner
+  Adds a recipe to a day + meal slot in the weekly planner
   (converted from Tailwind to Bootstrap 5 + scoped CSS).
+  Recipes come from our database AND Spoonacular. To plan something that isn't
+  in either, the user creates a recipe on /recipes/create (linked at the bottom).
 
-  Usage (in MealPlanView.vue):
-    <AddMealModal
+  Usage (in Planner.vue):
+    <addMealModal
       v-if="addTarget"
       :default-date="addTarget.date"
       :default-slot="addTarget.mealSlot"
-      :recipes="allRecipes"
-      @close="addTarget = null"
+      :recipes="recipeOptions"
+      :search-results="recipeSearch"
+      @search="searchRecipes"
+      @close="closeAddMeal"
       @add="addMealToPlan"
     />
 -->
@@ -77,11 +81,16 @@
               />
             </div>
 
-            <div class="d-flex flex-column gap-2 pt-2">
-              <span class="fft-overline">{{ query ? `Results (${suggestions.length})` : 'Quick Suggestions' }}</span>
+            <!-- Results: "Quick Suggestions" before typing; "Your recipes" + "From Spoonacular" while searching -->
+            <div v-for="group in resultGroups" :key="group.key" class="d-flex flex-column gap-2 pt-2"
+              :data-testid="`add-meal-${group.key}`">
+              <span class="fft-overline d-flex align-items-center gap-1">
+                <span v-if="group.key === 'online'" class="material-symbols-outlined fs-16">public</span>
+                {{ group.title }}
+              </span>
 
               <button
-                v-for="r in suggestions"
+                v-for="r in group.recipes"
                 :key="r.id"
                 type="button"
                 class="fft-suggestion d-flex align-items-center justify-content-between gap-2 p-2 text-start"
@@ -89,14 +98,13 @@
                 @click="selectRecipe(r)"
               >
                 <div class="d-flex align-items-center gap-3 min-w-0">
-                  <span class="fft-suggestion-icon flex-shrink-0">
-                    <span class="material-symbols-outlined fs-16">{{ r.icon || 'restaurant' }}</span>
+                  <img v-if="r.image" v-recipe-img="r.image" alt="" class="fft-suggestion-img flex-shrink-0" loading="lazy" />
+                  <span v-else class="fft-suggestion-icon flex-shrink-0">
+                    <span class="material-symbols-outlined fs-16">restaurant</span>
                   </span>
                   <div class="d-flex flex-column min-w-0">
                     <span class="small fw-semibold text-truncate">{{ r.title }}</span>
-                    <span class="fft-meta">
-                      {{ r.nutrition.calories }} kcal · {{ r.nutrition.protein }}g Protein · {{ r.prepMinutes }}m prep
-                    </span>
+                    <span class="fft-meta">{{ recipeMeta(r) }}</span>
                   </div>
                 </div>
                 <span class="material-symbols-outlined fs-18 fft-suggestion-check">
@@ -104,8 +112,15 @@
                 </span>
               </button>
 
-              <div v-if="suggestions.length === 0" class="fft-empty text-center py-3">
-                No recipes found. Try another search, or add a custom meal below.
+              <div v-if="group.key === 'online' && onlinePending" class="fft-meta d-flex align-items-center gap-2 py-1">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                Searching Spoonacular...
+              </div>
+              <div v-else-if="group.key === 'online' && (searchResults.warning || searchResults.error)" class="fft-meta fft-warning py-1">
+                {{ searchResults.warning || searchResults.error }}
+              </div>
+              <div v-else-if="group.recipes.length === 0" class="fft-empty py-1">
+                {{ group.key === 'online' ? 'No matches on Spoonacular.' : 'No saved recipes match.' }}
               </div>
             </div>
           </div>
@@ -141,48 +156,22 @@
             </div>
           </div>
 
-          <!-- Custom meal -->
-          <div class="fft-custom pt-2 d-flex flex-column gap-2">
-            <button
-              type="button"
-              class="fft-custom-toggle d-flex align-items-center justify-content-between py-1"
-              :aria-expanded="showCustom"
-              aria-controls="custom-meal-fields"
-              @click="showCustom = !showCustom"
-            >
-              <span class="d-flex align-items-center gap-2">
-                <span class="material-symbols-outlined text-fft-primary fs-18">edit_note</span>
-                <span class="fft-label">Can't find it? Add custom meal</span>
+          <!-- Can't find it? -> create a full recipe (with ingredients) instead of a name-only custom meal,
+               so it also works with the shopping list and pantry. ?from=planner brings the user back here after saving. -->
+          <router-link
+            :to="{ path: '/recipes/create', query: { from: 'planner' } }"
+            class="fft-create d-flex align-items-center justify-content-between gap-2 p-3"
+            data-testid="add-meal-create-recipe"
+          >
+            <span class="d-flex align-items-center gap-3">
+              <span class="material-symbols-outlined text-fft-primary fs-20">edit_note</span>
+              <span class="d-flex flex-column">
+                <span class="fft-label">Can't find it? Create your own recipe</span>
+                <span class="fft-meta">Add its ingredients once, then plan it like any other recipe</span>
               </span>
-              <span class="material-symbols-outlined fft-outline fs-18">
-                {{ showCustom ? 'expand_less' : 'expand_more' }}
-              </span>
-            </button>
-
-            <div v-show="showCustom" id="custom-meal-fields" class="d-flex flex-column gap-2 pt-1">
-              <input
-                v-model.trim="custom.title"
-                type="text"
-                class="form-control fft-input fft-input--plain"
-                placeholder="e.g., Homemade Protein Smoothie Bowl"
-                aria-label="Custom meal name"
-                @input="onCustomInput"
-              />
-              <div class="row row-cols-2 row-cols-sm-4 g-2">
-                <div v-for="m in macroFields" :key="m.key" class="col d-flex flex-column gap-1">
-                  <label :for="`custom-${m.key}`" class="fft-meta">{{ m.label }}</label>
-                  <input
-                    :id="`custom-${m.key}`"
-                    v-model.number="custom[m.key]"
-                    type="number"
-                    min="0"
-                    class="form-control fft-input fft-input--small text-center"
-                    :placeholder="m.placeholder"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+            </span>
+            <span class="material-symbols-outlined fft-outline fs-18">arrow_forward</span>
+          </router-link>
         </div>
 
         <!-- Footer -->
@@ -211,6 +200,7 @@
 
 <script>
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+const MIN_SEARCH = 2; // same minimum as GET /planner/recipe-search
 
 // Format a Date as YYYY-MM-DD in local time (avoids UTC off-by-one in Singapore)
 function toISODate(d) {
@@ -236,11 +226,18 @@ export default {
     // 'YYYY-MM-DD' of the day the user clicked "Add Meal" on (defaults to today)
     defaultDate: { type: String, default: () => toISODate(new Date()) },
     defaultSlot: { type: String, default: 'Dinner' },
-    // Same recipe shape as mockSwapOptions / RecipeModal
+    // Saved recipes for "Quick Suggestions" (GET /planner/recipe-options), same shape as the swap modal uses
     recipes: { type: Array, default: () => [] },
+    // Results of the last search, filled in by Planner.vue (GET /planner/recipe-search):
+    // { query, saved: [], online: [], warning, loading, error }
+    searchResults: {
+      type: Object,
+      default: () => ({ query: '', saved: [], online: [], warning: '', loading: false, error: '' }),
+    },
   },
 
-  emits: ['close', 'add'],
+  // search(query): the parent searches saved + Spoonacular recipes and passes them back as searchResults
+  emits: ['close', 'add', 'search'],
 
   data() {
     return {
@@ -250,15 +247,18 @@ export default {
       query: '',
       selectedRecipe: null,
       servings: 2,
-      showCustom: false,
-      custom: { title: '', calories: null, protein: null, carbs: null, fat: null },
-      macroFields: [
-        { key: 'calories', label: 'Calories', placeholder: '280 kcal' },
-        { key: 'protein', label: 'Protein', placeholder: '8g' },
-        { key: 'carbs', label: 'Carbs', placeholder: '32g' },
-        { key: 'fat', label: 'Fat', placeholder: '12g' },
-      ],
+      searchTimer: null,
     };
+  },
+
+  watch: {
+    // Wait until the user stops typing (600 ms) before searching, so we don't use
+    // Spoonacular's daily quota on every key press ("c", "ch", "chi", ...)
+    query(value) {
+      clearTimeout(this.searchTimer);
+      if (value.length < MIN_SEARCH) return;
+      this.searchTimer = setTimeout(() => this.$emit('search', value), 600);
+    },
   },
 
   computed: {
@@ -275,25 +275,41 @@ export default {
       });
     },
 
-    suggestions() {
+    // Saved recipes matching the search, filtered here so results appear instantly while the server search runs
+    localMatches() {
       const q = this.query.toLowerCase();
-      const list = q
-        ? this.recipes.filter((r) =>
-            [r.title, ...(r.tags || []), ...(r.ingredients || []).map((i) => i.name)]
-              .join(' ')
-              .toLowerCase()
-              .includes(q),
-          )
-        : this.recipes;
-      return list.slice(0, 5);
+      return this.recipes.filter((r) =>
+        [r.title, ...(r.tags || []), ...(r.ingredients || []).map((i) => i.name)]
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      );
     },
 
-    isCustom() {
-      return this.showCustom && this.custom.title.length > 0;
+    // True once the server's results are for exactly what's in the search box (not an older search)
+    resultsAreFresh() {
+      return this.searchResults.query === this.query && !this.searchResults.loading;
+    },
+
+    // Still waiting: either the 600 ms typing pause, or the request itself
+    onlinePending() {
+      return this.query.length >= MIN_SEARCH && !this.resultsAreFresh;
+    },
+
+    // The lists shown under the search box
+    resultGroups() {
+      if (this.query.length < MIN_SEARCH) {
+        return [{ key: 'quick', title: 'Quick Suggestions', recipes: this.recipes.slice(0, 5) }];
+      }
+      const fresh = this.resultsAreFresh;
+      return [
+        { key: 'saved', title: 'Your recipes', recipes: (fresh ? this.searchResults.saved : this.localMatches).slice(0, 5) },
+        { key: 'online', title: 'From Spoonacular', recipes: fresh ? this.searchResults.online : [] },
+      ];
     },
 
     canSubmit() {
-      return Boolean(this.selectedRecipe || this.isCustom);
+      return Boolean(this.selectedRecipe);
     },
   },
 
@@ -303,6 +319,7 @@ export default {
   },
 
   beforeUnmount() {
+    clearTimeout(this.searchTimer);
     document.body.style.overflow = '';
     window.removeEventListener('keydown', this.onKeydown);
   },
@@ -314,34 +331,19 @@ export default {
 
     selectRecipe(recipe) {
       this.selectedRecipe = recipe;
-      this.servings = recipe.servings || this.servings;
-      this.custom.title = ''; // picking a recipe cancels a half-typed custom meal
+      // Start from the recipe's own servings, but the planner only allows 1-12
+      // (many Spoonacular recipes serve 16+, which the server would reject)
+      this.servings = Math.min(Math.max(recipe.servings || this.servings, 1), 12);
     },
 
-    onCustomInput() {
-      if (this.custom.title) this.selectedRecipe = null; // typing a custom meal deselects the recipe
-    },
-
-    buildCustomRecipe() {
-      const n = this.custom;
-      return {
-        id: null,
-        custom: true,
-        title: n.title,
-        description: 'Custom meal',
-        servings: this.servings,
-        prepMinutes: 0,
-        tags: ['Custom'],
-        nutrition: {
-          calories: n.calories ?? 0,
-          protein: n.protein ?? 0,
-          carbs: n.carbs ?? 0,
-          fat: n.fat ?? 0,
-          fiber: null,
-        },
-        ingredients: [],
-        steps: [],
-      };
+    // "520 kcal · 31g protein · 35m prep" (user recipes may have no nutrition yet, so skip missing parts)
+    recipeMeta(r) {
+      const n = r.nutrition || {};
+      return [
+        n.calories != null ? `${n.calories} kcal` : null,
+        n.protein != null ? `${n.protein}g protein` : null,
+        r.prepMinutes ? `${r.prepMinutes}m prep` : null,
+      ].filter(Boolean).join(' · ') || 'No nutrition info yet';
     },
 
     submit() {
@@ -352,7 +354,7 @@ export default {
         day: new Date(`${date}T00:00:00`).toLocaleDateString('en-SG', { weekday: 'long' }),
         mealSlot: this.selectedSlot,
         servings: this.servings,
-        recipe: this.isCustom ? this.buildCustomRecipe() : this.selectedRecipe,
+        recipe: this.selectedRecipe, // source 'spoonacular' = not saved yet; Planner.vue sends its externalId
       });
       this.close();
     },
@@ -464,8 +466,6 @@ export default {
   border: 1px solid var(--fft-outline-variant);
   color: var(--fft-on-surface);
 }
-.fft-input--plain { padding-left: 1rem; }
-.fft-input--small { padding: 0.375rem 0.5rem; border-radius: 0.5rem; }
 .fft-input::placeholder { color: var(--fft-outline); }
 .fft-input:focus {
   background-color: var(--fft-surface-low);
@@ -483,10 +483,6 @@ export default {
   pointer-events: none;
   z-index: 1;
 }
-/* hide number spinners in the macro inputs */
-.fft-input--small::-webkit-outer-spin-button,
-.fft-input--small::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.fft-input--small[type='number'] { -moz-appearance: textfield; }
 
 /* ---------- Meal slot buttons ---------- */
 .fft-slot {
@@ -535,6 +531,16 @@ export default {
 .fft-suggestion--active .fft-suggestion-check { color: var(--fft-primary); }
 
 .fft-empty { font-size: 0.875rem; color: var(--fft-outline); }
+.fft-warning { color: #9a5b13; } /* amber: Spoonacular unavailable, saved results still shown */
+
+/* recipe photo thumbnail (Spoonacular and user recipes with an image) */
+.fft-suggestion-img {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  background: var(--fft-surface-high);
+}
 
 /* ---------- Servings stepper ---------- */
 .fft-stepper {
@@ -557,15 +563,15 @@ export default {
 .fft-stepper-btn:hover:not(:disabled) { background: var(--fft-surface-high); }
 .fft-stepper-btn:disabled { opacity: 0.4; }
 
-/* ---------- Custom meal ---------- */
-.fft-custom { border-top: 1px solid var(--fft-outline-variant); }
-.fft-custom-toggle {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding-left: 0;
-  padding-right: 0;
+/* ---------- "Create your own recipe" link ---------- */
+.fft-create {
+  border-radius: 0.75rem;
+  border: 1px dashed var(--fft-outline-variant);
+  color: var(--fft-on-surface);
+  text-decoration: none;
+  transition: background-color 0.15s, border-color 0.15s;
 }
+.fft-create:hover { background: var(--fft-surface-low); border-color: var(--fft-primary); }
 
 /* ---------- Buttons & links ---------- */
 .fft-link { color: var(--fft-primary); text-decoration: none; }

@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
               <!-- One suggestion card -->
               <div class="fft-card h-100 d-flex flex-column" data-testid="suggestion-card">
                 <div class="position-relative fft-card-img">
-                  <img v-if="r.image" :src="r.image" :alt="r.title" class="w-100 h-100 fft-cover" />
+                  <img v-if="r.image" v-recipe-img="r.image" :alt="r.title" class="w-100 h-100 fft-cover" />
                   <div v-else class="w-100 h-100 d-flex align-items-center justify-content-center fft-bg-gray">
                     <span class="material-symbols-outlined text-fft-outline" style="font-size: 40px">restaurant</span>
                   </div>
@@ -240,6 +240,7 @@ onBeforeUnmount(() => {
   width: 100%;
   max-width: 1080px;
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
   border-radius: var(--fft-radius-2xl);
@@ -281,6 +282,7 @@ onBeforeUnmount(() => {
 
   .fft-modal {
     max-height: 100vh;
+    max-height: 100dvh;
     height: 100%;
     border-radius: 0;
   }
@@ -450,8 +452,10 @@ onBeforeUnmount(() => {
   transition: box-shadow 0.2s;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .fft-card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
 }
 
 .fft-card-img {
@@ -500,7 +504,7 @@ onBeforeUnmount(() => {
 
 /* ===== Spinner ===== */
 .fft-spin {
-  animation: fft-spin 1s linear infinite;
+  animation: fft-spin 0.7s linear infinite;
 }
 
 @keyframes fft-spin {

@@ -10,6 +10,7 @@ import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import DashboardAnalytics from '@/components/DashboardAnalytics.vue'
+import WeekAtGlance from '@/components/Dashboard/WeekAtGlance.vue'
 
 const auth = useAuthStore()
 
@@ -32,6 +33,37 @@ const currentRecipe = computed(() => {
 const currentMonth = new Date().toLocaleDateString('en-SG', {
   month: 'long',
   year: 'numeric'
+})
+
+/* ---------- Greeting ---------- */
+// e.g. "Wednesday, 4 November" + "Good afternoon, Eleen" + a line about today's meals
+const todayLong = new Date().toLocaleDateString('en-SG', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long'
+})
+
+const greeting = (() => {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+})()
+
+const firstName = computed(() => {
+  return (auth.user?.name || '').trim().split(/\s+/)[0]
+})
+
+// WeekAtGlance sends { total, left } once this week's plan has loaded
+const todaySummary = ref(null)
+
+const todayLine = computed(() => {
+  const summary = todaySummary.value
+  if (!summary) return 'Here is your week of meals.'
+  if (summary.total === 0) return 'Nothing is planned for today yet.'
+  if (summary.left === 0) return 'Every meal today is logged.'
+  if (summary.left === 1) return 'One meal left to cook today.'
+  return `${summary.left} meals left to cook today.`
 })
 
 async function loadTopRecipes() {
@@ -158,26 +190,25 @@ onUnmounted(() => {
 <template>
   <div class="fft-page">
     <main class="container dashboard-page py-4 py-lg-5 text-start">
-      <!-- Page heading -->
-      <header class="mb-4">
-        <p class="page-label mb-2">Your overview</p>
+      <!-- Page heading: today's date + greeting + how today is going -->
+      <header class="dashboard-hero">
+        <p class="hero-date">{{ todayLong }}</p>
 
         <h1 class="dashboard-heading">
-          Welcome to FoodForThought
+          {{ greeting }}<template v-if="firstName">, {{ firstName }}</template>
         </h1>
 
-        <div
-          class="d-flex flex-wrap justify-content-between gap-2 mt-2"
-        >
-          <p class="text-muted mb-0">
-            Cook smarter. Waste less. Live healthier.
-          </p>
-
-          <p class="month-label mb-0">
-            {{ currentMonth }}
-          </p>
-        </div>
+        <p class="hero-line" aria-live="polite">{{ todayLine }}</p>
       </header>
+
+      <!-- This week grid + suggestion + today's meals -->
+      <WeekAtGlance @summary="todaySummary = $event" />
+
+      <!-- Monthly stats -->
+      <div class="section-head">
+        <h2 class="section-title">{{ currentMonth }}</h2>
+        <p class="section-sub">Your progress and what the community is cooking.</p>
+      </div>
 
       <div class="row g-4">
         <!-- Left column -->
@@ -232,8 +263,7 @@ onUnmounted(() => {
                   :to="'/recipes/' + currentRecipe.recipeId"
                 >
                   <img
-                    v-if="currentRecipe.image"
-                    :src="currentRecipe.image"
+                    v-recipe-img="currentRecipe.image"
                     :alt="currentRecipe.title"
                     class="recipe-image mb-3"
                   >
@@ -428,65 +458,32 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Navigation cards -->
-      <div class="row g-4 mt-2">
-        <div class="col-12 col-md-4">
-          <section class="dashboard-card h-100">
-            <div class="panel-body d-flex flex-column h-100">
-              <h2 class="navigation-title">My Pantry</h2>
+      <!-- Shortcuts to the other main pages -->
+      <nav class="shortcut-grid" aria-label="Shortcuts">
+        <RouterLink to="/pantry" class="shortcut">
+          <span class="shortcut-icon material-symbols-outlined" aria-hidden="true">kitchen</span>
+          <span>
+            <span class="shortcut-title">Pantry</span>
+            <span class="shortcut-text">Check what you have and what's expiring.</span>
+          </span>
+        </RouterLink>
 
-              <p class="text-muted small">
-                Check the ingredients you have.
-              </p>
+        <RouterLink to="/recipes" class="shortcut">
+          <span class="shortcut-icon material-symbols-outlined" aria-hidden="true">menu_book</span>
+          <span>
+            <span class="shortcut-title">Recipes</span>
+            <span class="shortcut-text">Find something new to cook.</span>
+          </span>
+        </RouterLink>
 
-              <RouterLink
-                to="/pantry"
-                class="btn dashboard-button btn-sm mt-auto align-self-start"
-              >
-                View Pantry
-              </RouterLink>
-            </div>
-          </section>
-        </div>
-
-        <div class="col-12 col-md-4">
-          <section class="dashboard-card h-100">
-            <div class="panel-body d-flex flex-column h-100">
-              <h2 class="navigation-title">Recipes</h2>
-
-              <p class="text-muted small">
-                Find recipes based on your ingredients.
-              </p>
-
-              <RouterLink
-                to="/recipes"
-                class="btn dashboard-button btn-sm mt-auto align-self-start"
-              >
-                Browse Recipes
-              </RouterLink>
-            </div>
-          </section>
-        </div>
-
-        <div class="col-12 col-md-4">
-          <section class="dashboard-card h-100">
-            <div class="panel-body d-flex flex-column h-100">
-              <h2 class="navigation-title">Community</h2>
-
-              <p class="text-muted small">
-                Discover meals shared by the community.
-              </p>
-
-              <RouterLink
-                to="/community"
-                class="btn dashboard-button btn-sm mt-auto align-self-start"
-              >
-                View Community
-              </RouterLink>
-            </div>
-          </section>
-        </div>
-      </div>
+        <RouterLink to="/community" class="shortcut">
+          <span class="shortcut-icon material-symbols-outlined" aria-hidden="true">forum</span>
+          <span>
+            <span class="shortcut-title">Community</span>
+            <span class="shortcut-text">See your comments and liked recipes.</span>
+          </span>
+        </RouterLink>
+      </nav>
     </main>
   </div>
 </template>
@@ -496,23 +493,61 @@ onUnmounted(() => {
   color: var(--fft-text);
 }
 
-.page-label,
-.panel-label {
-  color: var(--fft-secondary-text);
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+/* ---------- Greeting ---------- */
+.dashboard-hero {
+  margin-bottom: 28px;
+}
+
+.hero-date {
+  margin: 0 0 4px;
+  color: var(--fft-primary);
+  font: 600 14px/20px 'Inter', sans-serif;
 }
 
 .dashboard-heading {
+  margin: 0;
   color: var(--fft-text);
   font-family: 'Outfit', sans-serif;
-  font-size: 32px;
+  font-size: clamp(30px, 4vw, 40px);
   font-weight: 600;
-  line-height: 40px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.hero-line {
+  margin: 8px 0 0;
+  color: var(--fft-secondary-text);
+  font: 400 17px/26px 'Inter', sans-serif;
+}
+
+/* ---------- Section break between "this week" and "this month" ---------- */
+.section-head {
+  margin: 48px 0 20px;
+  padding-top: 28px;
+  border-top: 1px solid var(--fft-surface-high);
+}
+
+.section-title {
+  margin: 0;
+  color: var(--fft-text);
+  font: 600 22px/28px 'Outfit', sans-serif;
   letter-spacing: -0.01em;
+}
+
+.section-sub {
+  margin: 2px 0 0;
+  color: var(--fft-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Card headings: readable sentence case instead of tiny capitals */
+.panel-label {
+  color: var(--fft-text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .month-label,
@@ -524,8 +559,8 @@ onUnmounted(() => {
 
 .dashboard-card {
   background-color: var(--fft-card);
-  border: 1px solid rgb(194 200 192 / 40%);
-  border-radius: 16px;
+  border: 1px solid rgb(194 200 192 / 45%);
+  border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
@@ -624,12 +659,69 @@ onUnmounted(() => {
   background-color: var(--fft-primary);
 }
 
-.navigation-title {
+/* ---------- Shortcuts ---------- */
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid rgb(194 200 192 / 45%);
+  border-radius: 16px;
+  background: var(--fft-card);
   color: var(--fft-text);
-  font-family: 'Outfit', sans-serif;
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 28px;
+  text-decoration: none;
+  transition:
+    border-color var(--dur-fast, 150ms),
+    background-color var(--dur-fast, 150ms);
+}
+
+.shortcut:hover {
+  border-color: var(--fft-primary);
+  background: var(--fft-surface-low);
+  color: var(--fft-text);
+}
+
+.shortcut:focus-visible {
+  outline: 2px solid var(--fft-primary);
+  outline-offset: 2px;
+}
+
+.shortcut-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--fft-primary-light);
+  color: var(--fft-primary-dark);
+  font-size: 22px;
+}
+
+.shortcut-title {
+  display: block;
+  font: 600 16px/22px 'Outfit', sans-serif;
+}
+
+.shortcut-text {
+  display: block;
+  color: var(--fft-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+@media (max-width: 767.98px) {
+  .shortcut-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 }
 
 .dashboard-button {

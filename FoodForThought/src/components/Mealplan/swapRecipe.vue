@@ -76,7 +76,7 @@
             >
               <div class="d-flex align-items-center gap-3 min-w-0">
                 <div class="fft-thumb flex-shrink-0">
-                  <img v-if="r.image" :src="r.image" :alt="r.title" />
+                  <img v-if="r.image" v-recipe-img="r.image" :alt="r.title" />
                   <span v-else class="material-symbols-outlined">restaurant</span>
                 </div>
 

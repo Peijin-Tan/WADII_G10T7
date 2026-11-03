@@ -1,6 +1,4 @@
-// Pantry API
-// Mount in server.js / app.js, the same way as the planner:
-//   app.use('/pantry', require('./routes/pantry/pantry'))
+// Pantry API, mounted in server/index.js as app.use('/pantry', pantryRouter)
 //
 //   GET    /pantry                  -> the logged-in user's pantry
 //   GET    /pantry/suggestions      -> ranked recipes for what's in the pantry
@@ -11,7 +9,7 @@
 // Every write returns the whole updated pantry as { items }, so the frontend just replaces its copy.
 //
 // This file also exports helpers the planner uses (see the bottom of the file):
-//   const { getPantryNames, ingredientMatches } = require('../pantry/pantry')
+//   const { getPantryNames } = require('./pantry')
 
 const express = require('express')
 const axios = require('axios')
@@ -191,30 +189,13 @@ async function searchByPantry(ingredients, prefs = {}, number = 12) {
 /* Route helpers (same pattern as Planner.js)                          */
 /* ------------------------------------------------------------------ */
 
-// Throw this inside a route to send a 4xx with a message
-function httpError(status, message) {
-  const err = new Error(message)
-  err.status = status
-  return err
-}
-
-// Wraps an async route so every error ends up in one place (Express 4 doesn't catch async errors)
-const handle = (fn) => async (req, res) => {
-  try {
-    await fn(req, res)
-  } catch (err) {
-    if (err.status) return res.status(err.status).json({ message: err.message })
-    if (err.name === 'ValidationError') {
-      // show the first field's message, e.g. "Quantity cannot be negative"
-      const first = Object.values(err.errors)[0]
-      return res.status(400).json({ message: first ? first.message : err.message })
-    }
-    if (err.name === 'CastError') return res.status(404).json({ message: 'Pantry item not found' })
-    if (err.code === 11000) return res.status(409).json({ message: 'You already have this ingredient' })
-    console.error(err)
-    res.status(500).json({ message: 'Something went wrong with your pantry' })
-  }
-}
+// Shared error helpers (utils/http.js). A bad item id is a CastError -> 404.
+const { httpError, makeHandler } = require('../utils/http')
+const handle = makeHandler({
+  fallback: 'Something went wrong with your pantry',
+  castError: { status: 404, message: 'Pantry item not found' },
+  duplicate: 'You already have this ingredient',
+})
 
 // Every pantry route needs a logged-in user (same as the planner).
 // requireAuth puts the user on req.user; we copy their id to req.userId.
@@ -274,6 +255,10 @@ router.get('/suggestions', handle(async (req, res) => {
   } catch (err) {
     // Spoonacular sends 402 when the daily quota is used up
     if (err.response?.status === 402) throw httpError(503, 'Recipe service quota reached. Try again tomorrow.')
+    if (err.response || err.code === 'ECONNABORTED') {
+      console.error('Spoonacular suggestions failed:', err.message)
+      throw httpError(502, 'Could not reach the recipe service. Please try again later.')
+    }
     throw err
   }
 }))
@@ -547,6 +532,9 @@ router.post('/', handle(async (req, res) => {
   const normalizedName = normalizeIngredient(name)
   const quantity = Number(req.body.quantity ?? 1)
   if (!Number.isFinite(quantity) || quantity <= 0) throw httpError(400, 'Quantity must be more than 0')
+  if (req.body.expiryDate && Number.isNaN(new Date(req.body.expiryDate).getTime())) {
+    throw httpError(400, 'Use-by date must be a valid date')
+  }
 
   const existing = await Pantry.findOne({ user: req.userId, normalizedName })
 
@@ -573,13 +561,37 @@ router.post('/', handle(async (req, res) => {
   res.status(201).json({ items: await loadPantry(req.userId) })
 }))
 
+// Checks the fields the edit form sends, so an emptied box can't save "null pcs".
+// Returns the cleaned values to copy onto the item.
+function checkEdits(body) {
+  const edits = {}
+  EDITABLE.forEach((f) => {
+    if (body[f] !== undefined) edits[f] = body[f]
+  })
+  if (edits.name !== undefined && !String(edits.name).trim()) throw httpError(400, 'Ingredient name is required')
+  if (edits.quantity !== undefined) {
+    const quantity = edits.quantity === '' || edits.quantity === null ? NaN : Number(edits.quantity)
+    if (!Number.isFinite(quantity) || quantity < 0) throw httpError(400, 'Quantity must be 0 or more')
+    edits.quantity = quantity
+  }
+  if (edits.expiryDate === '') edits.expiryDate = null // empty date box = no use-by date
+  if (edits.expiryDate && Number.isNaN(new Date(edits.expiryDate).getTime())) {
+    throw httpError(400, 'Use-by date must be a valid date')
+  }
+  return edits
+}
+
 // PATCH /pantry/:itemId
 // body can contain any of: { name, quantity, unit, category, expiryDate }
 router.patch('/:itemId', handle(async (req, res) => {
   const item = await findUserItem(req.userId, req.params.itemId)
-  EDITABLE.forEach((f) => {
-    if (req.body[f] !== undefined) item[f] = req.body[f]
-  })
+  const edits = checkEdits(req.body)
+  if (edits.name !== undefined) {
+    // renaming onto another item ("Garlic" -> "Milk" when Milk exists): say which one, instead of a vague 409
+    const clash = await Pantry.findOne({ user: req.userId, normalizedName: normalizeIngredient(edits.name), _id: { $ne: item._id } })
+    if (clash) throw httpError(409, `${clash.name} is already in your pantry. Edit that item instead, or pick another name.`)
+  }
+  Object.assign(item, edits)
   if (req.body.name !== undefined) item.normalizedName = normalizeIngredient(req.body.name)
   await item.save() // runs validation
   res.json({ items: await loadPantry(req.userId) })
@@ -601,3 +613,4 @@ module.exports.normalizeIngredient = normalizeIngredient
 module.exports.scoreRecipe = scoreRecipe
 module.exports.rankRecipes = rankRecipes
 module.exports.getSavedPreferences = getSavedPreferences
+module.exports.checkEdits = checkEdits

@@ -1,86 +1,159 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import logo from '@/assets/foodforthought-logo-horizontal.svg'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
-const isAdmin = computed(() => auth.user?.role === 'admin')
-const displayName = computed(() => auth.user?.name || 'Guest')
-const menuOpen = ref(false)
+
+// No navbar on the login, register and landing pages,
+// or on the admin dashboard (it has its own sidebar, like an admin console)
+const showMainNav = computed(() => !['/login', '/register', '/home', '/admindashboard'].includes(route.path))
+const isLoggedIn = computed(() => Boolean(auth.token))
+const isAdmin = computed(() => isLoggedIn.value && auth.user?.role === 'admin')
+const displayName = computed(() => auth.user?.name || 'Your account')
+// "Eleen Chia" -> "EC", shown in the avatar circle (no external image needed)
+const initials = computed(() =>
+  (auth.user?.name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join(''),
+)
+
+// Main links, in the order a week goes: overview -> plan -> shop -> stock -> find recipes.
+// The same list feeds the navbar and the footer, so they always match.
+const NAV_LINKS = [
+  { to: '/dashboard', label: 'Dashboard', icon: 'space_dashboard' },
+  { to: '/planner', label: 'Weekly Plan', icon: 'calendar_month' },
+  { to: '/shoppinglist', label: 'Shopping List', icon: 'shopping_basket' },
+  { to: '/pantry', label: 'Pantry', icon: 'kitchen' },
+  { to: '/recipes', label: 'Recipes', icon: 'menu_book' },
+  { to: '/community', label: 'Community', icon: 'groups' },
+]
+
+const menuOpen = ref(false) // phone / tablet: the collapsed menu panel
+const userMenuOpen = ref(false) // desktop: the account dropdown
+const userMenu = ref(null)
+
+// Any navigation closes both menus
+watch(() => route.fullPath, () => {
+  menuOpen.value = false
+  userMenuOpen.value = false
+})
+
+// Clicking outside the account dropdown, or pressing Esc, closes it
+function onDocumentClick(e) {
+  if (userMenuOpen.value && userMenu.value && !userMenu.value.contains(e.target)) userMenuOpen.value = false
+}
+function onKeydown(e) {
+  if (e.key === 'Escape') {
+    userMenuOpen.value = false
+    menuOpen.value = false
+  }
+}
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+})
 
 function handleLogout() {
   auth.logout()
   menuOpen.value = false
+  userMenuOpen.value = false
   router.push('/home')
 }
 </script>
 
 <template>
   <header v-if="showMainNav" class="app-navbar sticky-top">
-    <nav class="navbar navbar-expand-xl app-navbar-bar">
-      <div class="container-fluid px-3 px-lg-4">
+    <nav class="navbar navbar-expand-xl app-navbar-bar" aria-label="Main">
+      <div class="container-fluid px-3 px-lg-4 app-nav-container">
         <div class="app-nav-row">
-          <RouterLink to="/dashboard" class="navbar-brand app-brand" @click="menuOpen = false">
+          <RouterLink to="/dashboard" class="navbar-brand app-brand">
             <img :src="logo" alt="FoodForThought home" class="app-logo" />
           </RouterLink>
 
           <button class="navbar-toggler app-toggler" type="button" aria-controls="mainNav" :aria-expanded="menuOpen"
-            aria-label="Toggle navigation" @click="menuOpen = !menuOpen">
-            <span class="navbar-toggler-icon"></span>
+            :aria-label="menuOpen ? 'Close menu' : 'Open menu'" @click="menuOpen = !menuOpen">
+            <span class="material-symbols-outlined" aria-hidden="true">{{ menuOpen ? 'close' : 'menu' }}</span>
           </button>
         </div>
 
-        <div id="mainNav" class="collapse navbar-collapse" :class="{ show: menuOpen }">
-          <div class="app-main-nav">
-            <ul class="navbar-nav app-nav">
-              <li v-if="isAdmin" class="nav-item">
-                <RouterLink to="/admindashboard" class="nav-link app-nav-link" @click="menuOpen = false">Admin
-                </RouterLink>
-              </li>
-              <li class="nav-item">
-                <RouterLink to="/planner" class="nav-link app-nav-link" @click="menuOpen = false">Weekly Plan
-                </RouterLink>
-              </li>
-              <li class="nav-item">
-                <RouterLink to="/shoppinglist" class="nav-link app-nav-link" @click="menuOpen = false">Shopping List
-                </RouterLink>
-              </li>
-              <li class="nav-item">
-                <RouterLink to="/dashboard" class="nav-link app-nav-link" @click="menuOpen = false">Dashboard
-                </RouterLink>
-              </li>
-              <li class="nav-item">
-                <RouterLink to="/pantry" class="nav-link app-nav-link" @click="menuOpen = false">Pantry</RouterLink>
-              </li>
-              <li class="nav-item">
-                <RouterLink to="/recipes" class="nav-link app-nav-link" @click="menuOpen = false">Recipes</RouterLink>
-              </li>
-              <li class="nav-item">
-                <RouterLink to="/community" class="nav-link app-nav-link" @click="menuOpen = false">Community
-                </RouterLink>
-              </li>
-            </ul>
+        <div id="mainNav" class="collapse navbar-collapse app-collapse" :class="{ show: menuOpen }">
+          <!-- Main links: the grey pill only wraps the links, it doesn't stretch across the bar -->
+          <ul class="navbar-nav app-nav">
+            <li v-for="link in NAV_LINKS" :key="link.to" class="nav-item">
+              <RouterLink :to="link.to" class="nav-link app-nav-link">
+                <span class="material-symbols-outlined app-nav-icon" aria-hidden="true">{{ link.icon }}</span>
+                {{ link.label }}
+              </RouterLink>
+            </li>
+          </ul>
 
-            <div class="app-user-controls">
-              <div class="d-flex align-items-center gap-3">
-                <RouterLink
-                  to="/profile"
-                  class="app-profile-link"
-                  aria-label="View profile"
-                  @click="menuOpen = false"
-                >
-                  <img
-                    class="app-avatar"
-                    alt="Profile"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30"
-                  />
-                </RouterLink>
-                <span class="d-none d-md-inline text-success">{{ displayName }}</span>
+          <!-- Right side: admin tools (admins only), then the account menu or Log in -->
+          <div class="app-user-controls">
+            <RouterLink v-if="isAdmin" to="/admindashboard" class="app-admin-link" title="Admin dashboard">
+              <span class="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
+              Admin
+            </RouterLink>
+
+            <template v-if="isLoggedIn">
+              <!-- Desktop: account dropdown -->
+              <div ref="userMenu" class="app-user-menu d-none d-xl-block">
+                <button type="button" class="app-user-button" :aria-expanded="userMenuOpen" aria-haspopup="menu"
+                  @click="userMenuOpen = !userMenuOpen">
+                  <span class="app-avatar" aria-hidden="true">{{ initials }}</span>
+                  <span class="app-user-name">{{ displayName }}</span>
+                  <span class="material-symbols-outlined app-user-chevron" aria-hidden="true">expand_more</span>
+                </button>
+                <div v-if="userMenuOpen" class="app-user-dropdown" role="menu">
+                  <RouterLink to="/profile" class="app-menu-item" role="menuitem">
+                    <span class="material-symbols-outlined" aria-hidden="true">person</span>Profile
+                  </RouterLink>
+                  <RouterLink to="/preferences" class="app-menu-item" role="menuitem">
+                    <span class="material-symbols-outlined" aria-hidden="true">nutrition</span>Dietary preferences
+                  </RouterLink>
+                  <hr class="app-menu-divider" />
+                  <button type="button" class="app-menu-item app-menu-item--logout" role="menuitem" @click="handleLogout">
+                    <span class="material-symbols-outlined" aria-hidden="true">logout</span>Log out
+                  </button>
+                </div>
               </div>
+
+              <!-- Phone / tablet: the same options, listed in the menu panel -->
+              <div class="app-user-panel d-xl-none">
+                <div class="app-user-panel-head">
+                  <span class="app-avatar" aria-hidden="true">{{ initials }}</span>
+                  <span class="app-user-name">{{ displayName }}</span>
+                </div>
+                <RouterLink to="/profile" class="app-menu-item">
+                  <span class="material-symbols-outlined" aria-hidden="true">person</span>Profile
+                </RouterLink>
+                <RouterLink to="/preferences" class="app-menu-item">
+                  <span class="material-symbols-outlined" aria-hidden="true">nutrition</span>Dietary preferences
+                </RouterLink>
+                <button type="button" class="app-menu-item app-menu-item--logout" @click="handleLogout">
+                  <span class="material-symbols-outlined" aria-hidden="true">logout</span>Log out
+                </button>
+              </div>
+            </template>
+
+            <!-- Not logged in -->
+            <div v-else class="app-auth-buttons">
+              <RouterLink to="/register" class="app-signup-link">Create account</RouterLink>
+              <RouterLink to="/login" class="app-login-button">
+                <span class="material-symbols-outlined" aria-hidden="true">login</span>
+                Log in
+              </RouterLink>
             </div>
           </div>
         </div>
@@ -90,6 +163,9 @@ function handleLogout() {
 
   <RouterView />
 
+  <!-- themed "Are you sure?" popup, opened from any page with useConfirm() -->
+  <ConfirmDialog />
+
   <footer v-if="showMainNav" class="app-footer">
     <div
       class="container-fluid px-3 px-md-4 py-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 text-center text-md-start">
@@ -97,12 +173,8 @@ function handleLogout() {
         <img :src="logo" alt="FoodForThought" class="app-footer-logo" />
       </div>
 
-      <nav class="d-flex flex-wrap justify-content-center gap-3 gap-md-4">
-        <RouterLink to="/planner" class="app-footer-link">Weekly Plan</RouterLink>
-        <RouterLink to="/shoppinglist" class="app-footer-link">Shopping List</RouterLink>
-        <RouterLink to="/dashboard" class="app-footer-link">Dashboard</RouterLink>
-        <RouterLink to="/pantry" class="app-footer-link">Pantry</RouterLink>
-        <RouterLink to="/recipes" class="app-footer-link">Recipes</RouterLink>
+      <nav class="d-flex flex-wrap justify-content-center gap-3 gap-md-4" aria-label="Footer">
+        <RouterLink v-for="link in NAV_LINKS" :key="link.to" :to="link.to" class="app-footer-link">{{ link.label }}</RouterLink>
       </nav>
 
       <div class="app-footer-copy">© {{ new Date().getFullYear() }} FoodForThought. All rights reserved.</div>
@@ -111,8 +183,6 @@ function handleLogout() {
 </template>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 /* Undo the Vue starter layout (main.css turns #app into a 2-column grid at >=1024px) */
 body {
@@ -126,6 +196,7 @@ body {
   /* column layout so the footer can stick to the bottom */
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   grid-template-columns: none !important;
   max-width: none !important;
   margin: 0 !important;
@@ -139,10 +210,10 @@ body {
   --nav-on-surface-variant: #424842;
   --nav-outline: #727972;
   --nav-primary: #32533c;
+  --nav-primary-hover: #4a6b53;
   --nav-primary-container: #4a6b53;
-  --nav-on-primary-container: #c5eacc;
+  --nav-on-primary-container: #ffffff;
   --nav-primary-fixed: #c7ecce;
-  --nav-secondary: #a23e18;
 
   background: rgba(250, 250, 243, 0.92);
   backdrop-filter: blur(20px);
@@ -150,200 +221,6 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
-.app-navbar-bar {
-  min-height: 72px;
-}
-
-@media (min-width: 768px) {
-  .app-navbar-bar {
-    min-height: 80px;
-  }
-}
-
-.app-brand {
-  display: flex;
-  align-items: center;
-  margin-right: 0;
-  border-radius: 0.5rem;
-  transition: opacity 0.18s ease;
-}
-
-.app-brand:hover {
-  opacity: 0.85;
-}
-
-.app-brand:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--nav-primary);
-}
-
-/* Logo is about 5:1 (wide), so height drives the size and width follows.
-   32px tall on phones (~165px wide), up to 40px on large screens (~205px wide). */
-.app-logo {
-  display: block;
-  height: clamp(32px, 3vw, 40px);
-  width: auto;
-}
-
-.app-toggler {
-  border: 0;
-  background: var(--nav-surface-low);
-  border-radius: 0.5rem;
-  flex-shrink: 0;
-}
-
-.app-toggler:focus {
-  box-shadow: 0 0 0 2px var(--nav-primary);
-}
-
-/* Brand + hamburger row. Its width is set to 100% only when collapsed (see the
-   max-width: 1199.98px block below) so it doesn't squash the links on desktop. */
-.app-nav-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-shrink: 0;
-}
-
-.app-main-nav {
-  display: flex;
-  align-items: center;
-  /* "safe" stops the row from overflowing off the left edge if it ever gets too wide */
-  justify-content: safe center;
-  width: 100%;
-  gap: 1rem;
-  flex-wrap: nowrap;
-}
-
-.app-nav {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 4px;
-  background: var(--nav-surface-low);
-  border-radius: 0.5rem;
-  min-width: 0;
-  margin: 0 auto;
-}
-
-.app-user-controls {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.app-nav-link {
-  padding: 0.55rem 0.8rem !important;
-  border-radius: 0.75rem;
-  font: 600 0.875rem/1.35 'Inter', sans-serif;
-  letter-spacing: 0.01em;
-  color: var(--nav-on-surface-variant) !important;
-  white-space: nowrap;
-  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-
-.app-nav-link:hover {
-  background: var(--nav-surface-high);
-  color: var(--nav-on-surface) !important;
-  transform: translateY(-1px);
-}
-
-.app-nav-link.router-link-active {
-  background: var(--nav-primary-container);
-  color: var(--nav-on-primary-container) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* Logout: a muted brick red that sits with the earthy green palette,
-   sized and shaped like the nav links so the row lines up */
-.app-logout-button {
-  --logout-red: #b3261e;
-  --logout-red-dark: #8c1d18;
-
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem 1rem;
-  background: var(--logout-red);
-  border: 0;
-  border-radius: 0.75rem;
-  color: #ffffff !important;
-  font: 600 0.875rem/1.35 'Inter', sans-serif;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-}
-
-.app-logout-button .material-symbols-outlined {
-  font-size: 1.1rem;
-}
-
-.app-logout-button:hover {
-  background: var(--logout-red-dark);
-  color: #ffffff !important;
-  box-shadow: 0 4px 10px rgba(140, 29, 24, 0.25);
-  transform: translateY(-1px);
-}
-
-.app-logout-button:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* Keyboard focus ring, matching the toggler's focus style */
-.app-logout-button:focus-visible {
-  background: var(--logout-red-dark);
-  color: #ffffff !important;
-  box-shadow: 0 0 0 2px #fafaf3, 0 0 0 4px var(--logout-red);
-}
-
-/* Collapsed navbar (below xl = 1200px), matching navbar-expand-xl */
-@media (max-width: 1199.98px) {
-  /* Brand row spans the full bar so the hamburger sits in the right corner */
-  .app-nav-row {
-    width: 100%;
-  }
-
-  /* Open menu floats as a panel under the bar instead of pushing content down */
-  .app-navbar .navbar-collapse {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    padding: 8px 16px 16px;
-    background: #fafaf3;
-    border-radius: 0 0 1rem 1rem;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-  }
-
-  /* Stack the links above the user controls inside the dropdown */
-  .app-main-nav {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .app-nav {
-    width: 100%;
-    align-items: stretch;
-  }
-
-  .app-user-controls {
-    justify-content: space-between;
-    width: 100%;
-    margin-left: 0;
-    padding-top: 0.25rem;
-  }
-}
-
-/* Avatar + icon font */
 .app-navbar .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
@@ -353,12 +230,289 @@ body {
   user-select: none;
 }
 
+.app-navbar-bar { min-height: 72px; }
+
+.app-nav-container { position: relative; }
+
+/* ----- Logo + hamburger ----- */
+.app-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  margin-right: 0;
+  border-radius: 0.5rem;
+  transition: opacity 0.18s ease;
+}
+.app-brand:hover { opacity: 0.85; }
+.app-brand:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nav-primary); }
+
+/* Logo is about 5:1 (wide): 32px tall on phones, up to 40px on large screens */
+.app-logo {
+  display: block;
+  height: clamp(32px, 3vw, 40px);
+  width: auto;
+}
+
+.app-toggler {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--nav-surface-low);
+  color: var(--nav-on-surface);
+  flex-shrink: 0;
+}
+.app-toggler .material-symbols-outlined { font-size: 26px; }
+.app-toggler:focus { box-shadow: none; }
+.app-toggler:focus-visible { box-shadow: 0 0 0 2px var(--nav-primary); }
+
+/* ----- Main links ----- */
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 4px;
+  background: var(--nav-surface-low);
+  border-radius: 0.875rem;
+}
+
+.app-nav-link {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem !important;
+  border-radius: 0.65rem;
+  font: 600 0.875rem/1.35 'Inter', sans-serif;
+  letter-spacing: 0.01em;
+  color: var(--nav-on-surface-variant) !important;
+  white-space: nowrap;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+.app-nav-icon { font-size: 18px; }
+.app-nav-link:hover { background: var(--nav-surface-high); color: var(--nav-on-surface) !important; }
+.app-nav-link:focus-visible { outline: 2px solid var(--nav-primary); outline-offset: 1px; }
+.app-nav-link.router-link-active {
+  background: var(--nav-primary-container);
+  color: var(--nav-on-primary-container) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ----- Right side ----- */
+.app-user-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Admin: separate from the main links, with its own darker look, so it's clearly a staff tool */
+.app-admin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.8rem;
+  border: 1.5px solid #3b4a63;
+  border-radius: 0.65rem;
+  color: #3b4a63;
+  font: 600 0.8125rem/1.35 'Inter', sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.18s, color 0.18s;
+}
+.app-admin-link .material-symbols-outlined { font-size: 18px; }
+.app-admin-link:hover,
+.app-admin-link.router-link-active { background: #3b4a63; color: #fff; }
+.app-admin-link:focus-visible { outline: 2px solid #3b4a63; outline-offset: 2px; }
+
 .app-avatar {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   border-radius: 50%;
-  object-fit: cover;
+  background: var(--nav-primary);
+  color: #fff;
+  font: 600 13px/1 'Outfit', sans-serif;
+  letter-spacing: 0.02em;
   box-shadow: 0 0 0 2px var(--nav-primary-fixed);
+}
+
+.app-user-name {
+  font: 600 0.875rem/1.3 'Inter', sans-serif;
+  color: var(--nav-on-surface);
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Desktop account dropdown */
+.app-user-menu { position: relative; }
+.app-user-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 4px 8px 4px 4px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  transition: background-color 0.18s;
+}
+.app-user-button:hover,
+.app-user-button[aria-expanded='true'] { background: var(--nav-surface-low); }
+.app-user-button:focus-visible { outline: 2px solid var(--nav-primary); outline-offset: 2px; }
+.app-user-chevron { font-size: 20px; color: var(--nav-outline); transition: transform 0.18s; }
+.app-user-button[aria-expanded='true'] .app-user-chevron { transform: rotate(180deg); }
+
+.app-user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 1040;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(26, 28, 24, 0.16), 0 0 0 1px rgba(26, 28, 24, 0.05);
+}
+
+.app-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--nav-on-surface);
+  font: 500 0.875rem/1.3 'Inter', sans-serif;
+  text-align: left;
+  text-decoration: none;
+}
+.app-menu-item .material-symbols-outlined { font-size: 20px; color: var(--nav-outline); }
+.app-menu-item:hover { background: var(--nav-surface-low); color: var(--nav-on-surface); }
+.app-menu-item:focus-visible { outline: 2px solid var(--nav-primary); outline-offset: -2px; }
+.app-menu-item--logout,
+.app-menu-item--logout .material-symbols-outlined { color: #a23e18; }
+.app-menu-divider { margin: 4px 6px; border-color: var(--nav-surface-high); opacity: 1; }
+
+/* Logged out */
+.app-auth-buttons { display: flex; align-items: center; gap: 0.5rem; }
+.app-signup-link {
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.65rem;
+  color: var(--nav-primary);
+  font: 600 0.875rem/1.35 'Inter', sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.app-signup-link:hover { background: var(--nav-surface-low); color: var(--nav-primary); }
+.app-login-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.75rem;
+  background: var(--nav-primary);
+  color: #fff;
+  font: 600 0.875rem/1.35 'Inter', sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.18s;
+}
+.app-login-button .material-symbols-outlined { font-size: 18px; }
+.app-login-button:hover { background: var(--nav-primary-hover); color: #fff; }
+.app-signup-link:focus-visible,
+.app-login-button:focus-visible { outline: 2px solid var(--nav-primary); outline-offset: 2px; }
+
+/* ----- Desktop (xl, 1200px+): logo | links (centred) | account ----- */
+@media (min-width: 1200px) {
+  .app-navbar-bar { min-height: 80px; }
+
+  .app-collapse {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  /* the pill only wraps its links and sits in the middle of the free space */
+  .app-nav {
+    flex: 0 0 auto;
+    margin: 0 auto;
+  }
+}
+
+/* A little tighter between 1200 and 1400px so everything fits on one line */
+@media (min-width: 1200px) and (max-width: 1399.98px) {
+  .app-nav-link { padding: 0.5rem 0.6rem !important; font-size: 0.8125rem; }
+  .app-nav-icon { display: none; }
+  .app-user-name { display: none; }
+}
+
+/* ----- Phone / tablet (below 1200px): hamburger opens a panel ----- */
+@media (max-width: 1199.98px) {
+  .app-nav-row { width: 100%; }
+
+  /* Panel floats under the bar instead of pushing the page down */
+  .app-navbar .app-collapse {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: calc(100vh - 72px);
+    max-height: calc(100dvh - 72px);
+    overflow-y: auto;
+    padding: 8px 16px 16px;
+    background: #fafaf3;
+    border-radius: 0 0 1rem 1rem;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  /* links stacked; each highlight only wraps its own label + icon, not the whole panel width */
+  .app-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    background: transparent;
+    padding: 0;
+  }
+
+  .app-nav-link { padding: 0.75rem 0.85rem !important; font-size: 0.9375rem; }
+  .app-nav-icon { font-size: 20px; }
+
+  .app-user-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--nav-surface-high);
+  }
+
+  .app-admin-link { justify-content: center; padding: 0.65rem; }
+
+  .app-user-panel { display: flex; flex-direction: column; gap: 2px; }
+  .app-user-panel-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.75rem 0.6rem; }
+  .app-user-panel .app-user-name { max-width: none; }
+
+  .app-auth-buttons { flex-direction: column-reverse; align-items: stretch; }
+  .app-login-button,
+  .app-signup-link { justify-content: center; text-align: center; padding: 0.75rem; }
 }
 
 /* Footer (margin-top: auto pushes it to the bottom on short pages) */
@@ -400,20 +554,5 @@ body {
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.03em;
   color: #727972;
-}
-
-.app-profile-link {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.app-profile-link:hover .app-avatar {
-  transform: scale(1.08);
-}
-
-.app-avatar {
-  transition: transform 0.2s ease;
 }
 </style>
