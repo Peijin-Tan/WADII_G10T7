@@ -18,6 +18,7 @@ const User = require('../../models/User')
 const PantryShare = require('../../models/PantryShare')
 const PantryRequest = require('../../models/PantryRequest')
 const requireAuth = require('../middleware/auth') // same path as Planner.js
+const { getApprovedPantryChange, normalizePantryItemName } = require('../services/pantryrequestapproval')
 
 const router = express.Router()
 
@@ -295,10 +296,37 @@ router.patch('/requests/:requestId', handle(async (req, res) => {
   }
 
   if (status === 'approved') {
-    for (const item of request.items || []) {
-      if (!item?.itemId && !item?.name) continue
+    const { requesterAdditions, ownerDeductions } = getApprovedPantryChange(request.requestType, request.items || [])
 
-      const normalizedName = normalizeIngredient(item.name || 'item')
+    for (const item of ownerDeductions) {
+      const normalizedName = normalizePantryItemName(item.name)
+      const quantity = Number(item.quantity || 1)
+
+      if (!Number.isFinite(quantity) || quantity <= 0) continue
+
+      const pantryItem = await Pantry.findOne({ user: request.owner, normalizedName })
+      if (!pantryItem) {
+        throw httpError(409, `Not enough ${item.name} left in this pantry to approve this request.`)
+      }
+
+      const currentQty = Number(pantryItem.quantity || 0)
+      if (currentQty < quantity) {
+        throw httpError(409, `Not enough ${item.name} left in this pantry to approve this request.`)
+      }
+
+      const remainingQty = currentQty - quantity
+      if (remainingQty <= 0) {
+        await Pantry.deleteOne({ _id: pantryItem._id })
+      } else {
+        pantryItem.quantity = Math.round((remainingQty) * 1000) / 1000
+        if (item.unit) pantryItem.unit = item.unit
+        if (item.name) pantryItem.name = item.name
+        await pantryItem.save()
+      }
+    }
+
+    for (const item of requesterAdditions) {
+      const normalizedName = normalizePantryItemName(item.name)
       const quantity = Number(item.quantity || 1)
 
       if (!Number.isFinite(quantity) || quantity <= 0) continue
@@ -469,14 +497,14 @@ router.post('/requests', handle(async (req, res) => {
     throw httpError(400, 'Neighbour and request type are required.')
   }
 
-  if (!['buy', 'borrow', 'takeover'].includes(requestType)) {
-    throw httpError(400, 'Request type must be buy, borrow, or takeover.')
+  if (!['borrow', 'takeover'].includes(requestType)) {
+    throw httpError(400, 'Request type must be borrow or takeover.')
   }
 
   const selectedItems = Array.isArray(items) ? items : []
   const hasSelectedItems = selectedItems.length > 0
 
-  if (['borrow', 'takeover'].includes(requestType) && !hasSelectedItems) {
+  if (!hasSelectedItems) {
     throw httpError(400, 'Please select at least one item to borrow or take over.')
   }
 
@@ -488,10 +516,6 @@ router.post('/requests', handle(async (req, res) => {
 
   if (!share) {
     throw httpError(403, 'You need an active neighbour connection before making a pantry request.')
-  }
-
-  if (requestType === 'buy' && !share.canBuy) {
-    throw httpError(403, 'This neighbour has disabled buy requests.')
   }
 
   if (requestType === 'borrow' && !share.canBorrow) {
