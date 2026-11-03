@@ -263,8 +263,7 @@ onUnmounted(() => {
                   :to="'/recipes/' + currentRecipe.recipeId"
                 >
                   <img
-                    v-if="currentRecipe.image"
-                    :src="currentRecipe.image"
+                    v-recipe-img="currentRecipe.image"
                     :alt="currentRecipe.title"
                     class="recipe-image mb-3"
                   >

@@ -36,13 +36,9 @@ router.get('/', async (req, res) => {
   }
 })
 
+// DELETE /posts/:id — the post's author or an admin.
+// (There used to be three DELETE /:id handlers; Express only ever ran the first, admin-only one.)
 router.delete('/:id', requireAuth, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
-      message: 'Admin access required to delete posts'
-    })
-  }
-
   const { id } = req.params
 
   if (!mongoose.isObjectIdOrHexString(id)) {
@@ -52,13 +48,22 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 
   try {
-    const deletedPost = await Post.findByIdAndDelete(id)
+    const post = await Post.findById(id).select('userId')
 
-    if (!deletedPost) {
+    if (!post) {
       return res.status(404).json({
         message: 'Post not found'
       })
     }
+
+    const isAuthor = post.userId?.toString() === req.user._id.toString()
+    if (!isAuthor && req.user.role !== 'admin') {
+      return res.status(403).json({
+        message: 'You can only delete your own posts'
+      })
+    }
+
+    await Post.deleteOne({ _id: id })
 
     return res.json({
       message: 'Post deleted successfully',
@@ -295,58 +300,6 @@ router.post('/', requireAuth, async (req, res) => {
     })
   }
 })
-router.delete('/:id', requireAuth, async (req, res) => {
-  const postId = req.params.id
-
-  if (!mongoose.isValidObjectId(postId)) {
-    return res.status(400).json({
-      message: 'Invalid post ID'
-    })
-  }
-
-  try {
-    const post = await Post.findById(postId)
-
-    if (!post) {
-      return res.status(404).json({
-        message: 'This post is no longer available'
-      })
-    }
-
-    if (post.userId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        message: 'You can only delete your own posts'
-      })
-    }
-
-    // Delete the post and its likes together.
-    await mongoose.connection.transaction(async (session) => {
-      await Post.deleteOne(
-        {
-          _id: postId,
-          userId: req.user._id
-        },
-        { session }
-      )
-
-      await Like.deleteMany(
-        { postId: postId },
-        { session }
-      )
-    })
-
-    return res.json({
-      message: 'Post deleted successfully'
-    })
-  } catch (err) {
-    console.error(err)
-
-    return res.status(500).json({
-      message: 'Failed to delete post'
-    })
-  }
-})
-
 // GET /posts/liked — posts the logged-in user has liked
 router.get('/liked', requireAuth, async (req, res) => {
   try {
@@ -484,30 +437,6 @@ router.get('/:id', async (req, res) => {
     return res.status(500).json({
       message: 'Failed to retrieve recipe post'
     })
-  }
-})
-
-router.delete('/:id', requireAuth, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Admin access required to delete posts.' })
-  }
-
-  try {
-    const { id } = req.params
-
-    const deletedPost = await Post.findByIdAndDelete(id)
-
-    if (!deletedPost) {
-      return res.status(404).json({ message: 'Post not found.' })
-    }
-
-    return res.status(200).json({
-      message: 'Post deleted successfully.',
-      deletedPost
-    })
-  } catch (err) {
-    console.error('Delete post error:', err)
-    return res.status(500).json({ message: 'Server error while deleting post.' })
   }
 })
 

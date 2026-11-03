@@ -140,11 +140,6 @@ function describePantryUpdate(update, title) {
 /* ---------- Turning API entries into what the cards + modals need ---------- */
 const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack']
 // Shown when a recipe has no photo (custom meals, user recipes without an image)
-const MEAL_PLACEHOLDER = '/img/meal-placeholder.svg'
-// A broken image link (e.g. an old Spoonacular URL) falls back to the placeholder instead of a broken icon
-function usePlaceholder(e) {
-  if (!e.target.src.endsWith(MEAL_PLACEHOLDER)) e.target.src = MEAL_PLACEHOLDER
-}
 const SLOT_PILL = { breakfast: 'fft-pill-gray', lunch: 'fft-pill-green', dinner: 'fft-pill-amber', snack: 'fft-pill-peach' }
 
 const entries = computed(() =>
@@ -640,8 +635,8 @@ async function sendToGrocery() {
                     <div class="d-flex flex-column flex-md-row">
                       <!-- Every card has a photo: the recipe's own, or a placeholder if it has none (or it fails to load) -->
                       <div class="fft-meal-img position-relative flex-shrink-0">
-                        <img :src="entry.recipe.image || MEAL_PLACEHOLDER" :alt="entry.recipe.image ? entry.recipe.title : ''"
-                          class="fft-cover" loading="lazy" @error="usePlaceholder" />
+                        <img v-recipe-img="entry.recipe.image" :alt="entry.recipe.image ? entry.recipe.title : ''"
+                          class="fft-cover" loading="lazy" />
                       </div>
 
                       <div class="p-3 d-flex flex-column gap-2 flex-grow-1 fft-min-0">

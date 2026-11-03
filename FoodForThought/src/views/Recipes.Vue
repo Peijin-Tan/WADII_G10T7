@@ -291,7 +291,7 @@ onMounted(() => {
           >
             <div class="rp-media">
               <img
-                :src="recipe.image || '/img/meal-placeholder.svg'"
+                v-recipe-img="recipe.image"
                 :alt="''"
                 loading="lazy"
               />

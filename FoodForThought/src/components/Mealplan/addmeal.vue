@@ -98,7 +98,7 @@
                 @click="selectRecipe(r)"
               >
                 <div class="d-flex align-items-center gap-3 min-w-0">
-                  <img v-if="r.image" :src="r.image" alt="" class="fft-suggestion-img flex-shrink-0" loading="lazy" />
+                  <img v-if="r.image" v-recipe-img="r.image" alt="" class="fft-suggestion-img flex-shrink-0" loading="lazy" />
                   <span v-else class="fft-suggestion-icon flex-shrink-0">
                     <span class="material-symbols-outlined fs-16">restaurant</span>
                   </span>

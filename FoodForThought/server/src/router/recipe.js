@@ -3,6 +3,8 @@ const express = require('express')
 const mongoose = require('mongoose')
 const Recipe = require('../../models/Recipe')
 const Like = require('../../models/Like')
+const Comment = require('../../models/Comment')
+const Post = require('../../models/Post')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
@@ -357,6 +359,50 @@ router.post('/', requireAuth, async (req, res) => {
       message: 'Failed to create recipe',
       error: error.message
     })
+  }
+})
+
+// DELETE /recipes/:id
+// The recipe's author or an admin. Also removes its comments and likes.
+// Meal plans keep their entry: the planner shows it as "Recipe no longer available" with a Swap button,
+// so nobody loses their cooked history.
+router.delete('/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+
+  if (!mongoose.isValidObjectId(id)) {
+    return res.status(400).json({ message: 'Invalid recipe ID' })
+  }
+
+  try {
+    const recipe = await Recipe.findById(id).select('_id title createdBy externalId')
+
+    if (!recipe) {
+      return res.status(404).json({ message: 'Recipe not found' })
+    }
+
+    const isAuthor = recipe.createdBy && recipe.createdBy.toString() === req.user._id.toString()
+    if (!isAuthor && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'You can only delete your own recipes' })
+    }
+
+    await Recipe.deleteOne({ _id: id })
+
+    // A saved Spoonacular recipe shares its likes with the live API recipe ("spoonacular-<id>"),
+    // which still exists, so only community recipes ("recipe-<id>") lose their likes.
+    const [comments, likes] = await Promise.all([
+      Comment.deleteMany({ recipeId: id }),
+      recipe.externalId == null ? Like.deleteMany({ recipeKey: `recipe-${id}` }) : { deletedCount: 0 },
+      Post.updateMany({ recipeId: id }, { $set: { recipeId: null } }),
+    ])
+
+    return res.json({
+      message: 'Recipe deleted successfully',
+      recipeId: id,
+      removed: { comments: comments.deletedCount, likes: likes.deletedCount },
+    })
+  } catch (error) {
+    console.error('Delete recipe error:', error)
+    return res.status(500).json({ message: 'Failed to delete recipe' })
   }
 })
 

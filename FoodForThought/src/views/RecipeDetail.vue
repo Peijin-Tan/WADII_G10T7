@@ -99,7 +99,7 @@ onMounted(fetchRecipe)
         <!-- ===== Photo + title + key numbers ===== -->
         <header class="rd-hero">
           <div class="rd-photo">
-            <img :src="recipe.image || '/img/meal-placeholder.svg'" :alt="recipe.title" />
+            <img v-recipe-img="recipe.image" :alt="recipe.title" />
           </div>
 
           <div class="rd-intro">

@@ -101,8 +101,7 @@ onMounted(loadPost)
         </div>
 
         <img
-          v-if="post.recipeId.image"
-          :src="post.recipeId.image"
+          v-recipe-img="post.recipeId.image"
           :alt="post.recipeId.title"
           class="recipe-image rounded-4 mb-4"
         >

@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
               <!-- One suggestion card -->
               <div class="fft-card h-100 d-flex flex-column" data-testid="suggestion-card">
                 <div class="position-relative fft-card-img">
-                  <img v-if="r.image" :src="r.image" :alt="r.title" class="w-100 h-100 fft-cover" />
+                  <img v-if="r.image" v-recipe-img="r.image" :alt="r.title" class="w-100 h-100 fft-cover" />
                   <div v-else class="w-100 h-100 d-flex align-items-center justify-content-center fft-bg-gray">
                     <span class="material-symbols-outlined text-fft-outline" style="font-size: 40px">restaurant</span>
                   </div>

@@ -9,8 +9,9 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-// No navbar on the login, register and landing pages
-const showMainNav = computed(() => !['/login', '/register', '/home'].includes(route.path))
+// No navbar on the login, register and landing pages,
+// or on the admin dashboard (it has its own sidebar, like an admin console)
+const showMainNav = computed(() => !['/login', '/register', '/home', '/admindashboard'].includes(route.path))
 const isLoggedIn = computed(() => Boolean(auth.token))
 const isAdmin = computed(() => isLoggedIn.value && auth.user?.role === 'admin')
 const displayName = computed(() => auth.user?.name || 'Your account')

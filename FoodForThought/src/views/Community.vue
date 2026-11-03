@@ -479,16 +479,15 @@ watch(() => auth.token, loadActivity)
                   :to="recipeLink(group.recipe)"
                 >
                   <img
-                    v-if="group.recipe.image"
-                    :src="group.recipe.image"
+                    v-recipe-img="group.recipe.image"
                     :alt="group.recipe.title"
                     class="recipe-image card-img-top"
                   >
                 </RouterLink>
 
                 <img
-                  v-else-if="group.recipe?.image"
-                  :src="group.recipe.image"
+                  v-else-if="group.recipe"
+                  v-recipe-img="group.recipe.image"
                   :alt="group.recipe.title"
                   class="recipe-image card-img-top"
                 >
@@ -697,16 +696,15 @@ watch(() => auth.token, loadActivity)
                   :to="recipeLink(like.recipe)"
                 >
                   <img
-                    v-if="like.recipe.image"
-                    :src="like.recipe.image"
+                    v-recipe-img="like.recipe.image"
                     :alt="like.recipe.title"
                     class="recipe-image card-img-top"
                   >
                 </RouterLink>
 
                 <img
-                  v-else-if="like.recipe?.image"
-                  :src="like.recipe.image"
+                  v-else-if="like.recipe"
+                  v-recipe-img="like.recipe.image"
                   :alt="like.recipe.title"
                   class="recipe-image card-img-top"
                 >

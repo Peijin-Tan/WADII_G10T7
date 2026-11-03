@@ -16,15 +16,8 @@ const UserPreference = require('../../models/UserPreference')
 const Comment = require('../../models/Comment')
 const Like = require('../../models/Like')
 const requireAuth = require('../middleware/auth')
+const requireAdmin = require('../middleware/requireAdmin')
 const router = express.Router()
-
-function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Admin access required.' })
-  }
-
-  next()
-}
 
 // A malformed id would make Mongoose throw (a 500); answer with a clear 400 instead
 function checkId(req, res, next) {
