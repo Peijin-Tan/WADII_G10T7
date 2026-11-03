@@ -18,10 +18,6 @@ export default defineConfig({
 
   server: {
     proxy: {
-      '/posts': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
       '/auth': {
         target: 'http://localhost:8000',
         changeOrigin: true,
@@ -37,6 +33,10 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/img': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/images': {
         target: 'http://localhost:8000',
         changeOrigin: true
       },

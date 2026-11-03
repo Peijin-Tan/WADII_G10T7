@@ -1,0 +1,441 @@
+/*
+ * forms.css: shared look for the simple form pages
+ * (Create Recipe, Dietary Preferences, Profile, Change Password).
+ * Same colours and type as theme.css / the Pantry and login pages, so these pages match the rest of the site.
+ * Loaded once in main.js. Every class starts with "fp-" (form page) so nothing else is affected.
+ */
+
+.fp {
+  --fp-paper: #fafaf3;
+  --fp-surface: #f4f4ed;
+  --fp-surface-2: #e8e9e2;
+  --fp-card: #ffffff;
+  --fp-ink: #1a1c18;
+  --fp-ink-2: #424842;
+  --fp-muted: #727972;
+  --fp-line: #c2c8c0;
+  --fp-line-soft: rgb(194 200 192 / 45%);
+  --fp-leaf: #32533c;
+  --fp-leaf-hover: #4a6b53;
+  --fp-sprout: #c7ecce;
+  --fp-forest: #01210f;
+  --fp-peach: #ffdbcf;
+  --fp-danger: #ba1a1a;
+
+  flex: 1;
+  width: 100%;
+  min-height: 70vh;
+  background: var(--fp-paper);
+  color: var(--fp-ink);
+  font: 400 15px/24px 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.fp-wrap {
+  width: min(880px, 100% - 32px);
+  margin-inline: auto;
+  padding: 32px 0 64px;
+}
+.fp-wrap--narrow {
+  width: min(620px, 100% - 32px);
+}
+
+/* ---------- Page header ---------- */
+.fp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 16px -6px;
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--fp-ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.fp-back:hover {
+  background: var(--fp-surface);
+  color: var(--fp-leaf);
+}
+.fp-back .material-symbols-outlined {
+  font-size: 18px;
+}
+.fp-eyebrow {
+  margin: 0 0 4px;
+  color: var(--fp-leaf);
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.fp-title {
+  margin: 0;
+  font: 600 32px/40px 'Outfit', sans-serif;
+  letter-spacing: -0.02em;
+}
+.fp-lede {
+  max-width: 60ch;
+  margin: 8px 0 0;
+  color: var(--fp-ink-2);
+}
+.fp-head {
+  margin-bottom: 24px;
+}
+
+/* ---------- Cards ---------- */
+.fp-card {
+  padding: 24px;
+  border: 1px solid var(--fp-line-soft);
+  border-radius: 16px;
+  background: var(--fp-card);
+  box-shadow: 0 1px 2px rgb(26 28 24 / 4%);
+}
+.fp-card + .fp-card {
+  margin-top: 16px;
+}
+.fp-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.fp-card-head h2 {
+  margin: 0;
+  font: 600 20px/28px 'Outfit', sans-serif;
+}
+.fp-card-head p {
+  margin: 2px 0 0;
+  color: var(--fp-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+.fp-card-head .fp-count {
+  margin-left: auto;
+}
+.fp-bubble {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--fp-sprout);
+  color: var(--fp-leaf);
+}
+.fp-bubble--peach {
+  background: var(--fp-peach);
+  color: #8a2f10;
+}
+.fp-bubble .material-symbols-outlined {
+  font-size: 22px;
+}
+.fp-count {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: var(--fp-surface);
+  color: var(--fp-ink-2);
+  font: 600 12px/20px 'Inter', sans-serif;
+  white-space: nowrap;
+}
+
+/* ---------- Fields ---------- */
+.fp-field {
+  margin-bottom: 16px;
+}
+.fp-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--fp-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.fp-optional {
+  color: var(--fp-muted);
+  font-weight: 400;
+}
+.fp-input,
+.fp-select,
+.fp-textarea {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--fp-line);
+  border-radius: 12px;
+  background: var(--fp-card);
+  color: var(--fp-ink);
+  font: 400 15px/22px 'Inter', sans-serif;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.fp-input,
+.fp-select {
+  height: 44px;
+  padding: 0 14px;
+}
+.fp-select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23424842' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 14px center;
+  background-repeat: no-repeat;
+}
+.fp-textarea {
+  min-height: 88px;
+  padding: 10px 14px;
+  resize: vertical;
+}
+.fp-input::placeholder,
+.fp-textarea::placeholder {
+  color: #9aa09a;
+}
+.fp-input:hover,
+.fp-select:hover,
+.fp-textarea:hover {
+  border-color: #a3aaa2;
+}
+.fp-input:focus,
+.fp-select:focus,
+.fp-textarea:focus {
+  outline: none;
+  border-color: var(--fp-leaf);
+  box-shadow: 0 0 0 4px rgb(50 83 60 / 14%);
+}
+.fp-input.is-invalid {
+  border-color: var(--fp-danger);
+}
+.fp-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  color: var(--fp-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+.fp-hint .material-symbols-outlined {
+  font-size: 17px;
+}
+.fp-hint.is-error {
+  color: var(--fp-danger);
+}
+.fp-hint.is-ok {
+  color: var(--fp-leaf);
+}
+.fp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 575.98px) {
+  .fp-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+/* input with a "Show/Hide" button inside */
+.fp-input-wrap {
+  position: relative;
+}
+.fp-input-wrap .fp-input {
+  padding-right: 72px;
+}
+.fp-reveal {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  translate: 0 -50%;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fp-leaf);
+  font: 600 13px/1 'Inter', sans-serif;
+}
+.fp-reveal:hover {
+  background: var(--fp-surface);
+}
+
+/* ---------- Buttons ---------- */
+.fp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font: 600 15px/1 'Inter', sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.fp-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+.fp-btn--primary {
+  background: var(--fp-leaf);
+  color: #fff;
+}
+.fp-btn--primary:hover:not(:disabled) {
+  background: var(--fp-leaf-hover);
+  color: #fff;
+}
+.fp-btn--ghost {
+  border-color: var(--fp-line);
+  background: var(--fp-card);
+  color: var(--fp-ink);
+}
+.fp-btn--ghost:hover:not(:disabled) {
+  border-color: var(--fp-leaf);
+  color: var(--fp-leaf);
+}
+.fp-btn--dashed {
+  height: 40px;
+  border: 1px dashed var(--fp-leaf);
+  background: transparent;
+  color: var(--fp-leaf);
+  font-size: 14px;
+}
+.fp-btn--dashed:hover {
+  background: var(--fp-surface);
+}
+.fp-btn--danger {
+  border-color: #f2c4c0;
+  background: var(--fp-card);
+  color: var(--fp-danger);
+}
+.fp-btn--danger:hover {
+  background: #fdecec;
+  color: #93000a;
+}
+.fp-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.fp-btn:focus-visible,
+.fp-icon-btn:focus-visible,
+.fp-back:focus-visible,
+.fp-reveal:focus-visible {
+  outline: 2px solid var(--fp-leaf);
+  outline-offset: 2px;
+}
+.fp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fp-muted);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.fp-icon-btn:hover:not(:disabled) {
+  background: #fdecec;
+  color: var(--fp-danger);
+}
+.fp-icon-btn:disabled {
+  opacity: 0.35;
+}
+.fp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.fp-actions--end {
+  justify-content: flex-end;
+}
+@media (max-width: 575.98px) {
+  .fp-actions .fp-btn {
+    flex: 1 1 auto;
+  }
+}
+.fp-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(255 255 255 / 40%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: fp-spin 700ms linear infinite;
+}
+@keyframes fp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Toggle chips (checkboxes that look like pills) ---------- */
+.fp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.fp-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 16px 8px 12px;
+  border: 1px solid var(--fp-line);
+  border-radius: 9999px;
+  background: var(--fp-card);
+  color: var(--fp-ink-2);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.fp-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.fp-chip .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--fp-muted);
+}
+.fp-chip:hover {
+  border-color: var(--fp-leaf);
+}
+.fp-chip:has(input:checked) {
+  border-color: var(--fp-leaf);
+  background: var(--fp-sprout);
+  color: var(--fp-forest);
+}
+.fp-chip:has(input:checked) .material-symbols-outlined {
+  color: var(--fp-leaf);
+}
+.fp-chip--warn:has(input:checked) {
+  border-color: #c1572c;
+  background: var(--fp-peach);
+  color: #4a1504;
+}
+.fp-chip--warn:has(input:checked) .material-symbols-outlined {
+  color: #a2401a;
+}
+.fp-chip:has(input:focus-visible) {
+  outline: 2px solid var(--fp-leaf);
+  outline-offset: 2px;
+}
+
+/* ---------- Loading / empty ---------- */
+.fp-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 16px;
+  color: var(--fp-muted);
+}
+.fp-loading .fp-spinner {
+  border-color: rgb(50 83 60 / 20%);
+  border-top-color: var(--fp-leaf);
+}

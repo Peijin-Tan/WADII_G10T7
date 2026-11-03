@@ -21,9 +21,10 @@ const recipeSchema = new mongoose.Schema(
       required: true
     },
 
+    // optional: pages show a placeholder photo when it's empty
     image: {
       type: String,
-      required: true
+      default: ''
     },
 
     summary: {

@@ -3,6 +3,7 @@ import { ref, watch, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { useConfirm } from '@/composables/useConfirm'
 
 const props = defineProps({
   recipeId: {
@@ -12,6 +13,7 @@ const props = defineProps({
 })
 
 const auth = useAuthStore()
+const confirm = useConfirm()
 
 const comments = ref([])
 const content = ref('')
@@ -234,7 +236,11 @@ async function deleteComment(comment) {
     return
   }
 
-  const confirmed = window.confirm('Delete this comment?')
+  const confirmed = await confirm({
+    title: 'Delete this comment?',
+    message: 'It will be removed from this recipe for everyone.',
+    confirmText: 'Delete comment',
+  })
 
   if (!confirmed) return
 

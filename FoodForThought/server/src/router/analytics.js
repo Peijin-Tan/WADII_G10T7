@@ -7,6 +7,28 @@ const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
 
+// FoodForThought runs on Singapore time. These give month and day boundaries in Singapore time
+// whatever timezone the server is in (a deployed server is usually UTC, which would otherwise
+// put the first 8 hours of each month or day in the wrong one).
+const SINGAPORE_OFFSET = 8 * 60 * 60 * 1000
+const ONE_DAY = 24 * 60 * 60 * 1000
+
+function singaporeMonth(now = Date.now()) {
+  const sg = new Date(now + SINGAPORE_OFFSET)
+  const year = sg.getUTCFullYear()
+  const month = sg.getUTCMonth()
+  return {
+    start: new Date(Date.UTC(year, month, 1) - SINGAPORE_OFFSET),
+    end: new Date(Date.UTC(year, month + 1, 1) - SINGAPORE_OFFSET),
+  }
+}
+
+// Midnight (Singapore time) at the start of today
+function singaporeToday(now = Date.now()) {
+  const sg = new Date(now + SINGAPORE_OFFSET)
+  return new Date(Date.UTC(sg.getUTCFullYear(), sg.getUTCMonth(), sg.getUTCDate()) - SINGAPORE_OFFSET)
+}
+
 function getRecipeKey(recipe) {
   if (recipe.externalId != null) {
     return 'spoonacular-' + recipe.externalId
@@ -20,12 +42,7 @@ function getRecipeKey(recipe) {
 router.get('/', requireAuth, async (req, res) => {
   try {
     const now = new Date()
-
-    const monthStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
-    )
+    const monthStart = singaporeMonth(now.getTime()).start
 
     const recipes = await Recipe.find({
       source: 'user'
@@ -79,12 +96,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/cuisines', requireAuth, async (req, res) => {
   try {
     const now = new Date()
-
-    const monthStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
-    )
+    const monthStart = singaporeMonth(now.getTime()).start
 
     const recipes = await Recipe.find({
       source: 'user'
@@ -157,23 +169,14 @@ router.get('/cuisines', requireAuth, async (req, res) => {
 router.get('/activity', requireAuth, async (req, res) => {
   try {
     const now = new Date()
-
-    const firstDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    )
-
-    firstDay.setDate(firstDay.getDate() - 6)
+    // today and the six days before it
+    const firstDay = new Date(singaporeToday(now.getTime()).getTime() - 6 * ONE_DAY)
 
     const activity = []
 
     for (let i = 0; i < 7; i++) {
-      const dayStart = new Date(firstDay)
-      dayStart.setDate(dayStart.getDate() + i)
-
-      const dayEnd = new Date(dayStart)
-      dayEnd.setDate(dayEnd.getDate() + 1)
+      const dayStart = new Date(firstDay.getTime() + i * ONE_DAY)
+      const dayEnd = new Date(dayStart.getTime() + ONE_DAY)
 
       const commentCount = await Comment.countDocuments({
         userId: req.user._id,
@@ -215,23 +218,8 @@ router.get('/activity', requireAuth, async (req, res) => {
 router.get('/meal-progress', requireAuth, async (req, res) => {
   try {
     // The meal-plan model stores weekStart at Singapore midnight.
-    const singaporeOffset = 8 * 60 * 60 * 1000
-    const oneDay = 24 * 60 * 60 * 1000
-
-    const singaporeNow = new Date(
-      Date.now() + singaporeOffset
-    )
-
-    const year = singaporeNow.getUTCFullYear()
-    const month = singaporeNow.getUTCMonth()
-
-    const monthStart = new Date(
-      Date.UTC(year, month, 1) - singaporeOffset
-    )
-
-    const monthEnd = new Date(
-      Date.UTC(year, month + 1, 1) - singaporeOffset
-    )
+    const oneDay = ONE_DAY
+    const { start: monthStart, end: monthEnd } = singaporeMonth()
 
     // Include weeks beginning last month that overlap this month.
     const earliestWeekStart = new Date(

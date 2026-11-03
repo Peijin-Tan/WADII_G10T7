@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
 import axios from 'axios'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AuthShell from './AuthShell.vue'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const email = ref('')
@@ -29,8 +30,12 @@ async function handleSubmit() {
     auth.setLogin(response.data)
     password.value = ''
 
+    // Back to the page that sent them to log in (?redirect=/pantry), otherwise their home page.
+    // Only paths on this site ("/..." but not "//other-site.com") are followed.
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
     const isAdmin = auth.user?.role === 'admin'
-    await router.push(isAdmin ? '/admindashboard' : '/dashboard')
+    const home = isAdmin ? '/admindashboard' : '/dashboard'
+    await router.push(redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : home)
   } catch (err) {
     error.value =
       err.response?.data?.message || 'Unable to log in. Please try again.'

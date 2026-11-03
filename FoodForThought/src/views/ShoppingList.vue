@@ -249,7 +249,7 @@ async function togglePurchased(it) {
 }
 
 /* ---------------------------------------------------------------
-   Shopping mode (components/Shopping/shoppingMode.vue)
+   Shopping mode (components/Shopping/ShoppingModeModal.vue)
    Tapping an item there ticks it (togglePurchased above); the server then
    fills in its basket details, which the user can edit before adding to the pantry.
 ---------------------------------------------------------------- */
@@ -612,11 +612,7 @@ async function removeItem(it) {
               <span class="material-symbols-outlined" aria-hidden="true">shopping_cart_checkout</span>
               <span class="d-flex flex-column align-items-start">
                 <span>Start shopping</span>
-<<<<<<< Updated upstream
-                <span class="sw-shop-cta-count">{{ toBuyLeft }} {{ toBuyLeft === 1 ? 'item' : 'items' }} to buy</span>
-=======
                 <span class="sw-shop-cta-count tabular-nums">{{ toBuyLeft }} {{ toBuyLeft === 1 ? 'item' : 'items' }} to buy</span>
->>>>>>> Stashed changes
               </span>
             </button>
           </section>
@@ -750,11 +746,7 @@ async function removeItem(it) {
 @media (min-width: 768px) { .sw-page { padding: 1.5rem; gap: 2.5rem; } }
 
 /* Edge-to-edge page background: same colour as the planner and pantry (#fafaf3) */
-<<<<<<< Updated upstream
-.sw-shell { min-height: 100vh; background: #fafaf3; }
-=======
 .sw-shell { min-height: 100vh; min-height: 100dvh; background: #fafaf3; }
->>>>>>> Stashed changes
 
 /* ---------- Icons (Material Symbols) ---------- */
 .material-symbols-outlined { line-height: 1; vertical-align: middle; user-select: none; }

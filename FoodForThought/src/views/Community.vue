@@ -3,8 +3,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { useConfirm } from '@/composables/useConfirm'
 
 const auth = useAuthStore()
+const confirm = useConfirm()
 const router = useRouter()
 
 const activeTab = ref('comments')
@@ -248,9 +250,11 @@ async function saveComment(comment) {
 async function deleteComment(comment) {
   if (busyCommentIds.value.includes(comment._id)) return
 
-  const confirmed = window.confirm(
-    'Delete this comment? This cannot be undone.'
-  )
+  const confirmed = await confirm({
+    title: 'Delete this comment?',
+    message: "It will be removed from the recipe for everyone. This can't be undone.",
+    confirmText: 'Delete comment',
+  })
 
   if (!confirmed) return
 

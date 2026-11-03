@@ -24,18 +24,8 @@ body {
   font-weight: normal;
 }
 
-a,
-.green {
-  text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
+a {
   transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease;
-  padding: 3px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
-  }
 }
 
 @media (min-width: 1024px) {

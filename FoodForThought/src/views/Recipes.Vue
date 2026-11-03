@@ -16,6 +16,35 @@ const likingRecipeIds = ref([])
 const loadingLikes = ref(true)
 const lastQuery = ref('') // the search shown in "4 results for …"
 
+// The logged-in user's own recipes (shown in "My recipes" with Edit buttons, above the full list)
+const myRecipes = computed(() => {
+  if (!auth.user?._id || searchMode.value) return []
+  return recipes.value.filter((r) =>
+    r.source !== 'spoonacular' && String(r.createdBy?._id || r.createdBy || '') === String(auth.user._id))
+})
+// "My recipes" can be folded away; remembered in this browser (storage can be blocked, so never let it break the page)
+const MINE_KEY = 'fft-my-recipes-collapsed'
+function readCollapsed() {
+  try {
+    return localStorage.getItem(MINE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const mineCollapsed = ref(readCollapsed())
+function toggleMine() {
+  mineCollapsed.value = !mineCollapsed.value
+  try {
+    if (mineCollapsed.value) localStorage.setItem(MINE_KEY, '1')
+    else localStorage.removeItem(MINE_KEY)
+  } catch {
+    /* not remembered, still works */
+  }
+}
+
+const recipeMeta = (r) =>
+  [r.cuisine?.join(', '), r.totalTime ? `${r.totalTime} min` : ''].filter(Boolean).join(' · ')
+
 // Line above the grid, e.g. "3 recipes" or "4 results for "chicken""
 const resultLabel = computed(() => {
   const count = recipes.value.length
@@ -242,6 +271,51 @@ onMounted(() => {
           Search
         </button>
       </form>
+
+      <!-- ===== My recipes (logged in, not while searching). Hide/Show is remembered. ===== -->
+      <section
+        v-if="auth.token && !searchMode && !loading && !error"
+        class="rp-mine"
+        :class="{ 'is-collapsed': mineCollapsed }"
+        aria-labelledby="rp-mine-title"
+      >
+        <div class="rp-mine-head">
+          <h2 id="rp-mine-title" class="rp-mine-title">
+            My recipes
+            <span class="rp-mine-count">{{ myRecipes.length }}</span>
+          </h2>
+          <button
+            type="button"
+            class="rp-mine-toggle"
+            :aria-expanded="!mineCollapsed"
+            aria-controls="rp-mine-body"
+            @click="toggleMine"
+          >
+            {{ mineCollapsed ? 'Show' : 'Hide' }}
+            <span class="material-symbols-outlined" aria-hidden="true">expand_less</span>
+          </button>
+        </div>
+
+        <div v-show="!mineCollapsed" id="rp-mine-body" class="rp-mine-body">
+          <p v-if="myRecipes.length === 0" class="rp-mine-empty">
+            You haven't shared a recipe yet.
+            <RouterLink to="/recipes/create">Create your first one</RouterLink>
+          </p>
+          <ul v-else class="rp-mine-list">
+            <li v-for="recipe in myRecipes" :key="recipe._id" class="rp-mine-item">
+              <img v-recipe-img="recipe.image" alt="" class="rp-mine-thumb" loading="lazy" />
+              <div class="rp-mine-text">
+                <RouterLink :to="`/recipes/${recipe._id}`" class="rp-mine-name">{{ recipe.title }}</RouterLink>
+                <span class="rp-mine-meta">{{ recipeMeta(recipe) }}</span>
+              </div>
+              <RouterLink :to="`/recipes/${recipe._id}/edit`" class="rp-mine-edit" :aria-label="`Edit ${recipe.title}`">
+                <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                Edit
+              </RouterLink>
+            </li>
+          </ul>
+        </div>
+      </section>
 
       <p v-if="likeMessage" class="rp-notice" role="alert">
         <span class="material-symbols-outlined" aria-hidden="true">info</span>
@@ -778,6 +852,168 @@ div.rp-grid {
 
   .rp-card:hover .rp-media img {
     transform: none;
+  }
+}
+
+/* ---------- My recipes ---------- */
+.rp-mine {
+  margin: 20px 0 28px;
+  padding: 16px 18px 18px;
+  border: 1px solid rgb(194 200 192 / 45%);
+  border-radius: 16px;
+  background: var(--fft-card);
+  box-shadow: 0 1px 2px rgb(26 28 24 / 4%);
+}
+.rp-mine.is-collapsed {
+  padding-bottom: 16px;
+}
+.rp-mine-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rp-mine-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 600 18px/26px 'Outfit', sans-serif;
+}
+.rp-mine-count {
+  min-width: 24px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  background: var(--fft-primary-light);
+  color: var(--fft-primary);
+  font: 600 12px/22px 'Inter', sans-serif;
+  text-align: center;
+}
+.rp-mine-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 6px 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fft-secondary-text);
+  font: 600 13px/18px 'Inter', sans-serif;
+}
+.rp-mine-toggle:hover {
+  background: var(--fft-surface-low);
+  color: var(--fft-text);
+}
+.rp-mine-toggle:focus-visible {
+  outline: 2px solid var(--fft-primary);
+  outline-offset: 2px;
+}
+.rp-mine-toggle .material-symbols-outlined {
+  font-size: 20px;
+  transition: transform var(--dur-fast, 150ms) var(--ease-out, ease);
+}
+.rp-mine.is-collapsed .rp-mine-toggle .material-symbols-outlined {
+  transform: rotate(180deg);
+}
+.rp-mine-body {
+  margin-top: 14px;
+}
+.rp-mine-empty {
+  margin: 0;
+  color: var(--fft-secondary-text);
+}
+.rp-mine-empty a {
+  color: var(--fft-primary);
+  font-weight: 600;
+}
+.rp-mine-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-mine-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 10px 10px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--fft-surface-low);
+  transition: border-color var(--dur-fast, 150ms);
+}
+.rp-mine-item:hover {
+  border-color: var(--fft-border);
+}
+.rp-mine-thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--fft-surface-high);
+}
+.rp-mine-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rp-mine-name {
+  overflow: hidden;
+  padding: 0;
+  color: var(--fft-text);
+  font: 600 15px/20px 'Inter', sans-serif;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-mine-name:hover {
+  color: var(--fft-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rp-mine-meta {
+  overflow: hidden;
+  color: var(--fft-muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-mine-edit {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border: 1px solid var(--fft-border);
+  border-radius: 10px;
+  background: var(--fft-card);
+  color: var(--fft-primary);
+  font: 600 13px/16px 'Inter', sans-serif;
+  text-decoration: none;
+  transition: border-color var(--dur-fast, 150ms), background-color var(--dur-fast, 150ms);
+}
+.rp-mine-edit:hover {
+  border-color: var(--fft-primary);
+  background: var(--fft-primary-light);
+  color: var(--fft-primary);
+}
+.rp-mine-edit:focus-visible {
+  outline: 2px solid var(--fft-primary);
+  outline-offset: 2px;
+}
+.rp-mine-edit .material-symbols-outlined {
+  font-size: 16px;
+}
+@media (max-width: 575.98px) {
+  .rp-mine-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

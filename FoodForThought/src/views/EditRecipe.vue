@@ -1,291 +1,85 @@
-
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+/* Edit Recipe (/recipes/:id/edit, logged-in users only).
+   Opened from "My recipes" on the Recipes page, or the Edit button on a recipe you own.
+   Its author or an admin can edit; PUT /recipes/:id checks this again on the server.
+   The form is components/RecipeForm.vue (shared with Create Recipe). */
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { useConfirm } from '@/composables/useConfirm'
+import RecipeForm from '@/components/RecipeForm.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const confirm = useConfirm()
 
 const recipeId = route.params.id
+const backTo = `/recipes/${recipeId}`
+const headers = () => ({ Authorization: `Bearer ${auth.token}` })
 
-const title = ref('')
-const image = ref('')
-const imagePreview = ref('')
-const summary = ref('')
-const cuisine = ref('Chinese')
-const servings = ref(2)
-const prepTime = ref(10)
-const cookingTime = ref(15)
+const recipe = ref(null)
+const loading = ref(true)
+const loadError = ref('') // can't edit at all (not found / not yours)
+const saving = ref(false)
+const saveError = ref('')
+const deleting = ref(false)
 
-const ingredients = ref([])
-const instructions = ref([])
+const isAdmin = computed(() => auth.user?.role === 'admin')
+const isOwner = computed(() => String(recipe.value?.createdBy?._id || recipe.value?.createdBy || '') === String(auth.user?._id || ''))
 
-const dietaryOptions = [
-  'Vegetarian',
-  'Vegan',
-  'Gluten-Free',
-  'Dairy-Free',
-  'Pescatarian',
-  'Keto'
-]
-
-const dietaryCategories = ref([])
-
-const allergenOptions = [
-  'Peanuts',
-  'Tree Nuts',
-  'Milk',
-  'Eggs',
-  'Soy',
-  'Wheat',
-  'Fish',
-  'Shellfish',
-  'Sesame'
-]
-
-const allergens = ref([])
-
-const nutritionOptions = [
-  { name: 'Calories', unit: 'kcal' },
-  { name: 'Protein', unit: 'g' },
-  { name: 'Carbohydrates', unit: 'g' },
-  { name: 'Fat', unit: 'g' },
-  { name: 'Saturated Fat', unit: 'g' },
-  { name: 'Fiber', unit: 'g' },
-  { name: 'Sugar', unit: 'g' },
-  { name: 'Sodium', unit: 'mg' }
-]
-
-const nutrition = ref([])
-
-const loading = ref(false)
-const loadingRecipe = ref(true)
-const imageUploading = ref(false)
-const error = ref('')
-const success = ref('')
-
-// Retrieve existing recipe
 async function fetchRecipe() {
-  loadingRecipe.value = true
-  error.value = ''
-
+  loading.value = true
+  loadError.value = ''
   try {
     const response = await axios.get(`/api/recipes/${recipeId}`)
-    const recipe = response.data.data
-
-    // Check that the logged-in user owns this recipe
-    if (
-      !auth.user ||
-      String(recipe.createdBy?._id || recipe.createdBy) !==
-        String(auth.user._id || auth.user.id)
-    ) {
-      error.value = 'You do not have permission to edit this recipe.'
-      return
+    const data = response.data.data
+    if (data.source === 'spoonacular') {
+      loadError.value = 'Recipes saved from Spoonacular can\'t be edited.'
+    } else {
+      recipe.value = data
+      if (!isOwner.value && !isAdmin.value) loadError.value = 'You can only edit recipes you created.'
     }
-
-    title.value = recipe.title || ''
-    image.value = recipe.image || ''
-    imagePreview.value = recipe.image || ''
-    summary.value = recipe.summary || ''
-    cuisine.value = recipe.cuisine?.[0] || 'Chinese'
-
-    servings.value = recipe.servings || 2
-    prepTime.value = recipe.prepTime ?? 0
-    cookingTime.value = recipe.cookingTime ?? 0
-
-    ingredients.value = (recipe.ingredients || []).map(item => ({
-      name: item.name,
-      amount: item.amount,
-      unit: item.unit
-    }))
-
-    instructions.value = (recipe.instructions || [])
-      .sort((a, b) => a.step - b.step)
-      .map(item => item.description)
-
-    dietaryCategories.value = recipe.dietaryCategories || []
-    allergens.value = recipe.allergens || []
-
-    nutrition.value = nutritionOptions.map(option => {
-      const existing = (recipe.nutrition || []).find(
-        item => item.name === option.name
-      )
-
-      return {
-        name: option.name,
-        amount: existing ? existing.amount : '',
-        unit: option.unit
-      }
-    })
-
-    if (ingredients.value.length === 0) {
-      ingredients.value.push({ name: '', amount: 1, unit: 'g' })
-    }
-
-    if (instructions.value.length === 0) {
-      instructions.value.push('')
-    }
-
   } catch (err) {
     console.error(err)
-    error.value =
-      err.response?.data?.message ||
-      'Failed to retrieve recipe.'
-  } finally {
-    loadingRecipe.value = false
-  }
-}
-
-// Upload replacement image
-async function uploadImage(event) {
-  const file = event.target.files[0]
-
-  if (!file) return
-
-  const allowedTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp'
-  ]
-
-  if (!allowedTypes.includes(file.type)) {
-    error.value = 'Please upload a JPG, PNG or WebP image.'
-    event.target.value = ''
-    return
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    error.value = 'Image size must not exceed 5MB.'
-    event.target.value = ''
-    return
-  }
-
-  error.value = ''
-  imageUploading.value = true
-
-  const formData = new FormData()
-  formData.append('image', file)
-
-  try {
-    const response = await axios.post(
-      '/api/recipes/upload-image',
-      formData,
-      {
-        headers: {
-          Authorization: `Bearer ${auth.token}`
-        }
-      }
-    )
-
-    image.value = response.data.imageUrl
-    imagePreview.value = URL.createObjectURL(file)
-
-  } catch (err) {
-    console.error(err)
-    error.value =
-      err.response?.data?.message ||
-      'Failed to upload image.'
-
-  } finally {
-    imageUploading.value = false
-  }
-}
-
-function addIngredient() {
-  ingredients.value.push({
-    name: '',
-    amount: 1,
-    unit: 'g'
-  })
-}
-
-function removeIngredient(index) {
-  ingredients.value.splice(index, 1)
-}
-
-function addInstruction() {
-  instructions.value.push('')
-}
-
-function removeInstruction(index) {
-  instructions.value.splice(index, 1)
-}
-
-// Save updated recipe
-async function updateRecipe() {
-  loading.value = true
-  error.value = ''
-  success.value = ''
-
-  try {
-    if (!image.value) {
-      error.value = 'Please upload a recipe photo.'
-      return
-    }
-
-    const recipeData = {
-      title: title.value.trim(),
-      image: image.value,
-      summary: summary.value.trim(),
-      cuisine: [cuisine.value.trim()],
-      dietaryCategories: dietaryCategories.value,
-
-      servings: Number(servings.value),
-      prepTime: Number(prepTime.value),
-      cookingTime: Number(cookingTime.value),
-      totalTime:
-        Number(prepTime.value) + Number(cookingTime.value),
-
-      ingredients: ingredients.value.map(item => ({
-        name: item.name.trim(),
-        amount: Number(item.amount),
-        unit: item.unit.trim()
-      })),
-
-      instructions: instructions.value.map(
-        (description, index) => ({
-          step: index + 1,
-          description: description.trim()
-        })
-      ),
-
-      nutrition: nutrition.value
-        .filter(item => item.amount !== '' && item.amount !== null)
-        .map(item => ({
-          name: item.name,
-          amount: Number(item.amount),
-          unit: item.unit
-        })),
-
-      allergens: allergens.value
-    }
-
-    await axios.put(
-      `/api/recipes/${recipeId}`,
-      recipeData,
-      {
-        headers: {
-          Authorization: `Bearer ${auth.token}`
-        }
-      }
-    )
-
-    success.value = 'Recipe updated successfully!'
-
-    await router.push(`/recipes/${recipeId}`)
-
-  } catch (err) {
-    console.error(err)
-
-    error.value =
-      err.response?.data?.message ||
-      'Failed to update recipe. Please try again.'
-
+    loadError.value = err.response?.status === 404 ? 'This recipe no longer exists.' : 'Failed to load the recipe. Please try again.'
   } finally {
     loading.value = false
+  }
+}
+
+async function updateRecipe(recipeData) {
+  saving.value = true
+  saveError.value = ''
+  try {
+    await axios.put(`/api/recipes/${recipeId}`, recipeData, { headers: headers() })
+    await router.push(backTo)
+  } catch (err) {
+    console.error(err)
+    saveError.value = err.response?.data?.message || 'Failed to update recipe. Please try again.'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function deleteRecipe() {
+  const ok = await confirm({
+    title: `Delete "${recipe.value.title}"?`,
+    message: "Its comments and likes are deleted too. Anyone who planned it will see \"Recipe no longer available\" in their planner. This can't be undone.",
+    confirmText: 'Delete recipe',
+  })
+  if (!ok) return
+  deleting.value = true
+  saveError.value = ''
+  try {
+    await axios.delete(`/api/recipes/${recipeId}`, { headers: headers() })
+    await router.push('/recipes')
+  } catch (err) {
+    console.error(err)
+    saveError.value = err.response?.data?.message || 'Failed to delete recipe.'
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -293,386 +87,96 @@ onMounted(fetchRecipe)
 </script>
 
 <template>
-  <div class="fft-page">
-    <div class="container mt-5 mb-5" style="max-width: 800px">
+  <main class="fp">
+    <div class="fp-wrap rf-wrap">
+      <RouterLink :to="loadError ? '/recipes' : backTo" class="fp-back">
+        <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        {{ loadError ? 'Recipes' : 'Back to recipe' }}
+      </RouterLink>
 
-      <div v-if="loadingRecipe" class="text-center py-5">
+      <div v-if="loading" class="fp-card fp-loading" role="status">
+        <span class="fp-spinner" aria-hidden="true"></span>
         Loading recipe...
       </div>
 
-      <div v-else-if="error && !title" class="alert alert-danger">
-        {{ error }}
-        <div class="mt-3">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            @click="router.push('/profile')"
-          >
-            Back to Profile
-          </button>
+      <div v-else-if="loadError" class="fp-card er-blocked" role="alert">
+        <span class="fp-bubble fp-bubble--peach" aria-hidden="true"><span class="material-symbols-outlined">lock</span></span>
+        <div>
+          <h1 class="er-blocked-title">{{ loadError }}</h1>
+          <p class="m-0">You can still view it, or create your own version.</p>
+          <div class="fp-actions mt-3">
+            <RouterLink v-if="recipe" :to="backTo" class="fp-btn fp-btn--ghost">View recipe</RouterLink>
+            <RouterLink to="/recipes/create" class="fp-btn fp-btn--primary">Create a recipe</RouterLink>
+          </div>
         </div>
       </div>
 
       <template v-else>
-        <h1>Edit Recipe</h1>
-        <p class="text-muted">
-          Update your recipe details below.
-        </p>
+        <header class="fp-head">
+          <p class="fp-eyebrow">{{ isOwner ? 'Your recipe' : 'Editing as admin' }}</p>
+          <h1 class="fp-title">Edit recipe</h1>
+          <p class="fp-lede">Changes show for everyone straight away, including in meal plans that use it.</p>
+        </header>
 
-        <form @submit.prevent="updateRecipe">
+        <RecipeForm
+          :initial="recipe"
+          submit-label="Save changes"
+          :saving="saving"
+          :error="saveError"
+          :cancel-to="backTo"
+          @submit="updateRecipe"
+          @dismiss-error="saveError = ''"
+        />
 
-          <!-- Recipe title -->
-          <div class="mb-3">
-            <label class="form-label">Recipe title</label>
-            <input
-              v-model="title"
-              class="form-control"
-              required
-              maxlength="150"
-              placeholder="Recipe title"
-            />
+        <section class="fp-card er-danger" aria-labelledby="er-danger-title">
+          <div>
+            <h2 id="er-danger-title">Delete this recipe</h2>
+            <p>Removes it for everyone, with its comments and likes.</p>
           </div>
-
-          <!-- Recipe image -->
-          <div class="mb-3">
-            <label class="form-label">Recipe Photo</label>
-
-            <input
-              type="file"
-              class="form-control"
-              accept="image/jpeg,image/png,image/webp"
-              @change="uploadImage"
-              :disabled="imageUploading"
-            />
-
-            <small class="text-muted">
-              Upload a new photo to replace the current one.
-              JPG, PNG or WebP. Maximum 5MB.
-            </small>
-
-            <div v-if="imagePreview" class="mt-3">
-              <img
-                :src="imagePreview"
-                alt="Recipe preview"
-                style="
-                  width: 100%;
-                  max-width: 300px;
-                  height: 200px;
-                  object-fit: cover;
-                  border-radius: 12px;
-                "
-              />
-            </div>
-
-            <p
-              v-if="imageUploading"
-              class="text-muted mt-2"
-            >
-              Uploading image...
-            </p>
-          </div>
-
-          <!-- Description -->
-          <div class="mb-3">
-            <label class="form-label">Description</label>
-            <textarea
-              v-model="summary"
-              class="form-control"
-              required
-              rows="3"
-              placeholder="Describe your recipe..."
-            ></textarea>
-          </div>
-
-          <!-- Cuisine -->
-          <div class="mb-3">
-            <label class="form-label">Cuisine</label>
-            <select v-model="cuisine" class="form-select" required>
-              <option>Chinese</option>
-              <option>Japanese</option>
-              <option>Korean</option>
-              <option>Italian</option>
-              <option>Western</option>
-              <option>Indian</option>
-              <option>Malaysian</option>
-              <option>Thai</option>
-              <option>Other</option>
-            </select>
-          </div>
-
-          <!-- Servings and time -->
-          <div class="row">
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Servings</label>
-              <input
-                v-model.number="servings"
-                type="number"
-                min="1"
-                class="form-control"
-                required
-              />
-            </div>
-
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Prep time (min)</label>
-              <input
-                v-model.number="prepTime"
-                type="number"
-                min="0"
-                class="form-control"
-                required
-              />
-            </div>
-
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Cooking time (min)</label>
-              <input
-                v-model.number="cookingTime"
-                type="number"
-                min="0"
-                class="form-control"
-                required
-              />
-            </div>
-          </div>
-
-          <hr />
-
-          <!-- Ingredients -->
-          <h4>Ingredients</h4>
-
-          <div
-            v-for="(ingredient, index) in ingredients"
-            :key="index"
-            class="row mb-2 align-items-center"
-          >
-            <div class="col-md-5">
-              <input
-                v-model="ingredient.name"
-                class="form-control"
-                placeholder="Ingredient name"
-                required
-              />
-            </div>
-
-            <div class="col-md-3">
-              <input
-                v-model.number="ingredient.amount"
-                type="number"
-                min="0.01"
-                step="any"
-                class="form-control"
-                placeholder="Amount"
-                required
-              />
-            </div>
-
-            <div class="col-md-2">
-              <input
-                v-model="ingredient.unit"
-                class="form-control"
-                placeholder="Unit"
-                required
-              />
-            </div>
-
-            <div class="col-md-2">
-              <button
-                type="button"
-                class="btn btn-outline-danger"
-                :disabled="ingredients.length === 1"
-                @click="removeIngredient(index)"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            class="btn btn-outline-success mt-2"
-            @click="addIngredient"
-          >
-            + Add Ingredient
+          <button type="button" class="fp-btn fp-btn--danger" :disabled="deleting" @click="deleteRecipe">
+            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            {{ deleting ? 'Deleting...' : 'Delete recipe' }}
           </button>
-
-          <hr class="mt-4" />
-
-          <!-- Dietary categories -->
-          <h4>Dietary Categories</h4>
-          <p class="text-muted">
-            Select all dietary categories that apply.
-          </p>
-
-          <div class="row mb-4">
-            <div
-              v-for="option in dietaryOptions"
-              :key="option"
-              class="col-md-4 col-6 mb-2"
-            >
-              <div class="form-check">
-                <input
-                  :id="'diet-' + option"
-                  v-model="dietaryCategories"
-                  class="form-check-input"
-                  type="checkbox"
-                  :value="option"
-                />
-                <label
-                  class="form-check-label"
-                  :for="'diet-' + option"
-                >
-                  {{ option }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <hr />
-
-          <!-- Allergens -->
-          <h4>Allergens</h4>
-          <p class="text-muted">
-            Select all allergens present in your recipe.
-          </p>
-
-          <div class="row mb-4">
-            <div
-              v-for="option in allergenOptions"
-              :key="option"
-              class="col-md-4 col-6 mb-2"
-            >
-              <div class="form-check">
-                <input
-                  :id="'allergen-' + option"
-                  v-model="allergens"
-                  class="form-check-input"
-                  type="checkbox"
-                  :value="option"
-                />
-                <label
-                  class="form-check-label"
-                  :for="'allergen-' + option"
-                >
-                  {{ option }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <hr />
-
-          <!-- Nutrition -->
-          <h4>Nutrition Information</h4>
-          <p class="text-muted">
-            Enter nutritional values per serving.
-            Leave unavailable information blank.
-          </p>
-
-          <div class="row mb-4">
-            <div
-              v-for="(item, index) in nutrition"
-              :key="item.name"
-              class="col-md-6 mb-3"
-            >
-              <label
-                :for="'nutrition-' + index"
-                class="form-label"
-              >
-                {{ item.name }}
-              </label>
-
-              <div class="input-group">
-                <input
-                  :id="'nutrition-' + index"
-                  v-model="item.amount"
-                  type="number"
-                  min="0"
-                  step="any"
-                  class="form-control"
-                  :placeholder="'Enter ' + item.name.toLowerCase()"
-                />
-
-                <span class="input-group-text">
-                  {{ item.unit }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <hr />
-
-          <!-- Instructions -->
-          <h4>Instructions</h4>
-
-          <div
-            v-for="(instruction, index) in instructions"
-            :key="index"
-            class="mb-3"
-          >
-            <label class="form-label">
-              Step {{ index + 1 }}
-            </label>
-
-            <div class="d-flex gap-2">
-              <textarea
-                v-model="instructions[index]"
-                class="form-control"
-                rows="2"
-                required
-                placeholder="Describe this cooking step..."
-              ></textarea>
-
-              <button
-                type="button"
-                class="btn btn-outline-danger"
-                :disabled="instructions.length === 1"
-                @click="removeInstruction(index)"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            class="btn btn-outline-success mb-4"
-            @click="addInstruction"
-          >
-            + Add Step
-          </button>
-
-          <!-- Messages -->
-          <div v-if="error" class="alert alert-danger">
-            {{ error }}
-          </div>
-
-          <div v-if="success" class="alert alert-success">
-            {{ success }}
-          </div>
-
-          <!-- Actions -->
-          <div class="d-flex gap-2">
-            <button
-              type="submit"
-              class="btn btn-success"
-              :disabled="loading || imageUploading || !image"
-            >
-              {{ loading ? 'Saving...' : 'Save Changes' }}
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :disabled="loading"
-              @click="router.push('/profile')"
-            >
-              Cancel
-            </button>
-          </div>
-
-        </form>
+        </section>
       </template>
     </div>
-  </div>
+  </main>
 </template>
+
+<style scoped>
+.rf-wrap {
+  width: min(1100px, 100% - 32px);
+}
+.er-blocked {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.er-blocked-title {
+  margin: 0 0 4px;
+  font: 600 22px/30px 'Outfit', sans-serif;
+}
+.er-danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 40px;
+  border-color: #f2c4c0;
+}
+.er-danger h2 {
+  margin: 0;
+  font: 600 18px/26px 'Outfit', sans-serif;
+}
+.er-danger p {
+  margin: 2px 0 0;
+  color: var(--fp-muted);
+  font-size: 14px;
+}
+@media (min-width: 992px) {
+  .er-danger {
+    max-width: calc(100% - 344px); /* line up with the form column, not under the preview */
+  }
+}
+</style>

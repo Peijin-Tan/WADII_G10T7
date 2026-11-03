@@ -4,10 +4,40 @@ const mongoose = require('mongoose')
 const Recipe = require('../../models/Recipe')
 const Like = require('../../models/Like')
 const Comment = require('../../models/Comment')
-const Post = require('../../models/Post')
+const multer = require('multer')
+const Image = require('../../models/Image')
+const { deleteImageIfUnused } = require('./images')
 const requireAuth = require('../middleware/auth')
 
 const router = express.Router()
+
+// Fields a user may set on their own recipe (create + edit).
+// Everything else (source, createdBy, externalId, timestamps) is set by the server.
+const EDITABLE_FIELDS = [
+  'title', 'image', 'summary', 'cuisine', 'dietaryCategories', 'servings', 'prepTime',
+  'cookingTime', 'totalTime', 'ingredients', 'instructions', 'nutrition', 'allergens',
+]
+function pickRecipeFields(body = {}) {
+  const data = {}
+  for (const field of EDITABLE_FIELDS) {
+    if (body[field] !== undefined) data[field] = body[field]
+  }
+  return data
+}
+
+// The recipe's author, or an admin
+function canEdit(recipe, user) {
+  return user.role === 'admin' || (recipe.createdBy && recipe.createdBy.toString() === user._id.toString())
+}
+
+/* ---------- Photo uploads (Create / Edit Recipe) ----------
+   Kept in memory, then saved to MongoDB (models/Image.js) and served at /images/<id> (images.js). */
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, IMAGE_TYPES.includes(file.mimetype)),
+})
 
 async function findRecipeKey(value) {
   if (value.startsWith('recipe-')) {
@@ -330,7 +360,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const recipeData = {
-      ...req.body,
+      ...pickRecipeFields(req.body),
       source: 'user',
       createdBy: req.user._id
     }
@@ -362,6 +392,67 @@ router.post('/', requireAuth, async (req, res) => {
   }
 })
 
+// POST /recipes/upload-image   multipart form, field "image" (JPG, PNG or WebP, up to 5 MB)
+// Saves the photo in MongoDB and returns { imageUrl: '/images/<id>' } to put in the recipe's image field.
+router.post('/upload-image', requireAuth, (req, res) => {
+  upload.single('image')(req, res, async (err) => {
+    if (err?.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ message: 'Image size must not exceed 5MB.' })
+    if (err) {
+      console.error('Upload error:', err)
+      return res.status(500).json({ message: 'Failed to upload image.' })
+    }
+    if (!req.file) return res.status(400).json({ message: 'Please upload a JPG, PNG or WebP image.' })
+
+    try {
+      const image = await Image.create({
+        data: req.file.buffer,
+        contentType: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: req.user._id,
+      })
+      return res.status(201).json({ imageUrl: `/images/${image._id}` })
+    } catch (saveErr) {
+      console.error('Save image error:', saveErr)
+      return res.status(500).json({ message: 'Failed to upload image.' })
+    }
+  })
+})
+
+// PUT /recipes/:id
+// Edit a recipe: its author or an admin. Only EDITABLE_FIELDS are changed.
+router.put('/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+  if (!mongoose.isValidObjectId(id)) {
+    return res.status(400).json({ message: 'Invalid recipe ID' })
+  }
+
+  try {
+    const recipe = await Recipe.findById(id)
+    if (!recipe) {
+      return res.status(404).json({ message: 'Recipe not found' })
+    }
+    if (recipe.source === 'spoonacular') {
+      return res.status(403).json({ message: 'Recipes saved from Spoonacular cannot be edited' })
+    }
+    if (!canEdit(recipe, req.user)) {
+      return res.status(403).json({ message: 'You can only edit your own recipes' })
+    }
+
+    const oldImage = recipe.image
+    recipe.set(pickRecipeFields(req.body))
+    await recipe.save() // runs the schema validation
+    if (oldImage !== recipe.image) await deleteImageIfUnused(oldImage) // photo replaced
+
+    return res.json({ message: 'Recipe updated successfully', data: recipe })
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Please check the recipe: ' + Object.values(error.errors).map((e) => e.message).join(' ') })
+    }
+    console.error('Update recipe error:', error)
+    return res.status(500).json({ message: 'Failed to update recipe' })
+  }
+})
+
 // DELETE /recipes/:id
 // The recipe's author or an admin. Also removes its comments and likes.
 // Meal plans keep their entry: the planner shows it as "Recipe no longer available" with a Swap button,
@@ -374,14 +465,13 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 
   try {
-    const recipe = await Recipe.findById(id).select('_id title createdBy externalId')
+    const recipe = await Recipe.findById(id).select('_id title image createdBy externalId')
 
     if (!recipe) {
       return res.status(404).json({ message: 'Recipe not found' })
     }
 
-    const isAuthor = recipe.createdBy && recipe.createdBy.toString() === req.user._id.toString()
-    if (!isAuthor && req.user.role !== 'admin') {
+    if (!canEdit(recipe, req.user)) {
       return res.status(403).json({ message: 'You can only delete your own recipes' })
     }
 
@@ -392,7 +482,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     const [comments, likes] = await Promise.all([
       Comment.deleteMany({ recipeId: id }),
       recipe.externalId == null ? Like.deleteMany({ recipeKey: `recipe-${id}` }) : { deletedCount: 0 },
-      Post.updateMany({ recipeId: id }, { $set: { recipeId: null } }),
+      deleteImageIfUnused(recipe.image),
     ])
 
     return res.json({

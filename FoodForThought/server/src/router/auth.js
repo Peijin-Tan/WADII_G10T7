@@ -118,6 +118,42 @@ router.post('/register', async (req, res) => {
   }
 })
 
+// PATCH /auth/change-password   body: { currentPassword, newPassword }
+// Used by the Change Password page (linked from Profile). The user must know their current password.
+// A wrong current password is a 400 (not 401): a 401 would make the frontend log the user out.
+router.patch('/change-password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {}
+
+  if (typeof currentPassword !== 'string' || !currentPassword) {
+    return res.status(400).json({ message: 'Please enter your current password.' })
+  }
+  // same rule as sign-up
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ message: 'Your new password must be at least 8 characters long.' })
+  }
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ message: 'Your new password must be different from your current one.' })
+  }
+
+  try {
+    const user = await User.findById(req.user._id).select('+password')
+    if (!user) {
+      return res.status(404).json({ message: 'Account not found.' })
+    }
+    if (!(await user.comparePassword(currentPassword))) {
+      return res.status(400).json({ message: 'Your current password is incorrect.' })
+    }
+
+    user.password = newPassword // hashed by the pre('save') hook in models/User.js
+    await user.save()
+
+    return res.json({ message: 'Your password has been updated.' })
+  } catch (err) {
+    console.error('Change password error:', err)
+    return res.status(500).json({ message: 'Unable to update your password right now.' })
+  }
+})
+
 // GET /auth/me — verifies a token and returns the user
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user })

@@ -4,8 +4,10 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import axios from 'axios'
 import RecipeComments from '@/components/RecipeComments.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 
 const recipe = ref(null)
 const loading = ref(true)
@@ -38,6 +40,13 @@ async function fetchRecipe() {
 }
 
 /* ---------- Page helpers ---------- */
+// Community recipes can be edited by their author or an admin (PUT /recipes/:id checks this too)
+const canEdit = computed(() => {
+  const r = recipe.value
+  if (!r || r.source === 'spoonacular' || !auth.user) return false
+  return auth.user.role === 'admin' || String(r.createdBy?._id || r.createdBy || '') === String(auth.user._id)
+})
+
 // The four numbers under the title; any that are missing are left out
 const stats = computed(() => {
   if (!recipe.value) return []
@@ -108,6 +117,11 @@ onMounted(fetchRecipe)
             </p>
 
             <h1 class="rd-title">{{ recipe.title }}</h1>
+
+            <RouterLink v-if="canEdit" :to="`/recipes/${recipe._id}/edit`" class="rd-edit">
+              <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+              Edit recipe
+            </RouterLink>
 
             <p class="rd-summary">
               {{ recipe.summary || 'No description yet.' }}
@@ -686,5 +700,32 @@ onMounted(fetchRecipe)
   .rd-skeleton {
     animation: none;
   }
+}
+
+.rd-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--fft-border);
+  border-radius: 10px;
+  background: var(--fft-card);
+  color: var(--fft-primary);
+  font: 600 14px/18px 'Inter', sans-serif;
+  text-decoration: none;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.rd-edit:hover {
+  border-color: var(--fft-primary);
+  background: var(--fft-primary-light);
+  color: var(--fft-primary);
+}
+.rd-edit:focus-visible {
+  outline: 2px solid var(--fft-primary);
+  outline-offset: 2px;
+}
+.rd-edit .material-symbols-outlined {
+  font-size: 18px;
 }
 </style>

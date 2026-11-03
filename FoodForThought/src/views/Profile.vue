@@ -1,5 +1,6 @@
-
 <script setup>
+/* Profile (/profile, logged-in users only: meta.requiresAuth in router/index.js).
+   Shows who is logged in and links to their settings. Styles: assets/forms.css (fp-) + the few below. */
 import { computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -7,10 +8,35 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 
-const displayName = computed(() => auth.user?.name || 'Guest')
+const displayName = computed(() => auth.user?.name || 'Your account')
+const isAdmin = computed(() => auth.user?.role === 'admin')
+// "Alex Tan" -> "AT" (same as the navbar avatar, so no external photo is needed)
+const initials = computed(() =>
+  (auth.user?.name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join(''),
+)
 
-const profileImage =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30'
+const settings = computed(() => [
+  {
+    to: '/preferences',
+    icon: 'nutrition',
+    title: 'Dietary preferences',
+    text: 'Diets and allergens. Recipe suggestions respect these.',
+  },
+  {
+    to: '/change-password',
+    icon: 'lock',
+    title: 'Change password',
+    text: 'Update the password you use to log in.',
+  },
+  ...(isAdmin.value
+    ? [{ to: '/admindashboard', icon: 'admin_panel_settings', title: 'Admin console', text: 'Manage users, recipes and comments.' }]
+    : []),
+])
 
 function handleLogout() {
   auth.logout()
@@ -19,192 +45,144 @@ function handleLogout() {
 </script>
 
 <template>
-  <main class="profile-page">
-    <div class="profile-container">
-      <RouterLink to="/home" class="profile-back">
-        ← Back to Home
-      </RouterLink>
-
-      <section class="profile-card">
-        <div class="profile-header">
-          <img
-            :src="profileImage"
-            alt="User profile"
-            class="profile-image"
-          />
-
-          <h1>{{ displayName }}</h1>
+  <main class="fp">
+    <div class="fp-wrap fp-wrap--narrow">
+      <header class="fp-card pf-hero">
+        <span class="pf-avatar" aria-hidden="true">{{ initials }}</span>
+        <div class="pf-hero-text">
+          <h1 class="fp-title">{{ displayName }}</h1>
+          <span class="fp-count pf-role" :class="{ 'is-admin': isAdmin }">
+            <span class="material-symbols-outlined" aria-hidden="true">{{ isAdmin ? 'shield_person' : 'person' }}</span>
+            {{ isAdmin ? 'Admin' : 'Member' }}
+          </span>
         </div>
+      </header>
 
-        <div class="profile-options">
-          <RouterLink
-            to="/preferences"
-            class="profile-option"
-          >
-            <div class="option-icon">🥗</div>
-
-            <div class="option-content">
-              <h2>Dietary Preferences</h2>
-              <p>
-                Manage your dietary preferences and food allergens.
-              </p>
-            </div>
-
-            <span class="option-arrow">›</span>
-          </RouterLink>
-        </div>
-
-        <button
-          type="button"
-          class="profile-logout"
-          @click="handleLogout"
-        >
-          Log Out
-        </button>
+      <section class="fp-card pf-settings" aria-labelledby="pf-settings-title">
+        <h2 id="pf-settings-title" class="pf-section-title">Settings</h2>
+        <ul class="pf-list">
+          <li v-for="s in settings" :key="s.to">
+            <RouterLink :to="s.to" class="pf-row">
+              <span class="fp-bubble" aria-hidden="true">
+                <span class="material-symbols-outlined">{{ s.icon }}</span>
+              </span>
+              <span class="pf-row-text">
+                <span class="pf-row-title">{{ s.title }}</span>
+                <span class="pf-row-sub">{{ s.text }}</span>
+              </span>
+              <span class="material-symbols-outlined pf-chevron" aria-hidden="true">chevron_right</span>
+            </RouterLink>
+          </li>
+        </ul>
       </section>
+
+      <div class="fp-actions">
+        <button type="button" class="fp-btn fp-btn--danger" @click="handleLogout">
+          <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+          Log out
+        </button>
+      </div>
     </div>
   </main>
 </template>
 
 <style scoped>
-.profile-page {
-  flex: 1;
-  min-height: 70vh;
-  min-height: 70dvh;
-  padding: 48px 20px;
-  background: #fafaf3;
-  font-family: 'Inter', sans-serif;
-}
-
-.profile-container {
-  max-width: 650px;
-  margin: 0 auto;
-}
-
-.profile-back {
-  display: inline-block;
-  margin-bottom: 24px;
-  color: #32533c;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.profile-back:hover {
-  text-decoration: underline;
-}
-
-.profile-card {
-  padding: 36px;
-  background: #fff;
-  border: 1px solid #e8e9e2;
-  border-radius: 20px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-}
-
-.profile-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding-bottom: 32px;
-}
-
-.profile-image {
-  width: 112px;
-  height: 112px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 4px solid #c7ecce;
-  margin-bottom: 16px;
-}
-
-.profile-header h1 {
-  margin: 0;
-  color: #32533c;
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.profile-options {
-  border-top: 1px solid #e8e9e2;
-  border-bottom: 1px solid #e8e9e2;
-}
-
-.profile-option {
+.pf-hero {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 22px 8px;
-  color: inherit;
-  text-decoration: none;
-  border-radius: 12px;
-  transition: background-color 0.2s ease;
+  gap: 20px;
+  padding: 28px;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgb(199 236 206 / 55%) 0%, transparent 55%),
+    var(--fp-card);
 }
-
-.profile-option:hover {
-  background: #f4f4ed;
-}
-
-.option-icon {
-  display: flex;
+.pf-avatar {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: #e8f2e8;
-  font-size: 24px;
-}
-
-.option-content {
-  flex: 1;
-}
-
-.option-content h2 {
-  margin: 0 0 6px;
-  font-size: 17px;
-  font-weight: 600;
-  color: #32533c;
-}
-
-.option-content p {
-  margin: 0;
-  color: #727972;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.option-arrow {
-  color: #32533c;
-  font-size: 28px;
-}
-
-.profile-logout {
-  width: 100%;
-  margin-top: 28px;
-  padding: 13px 20px;
-  border: 1px solid #dc2626;
-  border-radius: 12px;
-  background: #dc2626;
+  flex: none;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--fp-leaf);
   color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+  font: 600 28px/1 'Outfit', sans-serif;
+  box-shadow: 0 0 0 4px var(--fp-sprout);
 }
-
-.profile-logout:hover {
-  background: #b91c1c;
+.pf-hero-text {
+  min-width: 0;
 }
-
-@media (max-width: 480px) {
-  .profile-card {
-    padding: 24px 18px;
-  }
-
-  .profile-option {
-    gap: 12px;
+.pf-hero-text .fp-title {
+  overflow-wrap: anywhere;
+}
+.pf-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.pf-role .material-symbols-outlined {
+  font-size: 16px;
+}
+.pf-role.is-admin {
+  background: var(--fp-sprout);
+  color: var(--fp-leaf);
+}
+.pf-settings {
+  padding: 8px;
+}
+.pf-section-title {
+  margin: 0;
+  padding: 12px 14px 6px;
+  color: var(--fp-muted);
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pf-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pf-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+.pf-row:hover {
+  background: var(--fp-surface);
+  color: inherit;
+}
+.pf-row:focus-visible {
+  outline: 2px solid var(--fp-leaf);
+  outline-offset: -2px;
+}
+.pf-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.pf-row-title {
+  font-weight: 600;
+}
+.pf-row-sub {
+  color: var(--fp-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+.pf-chevron {
+  color: var(--fp-muted);
+}
+@media (max-width: 420px) {
+  .pf-hero {
+    flex-direction: column;
+    text-align: center;
   }
 }
 </style>

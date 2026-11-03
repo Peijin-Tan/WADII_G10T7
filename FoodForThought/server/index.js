@@ -9,13 +9,10 @@ dotenv.config({ path: path.resolve(__dirname, 'config.env') })
 require('node:dns').setServers(['8.8.8.8', '1.1.1.1'])
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
-const cookieParser = require('cookie-parser')
-const csrf = require('csurf')
 
 const authRouter = require('./src/router/auth')
 const requireAuth = require('./src/middleware/auth')
 const usersRouter = require('./src/router/users')
-const postsRouter = require('./src/router/Post')
 const pantryRouter = require('./src/router/pantry')
 const commentsRouter = require('./src/router/comments')
 const plannerRouter = require('./src/router/Planner')
@@ -25,13 +22,21 @@ const dashboardRouter = require('./src/router/analytics')
 const activityRouter = require('./src/router/activity')
 const preferencesRouter = require('./src/router/preferences')
 const adminRouter = require('./src/router/admin')
+const imagesRouter = require('./src/router/images')
 
 const app = express()
-app.use(cors({
-  origin: 'http://localhost:5173'
-}))
+// Frontend origins allowed to call this API: `npm run dev` (5173) and `vite preview` (4173, used by
+// the Playwright config on CI). Set CLIENT_ORIGINS in config.env (comma-separated) when deploying.
+const allowedOrigins = (process.env.CLIENT_ORIGINS || 'http://localhost:5173,http://localhost:4173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+app.use(cors({ origin: allowedOrigins }))
 
-// Serve uploaded recipe images from the frontend public/img folder
+// Recipe photos. Before the rate limiter, because one page of recipes loads many images.
+//   /images/<id>  photos uploaded through the site, stored in MongoDB (src/router/images.js)
+//   /img/<file>   the older photos in the frontend's public/img folder
+app.use('/images', imagesRouter)
 app.use('/img', express.static(
   path.join(__dirname, '../public/img')
 ))
@@ -42,7 +47,6 @@ app.use(helmet())
 // Body parsing
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
-app.use(cookieParser())
 
 // Rate limiting (apply globally or to specific paths)
 const limiter = rateLimit({
@@ -55,7 +59,6 @@ app.use(limiter)
 
 // Mount routes
 app.use('/auth', authRouter)
-app.use('/posts', postsRouter)
 app.use('/comments', commentsRouter)
 app.use('/users', usersRouter)
 app.use('/planner', plannerRouter)
@@ -67,11 +70,6 @@ app.use('/activity', activityRouter)
 app.use('/preferences', preferencesRouter)
 app.use('/admin', adminRouter)
 
-// Expose a simple CSRF token endpoint (uses csurf internally)
-const csrfProtection = csrf({ cookie: true })
-app.get('/csrf-token', csrfProtection, (req, res) => {
-  res.json({ csrfToken: req.csrfToken() })
-})
 
 // Connect to Mongo and start server
 async function connectDb() {

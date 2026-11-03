@@ -1,66 +1,57 @@
-
 <script setup>
-import { ref, onMounted } from 'vue'
+/* Dietary Preferences (/preferences, logged-in users only).
+   GET/PUT /preferences (server/src/router/preferences.js). The pantry's "What can I cook?" suggestions
+   use these (diets -> Spoonacular diet, allergens -> intolerances; see getSavedPreferences in pantry.js).
+   Styles: assets/forms.css (fp-). */
+import { ref, computed, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import AppAlert from '@/components/ui/AppAlert.vue'
 
 const auth = useAuthStore()
 
+// value = what is saved (must match DIET_TO_SPOONACULAR / ALLERGEN_TO_SPOONACULAR in pantry.js)
 const dietaryOptions = [
-  'Vegetarian',
-  'Vegan',
-  'Gluten-Free',
-  'Dairy-Free',
-  'Pescatarian',
-  'Keto'
+  { value: 'Vegetarian', icon: 'eco' },
+  { value: 'Vegan', icon: 'spa' },
+  { value: 'Gluten-Free', icon: 'grain' },
+  { value: 'Dairy-Free', icon: 'water_drop' },
+  { value: 'Pescatarian', icon: 'set_meal' },
+  { value: 'Keto', icon: 'egg_alt' },
 ]
 
-const allergenOptions = [
-  'Peanuts',
-  'Tree Nuts',
-  'Milk',
-  'Eggs',
-  'Soy',
-  'Wheat',
-  'Fish',
-  'Shellfish',
-  'Sesame'
-]
+const allergenOptions = ['Peanuts', 'Tree Nuts', 'Milk', 'Eggs', 'Soy', 'Wheat', 'Fish', 'Shellfish', 'Sesame']
 
 const dietaryPreferences = ref([])
 const allergens = ref([])
+const saved = ref({ diets: [], allergens: [] }) // what the server has, to spot unsaved changes
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const success = ref('')
 
-const authHeaders = () => ({
-  Authorization: `Bearer ${auth.token}`
-})
+const authHeaders = () => ({ Authorization: `Bearer ${auth.token}` })
+
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
+const dirty = computed(() =>
+  !sameSet(dietaryPreferences.value, saved.value.diets) || !sameSet(allergens.value, saved.value.allergens))
+
+function applyResponse(data) {
+  dietaryPreferences.value = data.dietaryPreferences || []
+  allergens.value = data.allergens || []
+  saved.value = { diets: [...dietaryPreferences.value], allergens: [...allergens.value] }
+}
 
 async function loadPreferences() {
   error.value = ''
   loading.value = true
-
   try {
-    if (!auth.token) {
-      error.value = 'Please log in to manage your preferences.'
-      return
-    }
-
-    const response = await axios.get('/api/preferences', {
-      headers: authHeaders()
-    })
-
-    dietaryPreferences.value =
-      response.data.dietaryPreferences || []
-
-    allergens.value = response.data.allergens || []
+    const response = await axios.get('/api/preferences', { headers: authHeaders() })
+    applyResponse(response.data)
   } catch (err) {
     console.error(err)
-    error.value =
-      err.response?.data?.message ||
-      'Failed to load your preferences.'
+    error.value = err.response?.data?.message || 'Failed to load your preferences.'
   } finally {
     loading.value = false
   }
@@ -69,157 +60,125 @@ async function loadPreferences() {
 async function savePreferences() {
   error.value = ''
   success.value = ''
-
-  if (!auth.token) {
-    error.value = 'Please log in to save your preferences.'
-    return
-  }
-
   saving.value = true
-
   try {
     const response = await axios.put(
       '/api/preferences',
-      {
-        dietaryPreferences: dietaryPreferences.value,
-        allergens: allergens.value
-      },
-      {
-        headers: authHeaders()
-      }
+      { dietaryPreferences: dietaryPreferences.value, allergens: allergens.value },
+      { headers: authHeaders() },
     )
-
-    dietaryPreferences.value =
-      response.data.dietaryPreferences || []
-
-    allergens.value = response.data.allergens || []
-
+    applyResponse(response.data)
     success.value = 'Your preferences have been saved!'
   } catch (err) {
     console.error(err)
-    error.value =
-      err.response?.data?.message ||
-      'Failed to save your preferences.'
+    error.value = err.response?.data?.message || 'Failed to save your preferences.'
   } finally {
     saving.value = false
   }
+}
+
+function resetChanges() {
+  dietaryPreferences.value = [...saved.value.diets]
+  allergens.value = [...saved.value.allergens]
 }
 
 onMounted(loadPreferences)
 </script>
 
 <template>
-  <div class="container py-5">
-    <div class="mb-4">
-      <h1>Dietary Preferences</h1>
-      <p class="text-muted">
-        Personalise your recipe experience by selecting your
-        dietary preferences and allergens to avoid.
-      </p>
-    </div>
+  <main class="fp">
+    <div class="fp-wrap">
+      <RouterLink to="/profile" class="fp-back">
+        <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        Profile
+      </RouterLink>
 
-    <div v-if="loading" class="text-center py-5">
-      <div
-        class="spinner-border text-success"
-        role="status"
-      ></div>
-      <p class="mt-3">Loading your preferences...</p>
-    </div>
+      <header class="fp-head">
+        <h1 class="fp-title">Dietary preferences</h1>
+        <p class="fp-lede">
+          Pick how you eat and what you can't have. "What can I cook?" in your pantry only suggests recipes
+          that fit these.
+        </p>
+      </header>
 
-    <template v-else>
-      <div v-if="error" class="alert alert-danger">
-        {{ error }}
+      <div v-if="loading" class="fp-card fp-loading" role="status">
+        <span class="fp-spinner" aria-hidden="true"></span>
+        Loading your preferences...
       </div>
 
-      <div v-if="success" class="alert alert-success">
-        {{ success }}
-      </div>
+      <template v-else>
+        <AppAlert v-if="error" tone="error" class="mb-3" @dismiss="error = ''">{{ error }}</AppAlert>
+        <AppAlert v-if="success && !dirty" tone="success" class="mb-3" @dismiss="success = ''">{{ success }}</AppAlert>
 
-      <form @submit.prevent="savePreferences">
-        <section class="card mb-4">
-          <div class="card-body">
-            <h2 class="h4">Dietary Categories</h2>
-            <p class="text-muted">
-              Select the dietary styles that suit you.
-            </p>
-
-            <div class="row g-3">
-              <div
-                v-for="option in dietaryOptions"
-                :key="option"
-                class="col-md-6 col-lg-4"
-              >
-                <label
-                  class="preference-option d-flex align-items-center gap-2"
-                >
-                  <input
-                    v-model="dietaryPreferences"
-                    type="checkbox"
-                    :value="option"
-                    class="form-check-input mt-0"
-                  />
-                  <span>{{ option }}</span>
-                </label>
+        <form @submit.prevent="savePreferences">
+          <section class="fp-card" aria-labelledby="diets-title">
+            <div class="fp-card-head">
+              <span class="fp-bubble" aria-hidden="true"><span class="material-symbols-outlined">restaurant</span></span>
+              <div>
+                <h2 id="diets-title">Diets</h2>
+                <p>Choose any that describe how you eat.</p>
               </div>
+              <span class="fp-count">{{ dietaryPreferences.length }} selected</span>
             </div>
-          </div>
-        </section>
+            <div class="fp-chips" role="group" aria-labelledby="diets-title">
+              <label v-for="option in dietaryOptions" :key="option.value" class="fp-chip">
+                <input v-model="dietaryPreferences" type="checkbox" :value="option.value" />
+                <span class="material-symbols-outlined" aria-hidden="true">
+                  {{ dietaryPreferences.includes(option.value) ? 'check' : option.icon }}
+                </span>
+                {{ option.value }}
+              </label>
+            </div>
+          </section>
 
-        <section class="card mb-4">
-          <div class="card-body">
-            <h2 class="h4">Allergens to Avoid</h2>
-            <p class="text-muted">
-              Select any ingredients you need to avoid.
-            </p>
-
-            <div class="row g-3">
-              <div
-                v-for="option in allergenOptions"
-                :key="option"
-                class="col-md-6 col-lg-4"
-              >
-                <label
-                  class="preference-option d-flex align-items-center gap-2"
-                >
-                  <input
-                    v-model="allergens"
-                    type="checkbox"
-                    :value="option"
-                    class="form-check-input mt-0"
-                  />
-                  <span>{{ option }}</span>
-                </label>
+          <section class="fp-card" aria-labelledby="allergens-title">
+            <div class="fp-card-head">
+              <span class="fp-bubble fp-bubble--peach" aria-hidden="true"><span class="material-symbols-outlined">warning</span></span>
+              <div>
+                <h2 id="allergens-title">Allergens to avoid</h2>
+                <p>Recipes with these are always left out of suggestions.</p>
               </div>
+              <span class="fp-count">{{ allergens.length }} selected</span>
             </div>
-          </div>
-        </section>
+            <div class="fp-chips" role="group" aria-labelledby="allergens-title">
+              <label v-for="option in allergenOptions" :key="option" class="fp-chip fp-chip--warn">
+                <input v-model="allergens" type="checkbox" :value="option" />
+                <span class="material-symbols-outlined" aria-hidden="true">
+                  {{ allergens.includes(option) ? 'block' : 'add' }}
+                </span>
+                {{ option }}
+              </label>
+            </div>
+          </section>
 
-        <button
-          type="submit"
-          class="btn btn-success px-4"
-          :disabled="saving"
-        >
-          {{ saving ? 'Saving...' : 'Save Preferences' }}
-        </button>
-      </form>
-    </template>
-  </div>
+          <div class="fp-actions">
+            <button type="submit" class="fp-btn fp-btn--primary" :disabled="saving || !dirty">
+              <span v-if="saving" class="fp-spinner" aria-hidden="true"></span>
+              {{ saving ? 'Saving...' : 'Save preferences' }}
+            </button>
+            <button v-if="dirty" type="button" class="fp-btn fp-btn--ghost" :disabled="saving" @click="resetChanges">
+              Undo changes
+            </button>
+            <span v-if="dirty" class="dp-unsaved" role="status">
+              <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+              Unsaved changes
+            </span>
+          </div>
+        </form>
+      </template>
+    </div>
+  </main>
 </template>
 
 <style scoped>
-.preference-option {
-  padding: 12px;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  cursor: pointer;
-  min-height: 46px;
+.dp-unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fp-muted);
+  font-size: 14px;
 }
-
-.preference-option:hover {
-  background-color: #f8f9fa;
-}
-
-.preference-option .form-check-input {
-  flex-shrink: 0;
+.dp-unsaved .material-symbols-outlined {
+  font-size: 18px;
 }
 </style>

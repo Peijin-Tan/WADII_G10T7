@@ -5,6 +5,9 @@ import Community from '@/views/Community.vue'
 import { renderFeature, flushPromises, button, text, comment, like, recipe, serverError, deferred } from './featureTestSupport'
 
 vi.mock('axios', () => ({ default: { get: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
+// Deleting asks through the themed dialog (useConfirm); each test says what the user answers
+const { confirmMock } = vi.hoisted(() => ({ confirmMock: vi.fn() }))
+vi.mock('@/composables/useConfirm', () => ({ useConfirm: () => confirmMock }))
 enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.resetAllMocks()
@@ -104,7 +107,7 @@ describe('Community: comments and likes', () => {
     expect(axios.put).not.toHaveBeenCalled()
   })
   it('C10 leaves the comment unchanged when deletion is cancelled', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    confirmMock.mockResolvedValue(false)
     const { wrapper } = await renderFeature(Community)
     await flushPromises()
     await button(wrapper, 'Delete').trigger('click')
@@ -112,7 +115,7 @@ describe('Community: comments and likes', () => {
     expect(text(wrapper)).toContain(comment.content)
   })
   it('C11 removes a comment after confirmed successful deletion', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmMock.mockResolvedValue(true)
     axios.delete.mockResolvedValue({ data: {} })
     const { wrapper } = await renderFeature(Community)
     await flushPromises()

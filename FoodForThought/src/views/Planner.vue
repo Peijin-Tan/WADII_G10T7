@@ -294,7 +294,7 @@ function closeAddMeal() {
   recipeSearch.value = { query: '', saved: [], online: [], warning: '', loading: false, error: '' }
 }
 
-// payload from addmeal.vue: { date, day, mealSlot: 'Dinner', servings, recipe }
+// payload from AddMealModal.vue: { date, day, mealSlot: 'Dinner', servings, recipe }
 async function addMealToPlan(payload) {
   const chosenDay = new Date(`${payload.date}T00:00:00`)
   const dayOfWeek = Math.round((chosenDay - weekStart.value) / 86400000) // ms in a day
@@ -316,7 +316,7 @@ async function addMealToPlan(payload) {
   if (body.spoonacularId) loadRecipeOptions() // the new recipe is saved now, so it shows in Quick Suggestions and Swap
 }
 
-// from viewRecipe.vue and the status dropdown on each card: { entryId, status }
+// from RecipeModal.vue and the status dropdown on each card: { entryId, status }
 async function onStatusChange({ entryId, status }) {
   const title = plan.value.entries.find((e) => e.id === entryId)?.recipe.title || 'this meal'
   const data = await saveChange(api.patch(`/entries/${entryId}`, { status }))
@@ -356,7 +356,7 @@ async function changeMealTime(entry, slot) {
   if (errorMsg.value) controlsKey.value++
 }
 
-// from swapRecipe.vue: { entryId, recipe }
+// from SwapMealModal.vue: { entryId, recipe }
 function swapMeal({ entryId, recipe }) {
   return saveChange(api.patch(`/entries/${entryId}`, { recipeId: recipe.id }))
 }

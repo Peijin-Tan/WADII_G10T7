@@ -79,6 +79,9 @@ async function saveChange(request) {
 }
 
 /* ---------- Metrics ---------- */
+// Items with some left: what "What can I cook?" searches with (same rule as the server's getPantryNames)
+const inStockCount = computed(() => items.value.filter((i) => i.quantity > 0).length)
+
 const expiringSoon = computed(() => items.value.filter((i) => {
   if (i.quantity <= 0) return false // nothing left to use
   const n = daysUntil(i.expiryDate)
@@ -494,7 +497,7 @@ async function onRemove(item) {
 
     <!-- Modal (teleported to <body>, so its position here doesn't matter) -->
     <suggestionsModal v-if="showSuggestions" :recipes="suggestions.recipes" :loading="suggestLoading"
-      :error="suggestError" :message="suggestions.message" :pantry-count="suggestions.pantryCount"
+      :error="suggestError" :message="suggestions.message" :pantry-count="inStockCount"
       @search="fetchSuggestions" @close="showSuggestions = false" />
   </div>
 </template>

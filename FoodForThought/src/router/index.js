@@ -16,7 +16,8 @@ const router = createRouter({
     {
       path: '/dashboard',
       name: 'dashboard',
-      component: Dashboard
+      component: Dashboard,
+      meta: { requiresAuth: true }
     },
     {
       path: '/admin',
@@ -32,12 +33,20 @@ const router = createRouter({
     {
       path: '/pantry',
       name: 'pantry',
-      component: Pantry
+      component: Pantry,
+      meta: { requiresAuth: true }
     },
     {
       path: '/profile',
       name: 'profile',
-      component: () => import('../views/Profile.vue')
+      component: () => import('../views/Profile.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/change-password',
+      name: 'change-password',
+      component: () => import('../views/ChangePassword.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/recipes',
@@ -50,23 +59,34 @@ const router = createRouter({
       component: RecipeDetail
     },
     {
+      // Edit a recipe: its author or an admin (EditRecipe.vue checks, and so does PUT /recipes/:id)
+      path: '/recipes/:id/edit',
+      name: 'edit-recipe',
+      component: () => import('../views/EditRecipe.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/recipes/create',
-      component: () => import('../views/CreateRecipe.vue')
+      component: () => import('../views/CreateRecipe.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/preferences',
       name: 'dietary-preferences',
-      component: () => import('../views/DietaryPreferences.vue')
+      component: () => import('../views/DietaryPreferences.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/planner',
       name: 'planner',
-      component: () => import('../views/Planner.vue')
+      component: () => import('../views/Planner.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/shoppinglist',
       name: 'shoppinglist',
-      component: () => import('../views/ShoppingList.vue')
+      component: () => import('../views/ShoppingList.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/login',
@@ -89,11 +109,6 @@ const router = createRouter({
       component: () => import('../views/Community.vue')
     },
     {
-      path: '/community/post/:id',
-      name: 'community-recipe',
-      component: () => import('@/views/CommunityRecipe.vue')
-    },
-    {
       // Catch-all: any unknown URL shows the NotFound page
       path: '/:pathMatch(.*)*',
       name: 'not-found',
@@ -102,20 +117,25 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, from, next) => {
+// Returning a path redirects there; returning nothing lets the navigation continue.
+router.beforeEach((to) => {
   const auth = useAuthStore()
+
+  // Pages that only make sense when logged in (meta.requiresAuth): guests go to the login page
+  // (?redirect= brings them back here after logging in)
+  if (to.meta.requiresAuth && !auth.token) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
 
   if (to.meta.requiresAdmin) {
     if (!auth.user) {
-      return next('/login')
+      return { path: '/login', query: { redirect: to.fullPath } }
     }
 
     if (auth.user.role !== 'admin') {
-      return next('/home')
+      return '/home'
     }
   }
-
-  next()
 })
 
 export default router
