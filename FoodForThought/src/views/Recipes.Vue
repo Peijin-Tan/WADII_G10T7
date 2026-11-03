@@ -36,7 +36,15 @@ async function fetchRecipes() {
   searchMode.value = false
 
   try {
-    const response = await axios.get('/api/recipes')
+    const config = auth.token
+      ? {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      : {}
+
+    const response = await axios.get('/api/recipes', config)
     recipes.value = response.data.data
   } catch (err) {
     console.error(err)
@@ -71,12 +79,14 @@ async function searchRecipes() {
 
     const [savedResponse, spoonacularResponse] = await Promise.all([
       // Search MongoDB recipes, including user-created recipes
-      axios.get('/api/recipes', {
-        ...config,
-        params: {
-          search: searchTerm
-        }
-      }),
+      axios.get('/api/recipes', auth.token
+        ? {
+            headers: {
+              Authorization: `Bearer ${auth.token}`
+            }
+          }
+        : {}
+      ),
 
       // Search Spoonacular recipes
       axios.get('/api/recipes/search', {
