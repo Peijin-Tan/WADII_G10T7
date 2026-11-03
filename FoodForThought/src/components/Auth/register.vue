@@ -1,80 +1,101 @@
 <template>
-  <!-- min-vh-100 and d-flex vertically center the form in the viewport -->
-  <div class="container min-vh-100 d-flex justify-content-center align-items-center py-4">
-    <div class="row justify-content-center w-100">
-      <!-- Standardized form card widths across screen sizes -->
-      <div class="col-12 col-sm-10 col-md-8 col-lg-5 col-xl-4 ">
-        <div class="card shadow-sm border-0 rounded-3">
-          <div class="card-body p-4">
-            <h5 class="card-title text-center mb-4 fw-bold">Register</h5>
+  <AuthShell
+    headline="Cook more of the week at home."
+    lede="Add what's in your kitchen, plan breakfast, lunch and dinner, then shop from one list."
+  >
+    <h1 class="auth-title">Create your account</h1>
+    <p class="auth-sub">It's free. All you need is your name, email and a password.</p>
 
-            <div v-if="errorMessage" class="alert alert-danger py-2" role="alert">
-              {{ errorMessage }}
-            </div>
-            <div v-if="successMessage" class="alert alert-success py-2" role="alert">
-              {{ successMessage }}
-            </div>
-
-            <form @submit.prevent="handleSubmit" novalidate>
-              <div class="mb-3">
-                <label for="registerName" class="form-label text-secondary small fw-semibold">Name</label>
-                <input
-                  v-model.trim="form.name"
-                  type="text"
-                  class="form-control"
-                  id="registerName"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-
-              <div class="mb-3">
-                <label for="registerEmail" class="form-label text-secondary small fw-semibold">Email address</label>
-                <input
-                  v-model.trim="form.email"
-                  type="email"
-                  class="form-control"
-                  :class="{ 'is-invalid': form.email && !isEmailValid }"
-                  id="registerEmail"
-                  placeholder="name@example.com"
-                  required
-                />
-                <div v-if="form.email && !isEmailValid" class="invalid-feedback">
-                  Please enter a valid email address.
-                </div>
-              </div>
-
-              <div class="mb-3">
-                <label for="registerPassword" class="form-label text-secondary small fw-semibold">Password</label>
-                <input
-                  v-model="form.password"
-                  type="password"
-                  class="form-control"
-                  :class="{ 'is-invalid': form.password && !isPasswordValid }"
-                  id="registerPassword"
-                  placeholder="At least 8 characters"
-                  required
-                />
-                <div v-if="form.password && !isPasswordValid" class="invalid-feedback">
-                  Password must be at least 8 characters long.
-                </div>
-              </div>
-
-
-              <button
-                type="submit"
-                class="btn btn-primary w-100 py-2 fw-semibold"
-                :disabled="isLoading || !isFormValid"
-              >
-                <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                {{ isLoading ? 'Registering...' : 'Register' }}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+    <div v-if="errorMessage" class="auth-alert is-error" role="alert">
+      <span class="material-symbols-outlined" aria-hidden="true">error</span>
+      <span>{{ errorMessage }}</span>
     </div>
-  </div>
+    <div v-if="successMessage" class="auth-alert is-success" role="status">
+      <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+      <span>{{ successMessage }}</span>
+    </div>
+
+    <form @submit.prevent="handleSubmit" novalidate>
+      <div class="auth-field">
+        <label for="registerName" class="auth-label">Name</label>
+        <input
+          id="registerName"
+          v-model.trim="form.name"
+          type="text"
+          class="auth-input"
+          placeholder="e.g. Alex Tan"
+          autocomplete="name"
+          required
+        />
+      </div>
+
+      <div class="auth-field">
+        <label for="registerEmail" class="auth-label">Email address</label>
+        <input
+          id="registerEmail"
+          v-model.trim="form.email"
+          type="email"
+          class="auth-input"
+          :class="{ 'is-invalid': form.email && !isEmailValid }"
+          placeholder="name@example.com"
+          autocomplete="email"
+          :aria-invalid="Boolean(form.email && !isEmailValid)"
+          aria-describedby="registerEmailHint"
+          required
+        />
+        <p v-if="form.email && !isEmailValid" id="registerEmailHint" class="auth-hint is-error">
+          <span class="material-symbols-outlined" aria-hidden="true">error</span>
+          Please enter a valid email address.
+        </p>
+      </div>
+
+      <div class="auth-field">
+        <label for="registerPassword" class="auth-label">Password</label>
+        <div class="auth-input-wrap">
+          <input
+            id="registerPassword"
+            v-model="form.password"
+            :type="showPassword ? 'text' : 'password'"
+            class="auth-input has-toggle"
+            :class="{ 'is-invalid': form.password && !isPasswordValid }"
+            autocomplete="new-password"
+            :aria-invalid="Boolean(form.password && !isPasswordValid)"
+            aria-describedby="registerPasswordHint"
+            required
+          />
+          <button
+            type="button"
+            class="auth-toggle"
+            aria-controls="registerPassword"
+            :aria-pressed="showPassword"
+            @click="showPassword = !showPassword"
+          >
+            {{ showPassword ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+        <!-- Always visible, so people know the rule before they type; turns green once it's met -->
+        <p
+          id="registerPasswordHint"
+          class="auth-hint"
+          :class="{ 'is-ok': isPasswordValid, 'is-error': form.password && !isPasswordValid }"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">
+            {{ isPasswordValid ? 'check_circle' : 'info' }}
+          </span>
+          At least 8 characters
+        </p>
+      </div>
+
+      <button type="submit" class="auth-submit" :disabled="isLoading || !isFormValid">
+        <span v-if="isLoading" class="auth-spinner" aria-hidden="true"></span>
+        {{ isLoading ? 'Creating account...' : 'Create account' }}
+      </button>
+    </form>
+
+    <p class="auth-switch">
+      Already have an account? <router-link to="/login">Log in</router-link>
+    </p>
+  </AuthShell>
 </template>
 
 <script setup>
@@ -83,6 +104,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { API_URL } from '@/services/api'
+import AuthShell from './AuthShell.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -95,6 +117,7 @@ const form = reactive({
 })
 
 const isLoading = ref(false)
+const showPassword = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 

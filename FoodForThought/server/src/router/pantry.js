@@ -354,8 +354,4 @@ module.exports.normalizeIngredient = normalizeIngredient
 module.exports.scoreRecipe = scoreRecipe
 module.exports.rankRecipes = rankRecipes
 module.exports.getSavedPreferences = getSavedPreferences
-<<<<<<< Updated upstream
 module.exports.checkEdits = checkEdits
-=======
-module.exports.checkEdits = checkEdits
->>>>>>> Stashed changes
