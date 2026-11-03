@@ -50,13 +50,13 @@ const router = createRouter({
       component: () => import('../views/EditRecipe.vue')
     },
     {
+      path: '/recipes/create',
+      component: () => import('../views/CreateRecipe.vue')
+    },
+    {
       path: '/recipes/:id',
       name: 'recipe-detail',
       component: RecipeDetail
-    },
-    {
-      path: '/recipes/create',
-      component: () => import('../views/CreateRecipe.vue')
     },
     {
       path: '/preferences',

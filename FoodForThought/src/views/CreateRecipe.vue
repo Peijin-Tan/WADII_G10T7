@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
@@ -227,7 +227,7 @@ async function createRecipe() {
     })
 
     success.value = 'Recipe created successfully!'
-    await router.push('/recipes')
+    await router.push(backTo)
 
   } catch (err) {
     console.error(err)
@@ -244,6 +244,7 @@ async function createRecipe() {
 
 
 <template>
+    <div class="fft-page">
   <div class="container mt-5 mb-5" style="max-width: 800px">
     <h1>Create a Recipe</h1>
     <p class="text-muted">
@@ -457,40 +458,6 @@ async function createRecipe() {
 
 <hr />
 
-<h4>Allergens</h4>
-
-<p class="text-muted">
-  Select all allergens present in your recipe.
-</p>
-
-<div class="row mb-4">
-  <div
-    v-for="option in allergenOptions"
-    :key="option"
-    class="col-md-4 col-6 mb-2"
-  >
-    <div class="form-check">
-      <input
-        :id="'allergen-' + option"
-        v-model="allergens"
-        class="form-check-input"
-        type="checkbox"
-        :value="option"
-      />
-
-      <label
-        class="form-check-label"
-        :for="'allergen-' + option"
-      >
-        {{ option }}
-      </label>
-    </div>
-  </div>
-</div>
-
-
-<hr />
-
       <!-- Allergens -->
       <h4>Allergens</h4>
       <p class="text-muted">
@@ -632,5 +599,6 @@ async function createRecipe() {
         </button>
       </div>
     </form>
+  </div>
   </div>
 </template>
