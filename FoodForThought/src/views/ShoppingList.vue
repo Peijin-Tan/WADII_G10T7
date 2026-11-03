@@ -373,10 +373,10 @@ async function removeItem(it) {
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                 </svg>
-                <div class="sw-ring-label"><span class="sw-label-sm">{{ percent }}%</span></div>
+                <div class="sw-ring-label"><span class="sw-label-sm tabular-nums">{{ percent }}%</span></div>
               </div>
               <div class="d-flex flex-column">
-                <span class="sw-label-lg">{{ bought }} of {{ total }} bought</span>
+                <span class="sw-label-lg tabular-nums">{{ bought }} of {{ total }} bought</span>
                 <span class="sw-label-sm sw-text-outline">{{ pantryItems.length }} covered by your pantry</span>
                 <router-link to="/pantry" class="sw-inline-link">
                   Go to pantry
@@ -612,7 +612,11 @@ async function removeItem(it) {
               <span class="material-symbols-outlined" aria-hidden="true">shopping_cart_checkout</span>
               <span class="d-flex flex-column align-items-start">
                 <span>Start shopping</span>
+<<<<<<< Updated upstream
                 <span class="sw-shop-cta-count">{{ toBuyLeft }} {{ toBuyLeft === 1 ? 'item' : 'items' }} to buy</span>
+=======
+                <span class="sw-shop-cta-count tabular-nums">{{ toBuyLeft }} {{ toBuyLeft === 1 ? 'item' : 'items' }} to buy</span>
+>>>>>>> Stashed changes
               </span>
             </button>
           </section>
@@ -746,7 +750,11 @@ async function removeItem(it) {
 @media (min-width: 768px) { .sw-page { padding: 1.5rem; gap: 2.5rem; } }
 
 /* Edge-to-edge page background: same colour as the planner and pantry (#fafaf3) */
+<<<<<<< Updated upstream
 .sw-shell { min-height: 100vh; background: #fafaf3; }
+=======
+.sw-shell { min-height: 100vh; min-height: 100dvh; background: #fafaf3; }
+>>>>>>> Stashed changes
 
 /* ---------- Icons (Material Symbols) ---------- */
 .material-symbols-outlined { line-height: 1; vertical-align: middle; user-select: none; }
@@ -754,7 +762,7 @@ async function removeItem(it) {
 .sw-ico-18 { font-size: 18px; }
 .sw-ico-20 { font-size: 20px; }
 .sw-ico-22 { font-size: 22px; }
-.sw-spin { animation: sw-spin 1s linear infinite; }
+.sw-spin { animation: sw-spin 0.7s linear infinite; }
 @keyframes sw-spin { to { transform: rotate(360deg); } }
 
 /* ---------- Typography scale ---------- */

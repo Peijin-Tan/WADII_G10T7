@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+<<<<<<< Updated upstream
 import { useRouter } from 'vue-router'
+=======
+import { useRoute, useRouter } from 'vue-router'
+>>>>>>> Stashed changes
 import { createApi, errorMessage } from '@/services/api'
 import { addDays, toISODate, mondayOf, startOfToday } from '@/utils/dates'
 import RecipeModal from '@/components/Mealplan/RecipeModal.vue'
@@ -16,6 +20,10 @@ import { useConfirm } from '@/composables/useConfirm'
 const api = createApi('/planner')
 const shoppingApi = createApi('/shoppinglist')
 const router = useRouter()
+<<<<<<< Updated upstream
+=======
+const route = useRoute()
+>>>>>>> Stashed changes
 const confirm = useConfirm()
 
 /* ---------- Date helpers ---------- */
@@ -259,6 +267,21 @@ function openAddMeal(slot = 'Dinner') {
   addTarget.value = { date: toISODate(days.value[activeIndex.value].date), mealSlot: slot }
 }
 
+<<<<<<< Updated upstream
+=======
+// The Dashboard's "+ Plan" buttons link here as /planner?day=3&add=dinner:
+// jump to that day (this week) and open the Add Meal modal for that meal time.
+onMounted(() => {
+  const day = Number(route.query.day)
+  const slot = String(route.query.add || '')
+  if (!Number.isInteger(day) || day < 0 || day > 6 || !['breakfast', 'lunch', 'dinner', 'snack'].includes(slot)) return
+  weekOffset.value = 0
+  activeIndex.value = day
+  openAddMeal(capitalize(slot))
+  router.replace({ query: {} }) // so refreshing the page doesn't reopen the modal
+})
+
+>>>>>>> Stashed changes
 /* ---------- Add Meal modal: searching saved + Spoonacular recipes ---------- */
 // The modal emits 'search' as the user types (debounced); this page calls the API and passes
 // the results back in as props (same pattern as the pantry's suggestions modal).
@@ -779,6 +802,7 @@ async function sendToGrocery() {
   color: var(--fft-on-surface);
   background: var(--fft-background);
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
@@ -955,6 +979,7 @@ async function sendToGrocery() {
   padding-top: 0;
   background: var(--fft-background);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .foodforthought .fft-container {
@@ -1045,8 +1070,10 @@ async function sendToGrocery() {
   transition: box-shadow 0.2s;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .foodforthought .fft-hover-lift:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
 }
 
 .foodforthought .fft-pill {
@@ -1434,8 +1461,10 @@ async function sendToGrocery() {
   transition: transform 0.15s;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .foodforthought .fft-picker:hover .fft-picker-chevron {
   transform: translateY(1px);
+}
 }
 
 /* ---------- The real <select>, invisible but clickable ---------- */
@@ -1518,8 +1547,10 @@ async function sendToGrocery() {
   border-bottom-color: currentColor;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .foodforthought .fft-inline-link:hover .material-symbols-outlined {
   transform: translateX(2px);
+}
 }
 
 .foodforthought .fft-inline-link .material-symbols-outlined {
@@ -1533,7 +1564,7 @@ async function sendToGrocery() {
 }
 
 .foodforthought .fft-spin {
-  animation: fft-spin 1s linear infinite;
+  animation: fft-spin 0.7s linear infinite;
 }
 
 @keyframes fft-spin {

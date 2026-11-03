@@ -1,10 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { createApi, errorMessage } from '@/services/api'
+import { useConfirm } from '@/composables/useConfirm'
 
+// createApi sends the login token and logs out on 401 (expired login), like the other pages
+const api = createApi()
 const auth = useAuthStore()
+const confirm = useConfirm()
 
 const stats = ref({
   totalUsers: 0,
@@ -47,16 +50,12 @@ async function loadStats() {
     loading.value = true
     error.value = ''
 
-    const response = await axios.get('http://localhost:8000/admin/stats', {
-      headers: {
-        Authorization: `Bearer ${auth.token}`
-      }
-    })
+    const response = await api.get('/admin/stats')
 
     stats.value = response.data
   } catch (err) {
     console.error(err)
-    error.value = err.response?.data?.message || 'Unable to load dashboard statistics.'
+    error.value = errorMessage(err, 'Unable to load dashboard statistics.')
   } finally {
     loading.value = false
   }
@@ -67,7 +66,7 @@ async function loadComments() {
   commentsError.value = ''
 
   try {
-    const response = await axios.get('http://localhost:8000/comments')
+    const response = await api.get('/comments')
     comments.value = response.data
   } catch (err) {
     console.error(err)
@@ -88,16 +87,12 @@ async function loadUsers() {
   showUsers.value = true
 
   try {
-    const response = await axios.get('http://localhost:8000/users', {
-      headers: {
-        Authorization: `Bearer ${auth.token}`
-      }
-    })
+    const response = await api.get('/users')
 
     users.value = response.data
   } catch (err) {
     console.error(err)
-    usersError.value = err.response?.data?.message || 'Unable to load users.'
+    usersError.value = errorMessage(err, 'Unable to load users.')
   } finally {
     usersLoading.value = false
   }
@@ -117,18 +112,24 @@ async function deleteUser(userId) {
     return
   }
 
-  if (!confirm(`Delete ${userToDelete.name || userToDelete.email}?`)) return
+  const ok = await confirm({
+    title: `Delete ${userToDelete.name || userToDelete.email}?`,
+    message: 'Their account is removed along with their pantry, meal plans, shopping lists, preferences, comments and likes. Recipes and posts they shared stay. This can\'t be undone.',
+    confirmText: 'Delete user',
+  })
+  if (!ok) return
 
   deletingUserId.value = userId
 
   try {
-    await axios.delete(`http://localhost:8000/users/${userId}`, {
-      headers: {
-        Authorization: `Bearer ${auth.token}`
-      }
-    })
+    const { data } = await api.delete(`/users/${userId}`)
 
     users.value = users.value.filter(user => user._id !== userId)
+    // their comments were removed too, so refresh the moderation list and its count
+    if (data.removed?.comments) {
+      await loadComments()
+      stats.value.totalComments = Math.max(stats.value.totalComments - data.removed.comments, 0)
+    }
 
     if (stats.value?.totalUsers) {
       stats.value.totalUsers = Math.max(stats.value.totalUsers - 1, 0)
@@ -143,7 +144,7 @@ async function deleteUser(userId) {
     }
   } catch (err) {
     console.error(err)
-    usersError.value = err.response?.data?.message || 'Unable to delete user.'
+    usersError.value = errorMessage(err, 'Unable to delete user.')
   } finally {
     deletingUserId.value = null
   }
@@ -155,16 +156,17 @@ async function deleteComment(commentId) {
     return
   }
 
-  if (!confirm('Are you sure you want to delete this comment?')) return
+  const ok = await confirm({
+    title: 'Delete this comment?',
+    message: 'It will be removed from the recipe for everyone.',
+    confirmText: 'Delete comment',
+  })
+  if (!ok) return
 
   deletingCommentId.value = commentId
 
   try {
-    await axios.delete(`http://localhost:8000/comments/${commentId}`, {
-      headers: {
-        Authorization: `Bearer ${auth.token}`
-      }
-    })
+    await api.delete(`/comments/${commentId}`)
 
     comments.value = comments.value.filter(comment => comment._id !== commentId)
 
@@ -173,9 +175,42 @@ async function deleteComment(commentId) {
     }
   } catch (err) {
     console.error(err)
-    commentsError.value = err.response?.data?.message || 'Unable to delete comment.'
+    commentsError.value = errorMessage(err, 'Unable to delete comment.')
   } finally {
     deletingCommentId.value = null
+  }
+}
+
+/* ---------- Promote / demote (PATCH /users/:id/role) ----------
+   Sign-up always creates normal users, so this is how someone becomes an admin. */
+const changingRoleId = ref(null)
+
+async function changeRole(user) {
+  const makeAdmin = user.role !== 'admin'
+  const ok = await confirm({
+    title: makeAdmin ? `Make ${user.name} an admin?` : `Remove admin from ${user.name}?`,
+    message: makeAdmin
+      ? 'They will be able to see every user, delete accounts and remove comments.'
+      : 'They will become a normal user and lose access to this dashboard.',
+    confirmText: makeAdmin ? 'Make admin' : 'Remove admin',
+    tone: makeAdmin ? 'primary' : 'danger',
+    icon: makeAdmin ? 'admin_panel_settings' : 'person_remove',
+  })
+  if (!ok) return
+
+  changingRoleId.value = user._id
+  usersError.value = ''
+  try {
+    const { data } = await api.patch(`/users/${user._id}/role`, { role: makeAdmin ? 'admin' : 'user' })
+    user.role = data.role
+    // keep the counts on the cards in step
+    stats.value.totalAdmins += makeAdmin ? 1 : -1
+    stats.value.totalRegularUsers += makeAdmin ? -1 : 1
+  } catch (err) {
+    console.error(err)
+    usersError.value = errorMessage(err, 'Unable to change this user\'s role.')
+  } finally {
+    changingRoleId.value = null
   }
 }
 
@@ -270,13 +305,24 @@ onMounted(() => {
                 </span>
               </div>
 
-              <button
-                class="btn btn-outline-danger btn-sm"
-                :disabled="deletingUserId === user._id || user._id === auth.user?._id"
-                @click="deleteUser(user._id)"
-              >
-                {{ deletingUserId === user._id ? 'Deleting...' : user._id === auth.user?._id ? 'Current Admin' : 'Delete User' }}
-              </button>
+              <span v-if="user._id === auth.user?._id" class="text-muted small fw-semibold">You</span>
+              <div v-else class="d-flex gap-2 flex-wrap">
+                <button
+                  class="btn btn-sm"
+                  :class="user.role === 'admin' ? 'btn-outline-secondary' : 'btn-outline-primary'"
+                  :disabled="changingRoleId === user._id"
+                  @click="changeRole(user)"
+                >
+                  {{ changingRoleId === user._id ? 'Saving...' : user.role === 'admin' ? 'Remove admin' : 'Make admin' }}
+                </button>
+                <button
+                  class="btn btn-outline-danger btn-sm"
+                  :disabled="deletingUserId === user._id"
+                  @click="deleteUser(user._id)"
+                >
+                  {{ deletingUserId === user._id ? 'Deleting...' : 'Delete user' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>

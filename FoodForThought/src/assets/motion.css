@@ -1,0 +1,104 @@
+/*
+ * motion.css — shared motion tokens + mobile "feel" baseline.
+ *
+ * Based on Emil Kowalski's design-engineering skills (github.com/emilkowalski/skills):
+ *   - emil-design-eng: easing/duration rules, press feedback
+ *   - mobile-native:   tap highlight, input zoom, laggy taps, long-press selection
+ *
+ * Loaded once in main.js AFTER bootstrap + theme.css so these rules win over Bootstrap defaults.
+ * Component <style scoped> blocks still override anything here (they are more specific).
+ */
+
+:root {
+  /* Strong custom curves. The built-in CSS keywords are too weak to feel intentional. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* elements entering/exiting, press feedback */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);  /* something moving/morphing on screen */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);   /* sheets/drawers (iOS-like) */
+
+  /* Durations. Rule of thumb: UI animation stays under 300ms. */
+  --dur-press: 160ms;   /* button press feedback (100-160ms) */
+  --dur-fast: 150ms;    /* hover / colour changes */
+  --dur-modal: 200ms;   /* modals/dialogs entering */
+  --dur-exit: 150ms;    /* exits are faster than enters */
+}
+
+/* ---------- Mobile baseline (mobile-native skill) ---------- */
+
+html {
+  /* Remove the grey/blue flash phones paint over anything tapped.
+     Every button gets its own :active state below, so there's still feedback. */
+  -webkit-tap-highlight-color: transparent;
+  /* Stop iOS inflating font sizes when the phone is rotated to landscape */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Fire clicks immediately (no 300ms double-tap-zoom wait) on tappable things */
+a,
+button,
+.btn,
+[role='button'],
+label,
+summary {
+  touch-action: manipulation;
+}
+
+/* Long-pressing a control shouldn't select its label. Only controls — body text stays copyable. */
+button,
+.btn,
+[role='button'],
+.nav-link,
+.dropdown-item {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* iOS zooms the page when you focus an input under 16px, and doesn't zoom back out.
+   Only applied on touch screens so desktop keeps the designed sizes.
+   !important is needed because component styles set smaller sizes. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ---------- Press feedback (emil-design-eng skill) ---------- */
+/*
+ * Buttons shrink very slightly while pressed so the UI feels like it heard you.
+ * We use the separate `scale` property (not `transform`) so it never clobbers
+ * a component's own transform, e.g. translateY(-50%) used for positioning.
+ */
+.btn,
+button {
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    opacity var(--dur-fast) ease,
+    scale var(--dur-press) var(--ease-out);
+}
+
+.btn:active:not(:disabled):not(.disabled),
+button:active:not(:disabled),
+[role='button']:active {
+  scale: 0.97;
+}
+
+/* ---------- Reduced motion ---------- */
+/* "Reduced" means gentler, not zero: keep colour/opacity fades, drop movement. */
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled):not(.disabled),
+  button:active:not(:disabled),
+  [role='button']:active {
+    scale: none;
+  }
+}
+
+/* ---------- Small typography details (ui-cheatsheet) ---------- */
+/* Numbers that change (counts, totals, progress) shouldn't jitter in width */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

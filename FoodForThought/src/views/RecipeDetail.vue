@@ -1,12 +1,11 @@
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import axios from 'axios'
 import RecipeComments from '@/components/RecipeComments.vue'
 
 const route = useRoute()
-const router = useRouter()
 
 const recipe = ref(null)
 const loading = ref(true)
@@ -38,228 +37,654 @@ async function fetchRecipe() {
   }
 }
 
-function goBack() {
-  router.push('/recipes')
+/* ---------- Page helpers ---------- */
+// The four numbers under the title; any that are missing are left out
+const stats = computed(() => {
+  if (!recipe.value) return []
+  return [
+    { label: 'Prep', value: recipe.value.prepTime, unit: 'min' },
+    { label: 'Cook', value: recipe.value.cookingTime, unit: 'min' },
+    { label: 'Total', value: recipe.value.totalTime, unit: 'min' },
+    { label: 'Serves', value: recipe.value.servings, unit: '' }
+  ].filter(stat => stat.value != null && stat.value !== '')
+})
+
+// Steps in order, whatever order the database returns them in
+const steps = computed(() => {
+  return [...(recipe.value?.instructions || [])].sort(
+    (a, b) => (a.step ?? 0) - (b.step ?? 0)
+  )
+})
+
+// Ingredient checklist: ticks are only kept on this page (not saved)
+const checked = ref([])
+
+function toggleIngredient(index) {
+  checked.value = checked.value.includes(index)
+    ? checked.value.filter(i => i !== index)
+    : [...checked.value, index]
 }
 
 onMounted(fetchRecipe)
 </script>
 
 <template>
-    <div class="fft-page">
-  <div class="container py-5">
-    <button
-      class="btn btn-outline-secondary mb-4"
-      @click="goBack"
-    >
-      &larr; Back to Recipes
-    </button>
+  <div class="fft-page">
+    <main class="container recipe-page py-4 py-lg-5 text-start">
+      <RouterLink to="/recipes" class="rd-back">
+        <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        All recipes
+      </RouterLink>
 
-    <div v-if="loading" class="text-center py-5">
-      <div
-        class="spinner-border text-success"
-        role="status"
-      ></div>
-      <p class="mt-3">Loading recipe...</p>
-    </div>
-
-    <div v-else-if="error" class="alert alert-danger">
-      {{ error }}
-    </div>
-
-    <div v-else-if="recipe">
-      <!-- Recipe heading -->
-      <div class="row g-4 mb-5">
-        <div class="col-md-6">
-          <img
-            :src="recipe.image"
-            :alt="recipe.title"
-            class="img-fluid rounded shadow-sm recipe-image"
-          />
-        </div>
-
-        <div class="col-md-6">
-          <span
-            class="badge mb-3"
-            :class="recipe.source === 'spoonacular'
-              ? 'text-bg-primary'
-              : 'text-bg-success'"
-          >
-            {{ recipe.source === 'spoonacular'
-              ? 'Spoonacular'
-              : 'Community Recipe' }}
-          </span>
-
-          <h1 class="mb-3">{{ recipe.title }}</h1>
-
-          <p class="text-muted">
-            {{ recipe.summary || 'No description available.' }}
-          </p>
-
-          <hr />
-
-          <div class="row g-3">
-            <div class="col-6">
-              <strong>Prep Time</strong>
-              <p>{{ recipe.prepTime ?? 'N/A' }} minutes</p>
-            </div>
-
-            <div class="col-6">
-              <strong>Cooking Time</strong>
-              <p>{{ recipe.cookingTime ?? 'N/A' }} minutes</p>
-            </div>
-
-            <div class="col-6">
-              <strong>Total Time</strong>
-              <p>{{ recipe.totalTime ?? 'N/A' }} minutes</p>
-            </div>
-
-            <div class="col-6">
-              <strong>Servings</strong>
-              <p>{{ recipe.servings ?? 'N/A' }}</p>
-            </div>
-          </div>
-
-          <div v-if="recipe.cuisine?.length" class="mb-3">
-            <strong>Cuisine:</strong>
-            {{ recipe.cuisine.join(', ') }}
-          </div>
-
-          <div
-            v-if="recipe.dietaryCategories?.length"
-            class="mb-3"
-          >
-            <strong>Dietary Categories:</strong>
-            <span
-              v-for="diet in recipe.dietaryCategories"
-              :key="diet"
-              class="badge text-bg-light border ms-1"
-            >
-              {{ diet }}
-            </span>
-          </div>
+      <!-- Loading -->
+      <div v-if="loading" class="rd-hero" aria-busy="true" aria-label="Loading recipe">
+        <div class="rd-photo rd-skeleton"></div>
+        <div>
+          <div class="rd-skeleton rd-skeleton-line" style="width: 30%"></div>
+          <div class="rd-skeleton rd-skeleton-line is-title"></div>
+          <div class="rd-skeleton rd-skeleton-line"></div>
+          <div class="rd-skeleton rd-skeleton-line" style="width: 70%"></div>
         </div>
       </div>
 
-      <!-- Ingredients -->
-      <section class="mb-5">
-        <h2 class="mb-3">Ingredients</h2>
-
-        <div class="card">
-          <ul class="list-group list-group-flush">
-            <li
-              v-for="(ingredient, index) in recipe.ingredients"
-              :key="index"
-              class="list-group-item"
-            >
-              <span class="fw-medium">
-                {{ ingredient.name }}
-              </span>
-
-              <span class="text-muted ms-2">
-                {{ ingredient.amount }} {{ ingredient.unit }}
-              </span>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <!-- Instructions -->
-      <section class="mb-5">
-        <h2 class="mb-3">Cooking Instructions</h2>
-
-        <div
-          v-if="recipe.instructions?.length"
-          class="d-flex flex-column gap-3"
-        >
-          <div
-            v-for="(instruction, index) in recipe.instructions"
-            :key="index"
-            class="card"
-          >
-            <div class="card-body d-flex gap-3">
-              <span class="badge text-bg-success step-number">
-                {{ instruction.step ?? index + 1 }}
-              </span>
-
-              <p class="mb-0">
-                {{ instruction.description }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <p v-else class="text-muted">
-          No cooking instructions available.
-        </p>
-      </section>
-
-      <!-- Nutrition -->
-      <section v-if="recipe.nutrition?.length" class="mb-5">
-        <h2 class="mb-3">Nutrition Information</h2>
-
-        <div class="card">
-          <ul class="list-group list-group-flush">
-            <li
-              v-for="(item, index) in recipe.nutrition"
-              :key="index"
-              class="list-group-item d-flex justify-content-between"
-            >
-              <span>{{ item.name }}</span>
-              <span>
-                {{ item.amount ?? 'N/A' }}
-                {{ item.unit || '' }}
-              </span>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <!-- Allergens -->
-      <section v-if="recipe.allergens?.length" class="mb-4">
-        <h2 class="mb-3">Allergens</h2>
-
-        <span
-          v-for="allergen in recipe.allergens"
-          :key="allergen"
-          class="badge text-bg-warning me-2"
-        >
-          {{ allergen }}
-        </span>
-      </section>
-
-      <div v-if="recipe.sourceUrl" class="mt-4">
-        <a
-          :href="recipe.sourceUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-outline-primary"
-        >
-          View Original Recipe
-        </a>
+      <!-- Error -->
+      <div v-else-if="error" class="rd-empty" role="alert">
+        <span class="material-symbols-outlined rd-empty-icon" aria-hidden="true">no_meals</span>
+        <h1 class="rd-empty-title">{{ error }}</h1>
+        <p>It may have been removed, or the link is wrong.</p>
+        <RouterLink to="/recipes" class="rd-btn rd-btn-outline">Browse recipes</RouterLink>
       </div>
-      <RecipeComments
-        :key="recipe._id"
-        :recipe-id="recipe._id"
-      />
-    </div>
-  </div>
+
+      <article v-else-if="recipe">
+        <!-- ===== Photo + title + key numbers ===== -->
+        <header class="rd-hero">
+          <div class="rd-photo">
+            <img :src="recipe.image || '/img/meal-placeholder.svg'" :alt="recipe.title" />
+          </div>
+
+          <div class="rd-intro">
+            <p class="rd-source" :class="recipe.source === 'spoonacular' ? 'is-web' : 'is-community'">
+              {{ recipe.source === 'spoonacular' ? 'From Spoonacular' : 'Community recipe' }}
+            </p>
+
+            <h1 class="rd-title">{{ recipe.title }}</h1>
+
+            <p class="rd-summary">
+              {{ recipe.summary || 'No description yet.' }}
+            </p>
+
+            <dl v-if="stats.length" class="rd-stats">
+              <div v-for="stat in stats" :key="stat.label" class="rd-stat">
+                <dt>{{ stat.label }}</dt>
+                <dd>
+                  {{ stat.value }}<span v-if="stat.unit" class="rd-unit">{{ stat.unit }}</span>
+                </dd>
+              </div>
+            </dl>
+
+            <div
+              v-if="recipe.cuisine?.length || recipe.dietaryCategories?.length"
+              class="rd-tags"
+            >
+              <span v-for="name in recipe.cuisine" :key="'c-' + name" class="rd-tag is-cuisine">
+                {{ name }}
+              </span>
+              <span v-for="diet in recipe.dietaryCategories" :key="'d-' + diet" class="rd-tag">
+                {{ diet }}
+              </span>
+            </div>
+
+            <a
+              v-if="recipe.sourceUrl"
+              :href="recipe.sourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="rd-btn rd-btn-outline rd-original"
+            >
+              View original recipe
+              <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+              <span class="visually-hidden">(opens in a new tab)</span>
+            </a>
+          </div>
+        </header>
+
+        <!-- ===== Ingredients (left, stays in view) + method (right) ===== -->
+        <div class="rd-body">
+          <aside class="rd-side">
+            <section class="rd-panel rd-ingredients-panel" aria-labelledby="rd-ingredients-title">
+              <div class="rd-panel-head">
+                <h2 id="rd-ingredients-title" class="rd-h2">Ingredients</h2>
+                <span v-if="recipe.ingredients?.length" class="rd-panel-meta">
+                  {{ checked.length ? `${checked.length} of ${recipe.ingredients.length} ready` : 'Tick off as you go' }}
+                </span>
+              </div>
+
+              <ul v-if="recipe.ingredients?.length" class="rd-ingredients">
+                <li v-for="(ingredient, index) in recipe.ingredients" :key="index">
+                  <label class="rd-ingredient" :class="{ 'is-checked': checked.includes(index) }">
+                    <input
+                      type="checkbox"
+                      class="rd-check"
+                      :checked="checked.includes(index)"
+                      @change="toggleIngredient(index)"
+                    />
+                    <span class="rd-ingredient-name">{{ ingredient.name }}</span>
+                    <span class="rd-ingredient-amount">{{ ingredient.amount }} {{ ingredient.unit }}</span>
+                  </label>
+                </li>
+              </ul>
+              <p v-else class="rd-muted m-0">No ingredients listed.</p>
+            </section>
+
+            <section v-if="recipe.nutrition?.length" class="rd-panel" aria-labelledby="rd-nutrition-title">
+              <h2 id="rd-nutrition-title" class="rd-h2 rd-h2-sm">Nutrition</h2>
+              <dl class="rd-nutrition">
+                <div v-for="(item, index) in recipe.nutrition" :key="index">
+                  <dt>{{ item.name }}</dt>
+                  <dd>{{ item.amount ?? 'N/A' }} {{ item.unit || '' }}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section v-if="recipe.allergens?.length" class="rd-panel rd-allergens" aria-labelledby="rd-allergens-title">
+              <h2 id="rd-allergens-title" class="rd-h2 rd-h2-sm">
+                <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                Contains
+              </h2>
+              <div class="rd-tags m-0">
+                <span v-for="allergen in recipe.allergens" :key="allergen" class="rd-tag is-allergen">
+                  {{ allergen }}
+                </span>
+              </div>
+            </section>
+          </aside>
+
+          <section class="rd-method" aria-labelledby="rd-method-title">
+            <h2 id="rd-method-title" class="rd-h2">Method</h2>
+
+            <!-- A real sequence, so a numbered list -->
+            <ol v-if="steps.length" class="rd-steps">
+              <li v-for="(instruction, index) in steps" :key="index" class="rd-step">
+                <span class="rd-step-num" aria-hidden="true">{{ index + 1 }}</span>
+                <p class="rd-step-text">{{ instruction.description }}</p>
+              </li>
+            </ol>
+            <p v-else class="rd-muted">No cooking instructions yet.</p>
+          </section>
+        </div>
+
+        <RecipeComments
+          :key="recipe._id"
+          :recipe-id="recipe._id"
+        />
+      </article>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.recipe-image {
+.recipe-page {
+  color: var(--fft-text);
+}
+
+.rd-muted {
+  color: var(--fft-muted);
+}
+
+/* ---------- Back link ---------- */
+.rd-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 24px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 9999px;
+  color: var(--fft-secondary-text);
+  font: 600 14px/20px 'Inter', sans-serif;
+  text-decoration: none;
+  transition: background-color var(--dur-fast, 150ms), color var(--dur-fast, 150ms);
+}
+
+.rd-back:hover {
+  background: var(--fft-surface-high);
+  color: var(--fft-text);
+}
+
+.rd-back .material-symbols-outlined {
+  font-size: 20px;
+}
+
+/* ---------- Hero ---------- */
+.rd-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: center;
+  margin-bottom: 48px;
+}
+
+.rd-photo {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 24px;
+  background: var(--fft-surface-high);
+}
+
+.rd-photo img {
   width: 100%;
-  max-height: 450px;
+  height: 100%;
   object-fit: cover;
 }
 
-.step-number {
-  min-width: 32px;
-  height: 32px;
+.rd-source {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  font: 600 12px/20px 'Inter', sans-serif;
+}
+
+.rd-source.is-community {
+  background: var(--fft-primary-light);
+  color: var(--fft-primary-dark);
+}
+
+.rd-source.is-web {
+  background: var(--fft-peach);
+  color: var(--fft-peach-text);
+}
+
+.rd-title {
+  margin: 0;
+  font: 600 clamp(32px, 4.4vw, 48px) / 1.08 'Outfit', sans-serif;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.rd-summary {
+  max-width: 60ch;
+  margin: 14px 0 0;
+  color: var(--fft-secondary-text);
+  font-size: 16px;
+  line-height: 26px;
+}
+
+/* Prep / Cook / Total / Serves in one strip */
+.rd-stats {
+  display: flex;
+  margin: 24px 0 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--fft-surface-high);
+  border-bottom: 1px solid var(--fft-surface-high);
+}
+
+.rd-stat {
+  flex: 1;
+  padding: 0 16px;
+  border-left: 1px solid var(--fft-surface-high);
+}
+
+.rd-stat:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.rd-stat dt {
+  color: var(--fft-muted);
+  font: 500 13px/18px 'Inter', sans-serif;
+}
+
+.rd-stat dd {
+  margin: 2px 0 0;
+  font: 600 26px/32px 'Outfit', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.rd-unit {
+  margin-left: 3px;
+  color: var(--fft-secondary-text);
+  font: 500 14px/20px 'Inter', sans-serif;
+}
+
+.rd-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.rd-tag {
+  padding: 4px 12px;
+  border: 1px solid var(--fft-border);
+  border-radius: 9999px;
+  color: var(--fft-secondary-text);
+  font: 500 13px/18px 'Inter', sans-serif;
+}
+
+.rd-tag.is-cuisine {
+  border-color: transparent;
+  background: var(--fft-primary-light);
+  color: var(--fft-primary-dark);
+}
+
+.rd-tag.is-allergen {
+  border-color: transparent;
+  background: var(--fft-peach);
+  color: var(--fft-peach-text);
+  text-transform: capitalize;
+}
+
+/* ---------- Buttons ---------- */
+.rd-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font: 600 14px/20px 'Inter', sans-serif;
+  text-decoration: none;
+  transition: border-color var(--dur-fast, 150ms), background-color var(--dur-fast, 150ms);
+}
+
+.rd-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.rd-btn-outline {
+  border-color: var(--fft-border);
+  background: var(--fft-card);
+  color: var(--fft-primary);
+}
+
+.rd-btn-outline:hover {
+  border-color: var(--fft-primary);
+  color: var(--fft-primary);
+}
+
+.rd-original {
+  margin-top: 20px;
+}
+
+/* ---------- Body: ingredients + method ---------- */
+.rd-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.8fr);
+  gap: 40px;
+  align-items: start;
+  margin-bottom: 48px;
+}
+
+.rd-side {
+  position: sticky; /* the ingredient list stays in view while you read the method */
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rd-panel {
+  padding: 22px 22px 18px;
+  border: 1px solid rgb(194 200 192 / 45%);
+  border-radius: 20px;
+  background: var(--fft-card);
+}
+
+.rd-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.rd-panel-meta {
+  color: var(--fft-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.rd-h2 {
+  margin: 0;
+  font: 600 22px/28px 'Outfit', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.rd-h2-sm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.rd-h2-sm .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--fft-peach-text);
+}
+
+/* Ingredient checklist */
+.rd-ingredients {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rd-ingredients li + li {
+  border-top: 1px solid var(--fft-surface-low);
+}
+
+.rd-ingredient {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  cursor: pointer;
+}
+
+.rd-check {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--fft-primary);
+  cursor: pointer;
+}
+
+.rd-ingredient-name {
+  font-weight: 500;
+  transition: color var(--dur-fast, 150ms);
+}
+
+.rd-ingredient-amount {
+  color: var(--fft-muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.rd-ingredient.is-checked .rd-ingredient-name {
+  color: var(--fft-muted);
+  text-decoration: line-through;
+}
+
+/* Nutrition as a two-column list */
+.rd-nutrition {
+  margin: 0;
+}
+
+.rd-nutrition > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.rd-nutrition > div + div {
+  border-top: 1px solid var(--fft-surface-low);
+}
+
+.rd-nutrition dt {
+  color: var(--fft-secondary-text);
+  font-weight: 400;
+}
+
+.rd-nutrition dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.rd-allergens {
+  background: #fff3ed;
+  border-color: #f7cfbf;
+}
+
+/* Method */
+.rd-method .rd-h2 {
+  margin-bottom: 8px;
+}
+
+.rd-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rd-step {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--fft-surface-high);
+}
+
+.rd-step:last-child {
+  border-bottom: 0;
+}
+
+.rd-step-num {
+  font: 600 36px/1 'Outfit', sans-serif;
+  color: var(--fft-primary);
+  letter-spacing: -0.02em;
+}
+
+.rd-step-text {
+  max-width: 64ch;
+  margin: 0;
+  font-size: 17px;
+  line-height: 28px;
+}
+
+/* ---------- Empty / error ---------- */
+.rd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 24px;
+  border: 1px dashed var(--fft-border);
+  border-radius: 20px;
+  text-align: center;
+  color: var(--fft-secondary-text);
+}
+
+.rd-empty-icon {
+  margin-bottom: 8px;
+  font-size: 44px;
+  color: var(--fft-muted);
+}
+
+.rd-empty-title {
+  margin: 0 0 4px;
+  font: 600 24px/30px 'Outfit', sans-serif;
+  color: var(--fft-text);
+}
+
+.rd-empty .rd-btn {
+  margin-top: 16px;
+}
+
+/* ---------- Loading ---------- */
+.rd-skeleton {
+  background: linear-gradient(90deg, var(--fft-surface-low) 25%, var(--fft-surface-high) 50%, var(--fft-surface-low) 75%);
+  background-size: 200% 100%;
+  animation: rd-shimmer 1.2s linear infinite;
+}
+
+.rd-skeleton-line {
+  height: 18px;
+  margin-bottom: 14px;
+  border-radius: 6px;
+}
+
+.rd-skeleton-line.is-title {
+  height: 44px;
+  width: 85%;
+}
+
+@keyframes rd-shimmer {
+  to { background-position: -200% 0; }
+}
+
+/* ---------- Smaller screens ---------- */
+@media (max-width: 991.98px) {
+  .rd-hero,
+  .rd-body {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  /* Phones/tablets: Ingredients, then Method, then nutrition + allergens.
+     display: contents lets the panels inside the sidebar be ordered alongside the method. */
+  .rd-side {
+    display: contents;
+  }
+
+  .rd-ingredients-panel {
+    order: 1;
+  }
+
+  .rd-method {
+    order: 2;
+  }
+
+  .rd-side > .rd-panel:not(.rd-ingredients-panel) {
+    order: 3;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .rd-photo {
+    border-radius: 18px;
+  }
+
+  .rd-stat {
+    padding: 0 10px;
+  }
+
+  .rd-stat dd {
+    font-size: 22px;
+    line-height: 28px;
+  }
+
+  .rd-step {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .rd-step-num {
+    font-size: 28px;
+  }
+
+  .rd-step-text {
+    font-size: 16px;
+    line-height: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-skeleton {
+    animation: none;
+  }
 }
 </style>

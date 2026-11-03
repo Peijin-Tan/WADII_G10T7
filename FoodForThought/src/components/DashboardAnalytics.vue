@@ -605,8 +605,8 @@ onMounted(() => {
 <style scoped>
 .analytics-card {
   background-color: var(--fft-card);
-  border: 1px solid rgb(194 200 192 / 40%);
-  border-radius: 16px;
+  border: 1px solid rgb(194 200 192 / 45%);
+  border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
@@ -621,12 +621,11 @@ onMounted(() => {
 }
 
 .panel-label {
-  color: var(--fft-secondary-text);
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
+  color: var(--fft-text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  line-height: 24px;
 }
 
 .period-label {

@@ -554,6 +554,7 @@ async function onRemove(item) {
 /* ===== Layout ===== */
 .fft-main {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .fft-container {
@@ -946,7 +947,7 @@ h3.fft-headline-sm {
 
 /* ===== Loading spinner ===== */
 .fft-spin {
-  animation: fft-spin 1s linear infinite;
+  animation: fft-spin 0.7s linear infinite;
 }
 
 @keyframes fft-spin {

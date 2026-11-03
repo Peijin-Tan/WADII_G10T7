@@ -35,6 +35,18 @@ const itemSchema = new Schema({
   // NEW: how much of this the pantry already covers (for the "In Pantry" view).
   pantryQuantity: { type: Number, default: 0, min: 0 },
 
+  // Other amounts of the same ingredient in units that can't be converted to `unit`,
+  // e.g. ginger: quantity 1 / unit 'piece', alsoNeed [{ quantity: 1, unit: 'inch' }] -> "1 piece + 1 inch".
+  // Amounts in units that DO convert are already merged into quantity (1 tsp + 1 tbsp -> 4 tsp).
+  alsoNeed: [
+    {
+      _id: false,
+      quantity: { type: Number, min: 0, required: true },
+      unit: { type: String, trim: true, required: true },
+      pantryQuantity: { type: Number, min: 0, default: 0 },
+    },
+  ],
+
   // NEW: which recipes in this week's plan need it (shown as tags in the UI).
   usedIn: [
     {

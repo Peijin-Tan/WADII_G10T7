@@ -217,7 +217,11 @@ onBeforeUnmount(() => {
               <span class="sm-head-icon"><span class="material-symbols-outlined">shopping_cart</span></span>
               <div class="min-w-0">
                 <h2 id="sm-title" class="sm-title">Shopping mode</h2>
+<<<<<<< Updated upstream
                 <p class="sm-sub">{{ inBasket.length }} of {{ totalToShop }} in your basket</p>
+=======
+                <p class="sm-sub tabular-nums">{{ inBasket.length }} of {{ totalToShop }} in your basket</p>
+>>>>>>> Stashed changes
               </div>
             </div>
             <button type="button" class="sm-iconbtn" aria-label="Close shopping mode" @click="emit('close')">
@@ -225,7 +229,11 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="sm-progress" role="progressbar" :aria-valuenow="percent" aria-valuemin="0" aria-valuemax="100">
+<<<<<<< Updated upstream
             <span :style="{ width: `${percent}%` }"></span>
+=======
+            <span :style="{ transform: `scaleX(${percent / 100})` }"></span>
+>>>>>>> Stashed changes
           </div>
 
           <!-- Phones: one list at a time -->
@@ -485,6 +493,10 @@ onBeforeUnmount(() => {
   .sm-modal {
     width: min(960px, calc(100vw - 48px));
     height: min(760px, calc(100vh - 48px));
+<<<<<<< Updated upstream
+=======
+    height: min(760px, calc(100dvh - 48px));
+>>>>>>> Stashed changes
     border-radius: 16px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
   }
@@ -508,7 +520,12 @@ onBeforeUnmount(() => {
 .sm-title { font: 600 20px/26px 'Outfit', sans-serif; margin: 0; }
 .sm-sub { font-size: 13px; color: var(--sm-muted); margin: 0; }
 .sm-progress { height: 6px; border-radius: 9999px; background: var(--sm-high); overflow: hidden; margin: 12px 0; }
+<<<<<<< Updated upstream
 .sm-progress span { display: block; height: 100%; background: var(--sm-primary); transition: width 0.3s ease; }
+=======
+/* scaleX from the left edge instead of animating width: transform skips layout and runs on the GPU */
+.sm-progress span { display: block; width: 100%; height: 100%; transform-origin: left center; background: var(--sm-primary); transition: transform 300ms var(--ease-out); }
+>>>>>>> Stashed changes
 
 .sm-tabs { display: flex; gap: 4px; }
 .sm-tabs button {
