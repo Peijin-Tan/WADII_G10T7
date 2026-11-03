@@ -1,10 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-<<<<<<< Updated upstream
-import { useRouter } from 'vue-router'
-=======
 import { useRoute, useRouter } from 'vue-router'
->>>>>>> Stashed changes
 import { createApi, errorMessage } from '@/services/api'
 import { addDays, toISODate, mondayOf, startOfToday } from '@/utils/dates'
 import RecipeModal from '@/components/Mealplan/RecipeModal.vue'
@@ -20,10 +16,7 @@ import { useConfirm } from '@/composables/useConfirm'
 const api = createApi('/planner')
 const shoppingApi = createApi('/shoppinglist')
 const router = useRouter()
-<<<<<<< Updated upstream
-=======
 const route = useRoute()
->>>>>>> Stashed changes
 const confirm = useConfirm()
 
 /* ---------- Date helpers ---------- */
@@ -267,8 +260,6 @@ function openAddMeal(slot = 'Dinner') {
   addTarget.value = { date: toISODate(days.value[activeIndex.value].date), mealSlot: slot }
 }
 
-<<<<<<< Updated upstream
-=======
 // The Dashboard's "+ Plan" buttons link here as /planner?day=3&add=dinner:
 // jump to that day (this week) and open the Add Meal modal for that meal time.
 onMounted(() => {
@@ -281,7 +272,6 @@ onMounted(() => {
   router.replace({ query: {} }) // so refreshing the page doesn't reopen the modal
 })
 
->>>>>>> Stashed changes
 /* ---------- Add Meal modal: searching saved + Spoonacular recipes ---------- */
 // The modal emits 'search' as the user types (debounced); this page calls the API and passes
 // the results back in as props (same pattern as the pantry's suggestions modal).

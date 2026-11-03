@@ -252,8 +252,6 @@ export default {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-<<<<<<< Updated upstream
-=======
 /* Panel scales up slightly as it fades in, matching AddMealModal. Never from scale(0). */
 @keyframes fft-zoom {
   from { opacity: 0; transform: scale(0.95); }
@@ -263,16 +261,11 @@ export default {
 @media (prefers-reduced-motion: reduce) {
   .fft-modal { animation: fft-fade var(--dur-modal) ease; }
 }
->>>>>>> Stashed changes
 
 /* ---------- Shell ---------- */
 .fft-modal {
   max-width: 36rem;
   max-height: 90vh;
-<<<<<<< Updated upstream
-=======
-  max-height: 90dvh;
->>>>>>> Stashed changes
   border-radius: 1rem;
   overflow: hidden;
   background: var(--fft-surface-lowest);
@@ -285,11 +278,7 @@ export default {
 }
 .fft-modal-header { border-bottom: 1px solid var(--fft-outline-variant); }
 .fft-modal-footer { border-top: 1px solid var(--fft-outline-variant); }
-<<<<<<< Updated upstream
 .fft-modal-body { overflow-y: auto; max-height: 75vh; }
-=======
-.fft-modal-body { overflow-y: auto; max-height: 75vh; max-height: 75dvh; }
->>>>>>> Stashed changes
 
 .min-w-0 { min-width: 0; }
 
@@ -376,18 +365,12 @@ export default {
   border: 1px solid var(--fft-outline-variant);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-<<<<<<< Updated upstream
-=======
 @media (hover: hover) and (pointer: fine) {
->>>>>>> Stashed changes
 .fft-option:hover {
   border-color: rgba(58, 106, 58, 0.4);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
-<<<<<<< Updated upstream
-=======
 }
->>>>>>> Stashed changes
 .fft-thumb {
   width: 4rem;
   height: 4rem;
@@ -431,11 +414,7 @@ export default {
 
 /* ---------- Small screens ---------- */
 @media (max-width: 575.98px) {
-<<<<<<< Updated upstream
   .fft-modal { max-height: 95vh; }
-=======
-  .fft-modal { max-height: 95vh; max-height: 95dvh; }
->>>>>>> Stashed changes
   .fft-option .fft-btn-primary { width: 100%; }
 }
 </style>

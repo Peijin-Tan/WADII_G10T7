@@ -306,8 +306,6 @@ export default {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-<<<<<<< Updated upstream
-=======
 /* Panel scales up slightly as it fades in, matching AddMealModal. Never from scale(0). */
 @keyframes fft-zoom {
   from { opacity: 0; transform: scale(0.95); }
@@ -317,16 +315,11 @@ export default {
 @media (prefers-reduced-motion: reduce) {
   .fft-modal { animation: fft-fade var(--dur-modal) ease; }
 }
->>>>>>> Stashed changes
 
 /* ---------- Shell ---------- */
 .fft-modal {
   max-width: 42rem;
   max-height: 90vh;
-<<<<<<< Updated upstream
-=======
-  max-height: 90dvh;
->>>>>>> Stashed changes
   border-radius: 1rem;
   overflow: hidden;
   background: var(--fft-surface-lowest);
@@ -457,11 +450,7 @@ export default {
 
 /* ---------- Small screens (iPhone 6 ≈ 375px) ---------- */
 @media (max-width: 575.98px) {
-<<<<<<< Updated upstream
   .fft-modal { max-height: 95vh; }
-=======
-  .fft-modal { max-height: 95vh; max-height: 95dvh; }
->>>>>>> Stashed changes
   .fft-modal-header,
   .fft-modal-body { padding: 1rem !important; }
   .fft-title { font-size: 1.25rem; }

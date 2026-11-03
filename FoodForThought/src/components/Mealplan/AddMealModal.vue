@@ -393,21 +393,13 @@ export default {
   background: var(--fft-surface-lowest);
   border: 1px solid var(--fft-outline-variant) !important;
   color: var(--fft-on-surface);
-<<<<<<< Updated upstream
-  animation: fft-zoom 0.15s ease-out;
-=======
   animation: fft-zoom var(--dur-modal) var(--ease-out);
->>>>>>> Stashed changes
 }
 .fft-modal-header {
   background: rgba(244, 243, 238, 0.5);
   border-bottom: 1px solid var(--fft-outline-variant);
 }
-<<<<<<< Updated upstream
 .fft-modal-body { max-height: 75vh; overflow-y: auto; }
-=======
-.fft-modal-body { max-height: 75vh; max-height: 75dvh; overflow-y: auto; }
->>>>>>> Stashed changes
 .fft-modal-footer {
   background: rgba(244, 243, 238, 0.6);
   border-top: 1px solid var(--fft-outline-variant);
