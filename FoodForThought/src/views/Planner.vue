@@ -89,11 +89,10 @@ async function loadRecipeOptions() {
 onMounted(loadRecipeOptions)
 
 // Every write endpoint returns the updated week, so we just replace our copy.
-// Returns the response data (or null if it failed), e.g. so status changes can read pantryUpdate.
+// Returns the response data (or null if it failed).
 async function saveChange(request) {
   saving.value = true
   errorMsg.value = ''
-  pantryNote.value = null
   try {
     const res = await request
     latestRequest++ // a load that was still in flight is now out of date
@@ -106,35 +105,6 @@ async function saveChange(request) {
   } finally {
     saving.value = false
   }
-}
-
-/* ---------- What cooking did to the pantry ---------- */
-// PATCH returns pantryUpdate: { deducted: [{ name, quantity, unit }], skipped: [{ name, reason }] }
-// when a meal is marked Cooked, or { restored: [...] } when that is undone. Shown as a message,
-// so the user can see the pantry change instead of it happening silently.
-const pantryNote = ref(null) // { tone, title, lines: [] }
-
-const amountText = (d) => `${d.quantity} ${d.unit} ${d.name}`
-const listText = (names) => names.join(', ')
-
-function describePantryUpdate(update, title) {
-  if (!update) return null
-  if (update.restored) {
-    if (!update.restored.length) return null
-    return {
-      tone: 'info',
-      title: `${title} is back to Planned`,
-      lines: [`Put back in your pantry: ${listText(update.restored.map(amountText))}.`],
-    }
-  }
-  const lines = []
-  if (update.deducted?.length) lines.push(`Taken from your pantry: ${listText(update.deducted.map(amountText))}.`)
-  const missing = (update.skipped || []).filter((s) => s.reason === 'not in pantry').map((s) => s.name)
-  const unconverted = (update.skipped || []).filter((s) => s.reason !== 'not in pantry')
-  if (missing.length) lines.push(`Not in your pantry, so nothing was taken: ${listText(missing)}.`)
-  unconverted.forEach((s) => lines.push(`${capitalize(s.name)}: ${s.reason}, so update it on the Pantry page if you used some.`))
-  if (!lines.length) return null
-  return { tone: update.deducted?.length ? 'success' : 'warning', title: `Enjoy your ${title}!`, lines }
 }
 
 /* ---------- Turning API entries into what the cards + modals need ---------- */
@@ -318,9 +288,9 @@ async function addMealToPlan(payload) {
 
 // from viewRecipe.vue and the status dropdown on each card: { entryId, status }
 async function onStatusChange({ entryId, status }) {
-  const title = plan.value.entries.find((e) => e.id === entryId)?.recipe.title || 'this meal'
-  const data = await saveChange(api.patch(`/entries/${entryId}`, { status }))
-  if (data) pantryNote.value = describePantryUpdate(data.pantryUpdate, title)
+  // Marking a meal Cooked still takes its ingredients from the pantry (server side, see pantrysync.js);
+  // no message is shown for it, so the page doesn't fill up with notices.
+  await saveChange(api.patch(`/entries/${entryId}`, { status }))
 }
 
 /* ---------- Card controls: status + meal time ---------- */
@@ -524,10 +494,6 @@ async function sendToGrocery() {
 
           <AppAlert v-if="errorMsg" tone="error" title="That didn't work" @dismiss="errorMsg = ''">
             {{ errorMsg }}
-          </AppAlert>
-          <AppAlert v-if="pantryNote" :tone="pantryNote.tone" :title="pantryNote.title" icon="kitchen"
-            @dismiss="pantryNote = null">
-            <p v-for="line in pantryNote.lines" :key="line" class="m-0">{{ line }}</p>
           </AppAlert>
 
           <div class="row g-4 align-items-start">

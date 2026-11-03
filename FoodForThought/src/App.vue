@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import logo from '@/assets/foodforthought-logo-horizontal.svg'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { initialsOf } from '@/utils/initials'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,15 +16,8 @@ const showMainNav = computed(() => !['/login', '/register', '/home', '/admindash
 const isLoggedIn = computed(() => Boolean(auth.token))
 const isAdmin = computed(() => isLoggedIn.value && auth.user?.role === 'admin')
 const displayName = computed(() => auth.user?.name || 'Your account')
-// "Eleen Chia" -> "EC", shown in the avatar circle (no external image needed)
-const initials = computed(() =>
-  (auth.user?.name || '?')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join(''),
-)
+// "Eleen Chia" -> "EC", shown in the avatar circle (no external image needed; same as the Profile page)
+const initials = computed(() => initialsOf(auth.user?.name))
 
 // Main links, in the order a week goes: overview -> plan -> shop -> stock -> find recipes.
 // The same list feeds the navbar and the footer, so they always match.

@@ -4,14 +4,15 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { initialsOf } from '@/utils/initials'
 
 const auth = useAuthStore()
 const router = useRouter()
 
 const displayName = computed(() => auth.user?.name || 'Guest')
 
-const profileImage =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuB3oG6XLP0L5HhXmr7nV_d_hl50ix4lGiZQ0kuDbP0XtRO1ipuH91kh8Yp7P_pTMQ7fcx3IaXa3zJgpBgg9G8tnEkxK9a4-fNTQ2PCs6G1-DmO1SyppBRpyQVNTPnihBYmU1wy97GDkuqG1mPpF4yuT5Fk3RjOeTAQ0_zSZ6jQP-g7-TSs1Er6zPZC9wADCJEnckhg_EdCUtQB46jPa0yb-JvKtvqoVsY-xFXz5i30'
+// Same initials circle as the navbar avatar (App.vue), just bigger
+const initials = computed(() => initialsOf(auth.user?.name))
 
 const myRecipes = ref([])
 const loadingRecipes = ref(false)
@@ -103,11 +104,7 @@ onMounted(fetchMyRecipes)
           <section class="profile-card">
 
             <div class="profile-header">
-              <img
-                :src="profileImage"
-                alt="User profile"
-                class="profile-image"
-              />
+              <span class="profile-avatar" aria-hidden="true">{{ initials }}</span>
 
               <h1>{{ displayName }}</h1>
               <p class="text-muted">Manage your account</p>
@@ -234,7 +231,7 @@ onMounted(fetchMyRecipes)
                 >
 
                   <img
-                    :src="recipe.image"
+                    v-recipe-img="recipe.image"
                     :alt="recipe.title"
                     class="recipe-image"
                   />
@@ -332,13 +329,21 @@ onMounted(fetchMyRecipes)
   padding-bottom: 28px;
 }
 
-.profile-image {
+/* Big version of the navbar avatar (.app-avatar in App.vue): dark green circle, white initials, light green ring */
+.profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 112px;
   height: 112px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 4px solid #c7ecce;
   margin-bottom: 16px;
+  border-radius: 50%;
+  background: #32533c;
+  color: #fff;
+  font: 600 40px/1 'Outfit', sans-serif;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 0 4px #c7ecce;
+  user-select: none;
 }
 
 .profile-header h1 {

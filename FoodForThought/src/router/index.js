@@ -59,6 +59,11 @@ const router = createRouter({
       component: RecipeDetail
     },
     {
+      path: '/change-password',
+      name: 'change-password',
+      component: () => import('../views/ChangePassword.vue')
+    },
+    {
       path: '/preferences',
       name: 'dietary-preferences',
       component: () => import('../views/DietaryPreferences.vue')

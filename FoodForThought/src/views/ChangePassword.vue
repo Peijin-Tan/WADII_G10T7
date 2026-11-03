@@ -1,8 +1,11 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { API_URL } from '@/services/api'
+import { isStrongPassword } from '@/utils/passwordRules'
+import PasswordChecklist from '@/components/Auth/PasswordChecklist.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -16,6 +19,13 @@ const form = reactive({
 const error = ref('')
 const success = ref('')
 const submitting = ref(false)
+
+// Same rules as sign-up (src/utils/passwordRules.js); PATCH /auth/change-password checks them again
+const newPasswordOk = computed(() => isStrongPassword(form.newPassword))
+const confirmMismatch = computed(() => form.confirmPassword !== '' && form.confirmPassword !== form.newPassword)
+const canSubmit = computed(() =>
+  form.currentPassword !== '' && newPasswordOk.value && form.confirmPassword === form.newPassword
+)
 
 async function handleSubmit() {
   if (submitting.value) return
@@ -34,8 +44,13 @@ async function handleSubmit() {
     return
   }
 
-  if (!form.newPassword || form.newPassword.length < 8) {
-    error.value = 'Your new password must be at least 8 characters long.'
+  if (!newPasswordOk.value) {
+    error.value = 'Your new password does not meet all the requirements below it.'
+    return
+  }
+
+  if (form.newPassword === form.currentPassword) {
+    error.value = 'Your new password must be different from your current one.'
     return
   }
 
@@ -48,7 +63,7 @@ async function handleSubmit() {
 
   try {
     await axios.patch(
-      'http://localhost:8000/auth/change-password',
+      `${API_URL}/auth/change-password`,
       {
         currentPassword: form.currentPassword,
         newPassword: form.newPassword,
@@ -114,10 +129,13 @@ async function handleSubmit() {
               v-model="form.newPassword"
               type="password"
               class="form-control"
+              :class="{ 'is-invalid': form.newPassword && !newPasswordOk, 'is-valid': newPasswordOk }"
               autocomplete="new-password"
               placeholder="Enter a new password"
+              aria-describedby="newPasswordRules"
               required
             />
+            <PasswordChecklist id="newPasswordRules" :password="form.newPassword" />
           </div>
 
           <div class="mb-4">
@@ -127,13 +145,18 @@ async function handleSubmit() {
               v-model="form.confirmPassword"
               type="password"
               class="form-control"
+              :class="{ 'is-invalid': confirmMismatch, 'is-valid': form.confirmPassword && !confirmMismatch && newPasswordOk }"
               autocomplete="new-password"
               placeholder="Confirm your new password"
+              aria-describedby="confirmPasswordHint"
               required
             />
+            <div v-if="confirmMismatch" id="confirmPasswordHint" class="invalid-feedback d-block">
+              Passwords don't match yet.
+            </div>
           </div>
 
-          <button type="submit" class="btn btn-success w-100" :disabled="submitting">
+          <button type="submit" class="btn btn-success w-100" :disabled="submitting || !canSubmit">
             {{ submitting ? 'Updating...' : 'Update Password' }}
           </button>
         </form>

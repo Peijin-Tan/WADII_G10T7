@@ -16,6 +16,24 @@ const pantryApi = createApi('/pantry')
 
 const activeTab = ref('comments')
 
+// The three tabs at the top of the page (underlined tab bar, see .cm-tabs styles)
+const COMMUNITY_TABS = [
+  { id: 'comments', label: 'My Comments' },
+  { id: 'likes', label: 'My Liked Recipes' },
+  { id: 'pantry', label: 'Neighbour Pantry' },
+]
+
+// Left/Right arrow keys move between tabs, like tabs in other apps
+function onTabKey(event) {
+  const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key]
+  if (!step) return
+  event.preventDefault()
+  const index = COMMUNITY_TABS.findIndex((tab) => tab.id === activeTab.value)
+  const next = (index + step + COMMUNITY_TABS.length) % COMMUNITY_TABS.length
+  activeTab.value = COMMUNITY_TABS[next].id
+  event.currentTarget.parentElement.children[next]?.focus()
+}
+
 const comments = ref([])
 const likes = ref([])
 const neighbours = ref([])
@@ -531,42 +549,20 @@ watch(() => auth.token, loadActivity)
 
       <div v-else>
         <!-- Tabs -->
-        <div class="d-flex flex-wrap gap-2 mb-4">
+        <div class="cm-tabs" role="tablist" aria-label="Your community activity">
           <button
+            v-for="tab in COMMUNITY_TABS"
+            :id="`cm-tab-${tab.id}`"
+            :key="tab.id"
             type="button"
-            class="btn"
-            :class="activeTab === 'comments'
-              ? 'activity-button'
-              : 'activity-outline'"
-            :aria-pressed="activeTab === 'comments'"
-            @click="activeTab = 'comments'"
-          >
-            My Comments
-          </button>
-
-          <button
-            type="button"
-            class="btn"
-            :class="activeTab === 'likes'
-              ? 'activity-button'
-              : 'activity-outline'"
-            :aria-pressed="activeTab === 'likes'"
-            @click="activeTab = 'likes'"
-          >
-            My Liked Recipes
-          </button>
-
-          <button
-            type="button"
-            class="btn"
-            :class="activeTab === 'pantry'
-              ? 'activity-button'
-              : 'activity-outline'"
-            :aria-pressed="activeTab === 'pantry'"
-            @click="activeTab = 'pantry'"
-          >
-            Neighbour Pantry
-          </button>
+            role="tab"
+            class="cm-tab"
+            :class="{ 'is-active': activeTab === tab.id }"
+            :aria-selected="activeTab === tab.id"
+            :tabindex="activeTab === tab.id ? 0 : -1"
+            @click="activeTab = tab.id"
+            @keydown="onTabKey"
+          >{{ tab.label }}</button>
         </div>
 
         <!-- Messages -->
@@ -592,7 +588,7 @@ watch(() => auth.token, loadActivity)
         </p>
 
         <!-- My Comments -->
-        <section v-if="activeTab === 'comments'">
+        <section v-if="activeTab === 'comments'" role="tabpanel" aria-labelledby="cm-tab-comments">
           <div
             class="d-flex justify-content-between align-items-center mb-3"
           >
@@ -810,7 +806,7 @@ watch(() => auth.token, loadActivity)
         </section>
 
         <!-- My Liked Recipes -->
-        <section v-else-if="activeTab === 'likes'">
+        <section v-else-if="activeTab === 'likes'" role="tabpanel" aria-labelledby="cm-tab-likes">
           <div
             class="d-flex justify-content-between align-items-center mb-3"
           >
@@ -965,7 +961,7 @@ watch(() => auth.token, loadActivity)
           </div>
         </section>
 
-        <section v-else-if="activeTab === 'pantry'" class="row g-4">
+        <section v-else-if="activeTab === 'pantry'" class="row g-4" role="tabpanel" aria-labelledby="cm-tab-pantry">
           <div class="col-12 col-lg-5">
             <div class="card activity-card h-100">
               <div class="card-body p-4">
@@ -1092,6 +1088,53 @@ watch(() => auth.token, loadActivity)
 </template>
 
 <style scoped>
+/* ---------- Tabs (My Comments / My Liked Recipes / Neighbour Pantry) ---------- */
+.cm-tabs {
+  display: flex;
+  gap: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid #e2e3dc;
+  overflow-x: auto; /* phones: scroll sideways instead of wrapping */
+  scrollbar-width: none;
+}
+.cm-tabs::-webkit-scrollbar {
+  display: none;
+}
+.cm-tab {
+  flex: none;
+  margin-bottom: -1px; /* the active underline sits on the bar's line */
+  padding: 12px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #727972;
+  font: 600 15px/20px 'Inter', sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.cm-tab:hover {
+  color: #2a2d27;
+  border-bottom-color: #c9cbc2;
+}
+.cm-tab.is-active {
+  color: #32533c;
+  border-bottom-color: #32533c;
+}
+.cm-tab:focus-visible {
+  outline: 2px solid #32533c;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+@media (max-width: 480px) {
+  .cm-tabs {
+    gap: 16px;
+  }
+  .cm-tab {
+    font-size: 13px;
+  }
+}
+
 .activity-heading {
   color: var(--fft-text);
   font-family: 'Outfit', sans-serif;
