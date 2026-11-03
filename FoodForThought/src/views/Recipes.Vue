@@ -46,8 +46,11 @@ async function fetchRecipes() {
   }
 }
 
+
 async function searchRecipes() {
-  if (!search.value.trim()) {
+  const searchTerm = search.value.trim()
+
+  if (!searchTerm) {
     await fetchRecipes()
     return
   }
@@ -58,29 +61,49 @@ async function searchRecipes() {
   lastQuery.value = search.value.trim()
 
   try {
+    const config = auth.token
+      ? {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      : {}
+
     const [savedResponse, spoonacularResponse] = await Promise.all([
-      axios.get('/api/recipes'),
+      // Search MongoDB recipes, including user-created recipes
+      axios.get('/api/recipes', {
+        ...config,
+        params: {
+          search: searchTerm
+        }
+      }),
+
+      // Search Spoonacular recipes
       axios.get('/api/recipes/search', {
-        params: { query: search.value.trim() }
+        params: {
+          query: searchTerm
+        }
       })
     ])
 
     const savedRecipes = savedResponse.data.data
     const externalRecipes = spoonacularResponse.data.data
 
-    // Combine saved and external recipes, avoiding duplicate titles.
+    // Avoid displaying duplicate recipes by title
     const savedTitles = new Set(
-      savedRecipes.map(recipe => recipe.title.toLowerCase())
+      savedRecipes.map(recipe => recipe.title.trim().toLowerCase())
     )
 
     const uniqueExternalRecipes = externalRecipes.filter(
-      recipe => !savedTitles.has(recipe.title.toLowerCase())
+      recipe => !savedTitles.has(recipe.title.trim().toLowerCase())
     )
 
+    // Display both MongoDB and Spoonacular results
     recipes.value = [
       ...savedRecipes,
       ...uniqueExternalRecipes
     ]
+
   } catch (err) {
     console.error(err)
     error.value = 'Failed to search recipes. Please try again.'
