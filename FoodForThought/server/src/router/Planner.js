@@ -1,11 +1,11 @@
-// Weekly meal planner API
-// Mount in server.js / app.js:   app.use('/api/planner', require('./routes/planner/Planner'))
+// Weekly meal planner API, mounted in server/index.js as app.use('/planner', plannerRouter)
 //
-//   GET    /api/planner?start=YYYY-MM-DD        -> the logged-in user's plan for that week
-//   GET    /api/planner/recipe-options?search=  -> recipes for the Add Meal / Swap modals
-//   POST   /api/planner/entries                 -> add a meal to a day + slot
-//   PATCH  /api/planner/entries/:entryId        -> change status (Cooked/Skipped), swap recipe, servings...
-//   DELETE /api/planner/entries/:entryId        -> remove a meal from the plan
+//   GET    /planner?start=YYYY-MM-DD        -> the logged-in user's plan for that week
+//   GET    /planner/recipe-options?search=  -> saved recipes for the Add Meal / Swap modals
+//   GET    /planner/recipe-search?search=   -> saved + Spoonacular recipes for the Add Meal search box
+//   POST   /planner/entries                 -> add a meal to a day + slot
+//   PATCH  /planner/entries/:entryId        -> change status (Cooked/Skipped), swap recipe, servings, day/slot
+//   DELETE /planner/entries/:entryId        -> remove a meal from the plan
 //
 // Every write returns the whole updated week, so the frontend just replaces its copy.
 
@@ -30,26 +30,9 @@ const router = express.Router()
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-// Throw this inside a route to send a 4xx with a message
-function httpError(status, message) {
-  const err = new Error(message)
-  err.status = status
-  return err
-}
-
-// Wraps an async route so every error ends up in one place (Express 4 doesn't catch async errors)
-const handle = (fn) => async (req, res) => {
-  try {
-    await fn(req, res)
-  } catch (err) {
-    if (err.status) return res.status(err.status).json({ message: err.message })
-    if (err.name === 'ValidationError' || err.name === 'CastError') {
-      return res.status(400).json({ message: err.message })
-    }
-    console.error(err)
-    res.status(500).json({ message: 'Something went wrong with the meal planner' })
-  }
-}
+// httpError(400, '...') sends a 4xx with a message; handle() catches every error in a route (utils/http.js)
+const { httpError, makeHandler } = require('../utils/http')
+const handle = makeHandler({ fallback: 'Something went wrong with the meal planner' })
 
 // Every planner route needs a logged-in user.
 // requireAuth (Kester's JWT middleware) checks the "Authorization: Bearer <token>" header
@@ -175,7 +158,9 @@ function toRecipeCard(recipe, pantryNames) {
     .filter((ing) => ing && ing.name)
     .map((ing) => ({
       name: String(ing.name),
-      quantity: formatQuantity(Number(ing.amount), ing.unit),
+      quantity: formatQuantity(Number(ing.amount), ing.unit), // for the recipe's own servings, e.g. "2 cups"
+      amount: Number(ing.amount) > 0 ? Number(ing.amount) : null, // raw values, so the recipe modal can
+      unit: ing.unit || '', //                                        scale them to the planned servings
       inPantry: isInPantry(pantryNames, ing.name),
     }))
   const inPantryCount = ingredients.filter((i) => i.inPantry).length

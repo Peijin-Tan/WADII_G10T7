@@ -65,21 +65,23 @@ router.post('/login', async (req, res) => {
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
-  const { name, email, password, role } = req.body || {}
-
-  const safeRole = typeof role === 'string' && ['user', 'admin'].includes(role)
-    ? role
-    : 'user'
+  // The role is NOT taken from the request: anyone signing up is a normal user.
+  // (Before, the form let people pick "Admin" and the server accepted it.)
+  // Admins are made by another admin on the admin dashboard, or with: npm run make-admin -- <email>
+  const { name, email, password } = req.body || {}
 
   if (
     typeof name !== 'string' || !name.trim() ||
     typeof email !== 'string' || !email.trim() ||
-    typeof password !== 'string' || !password ||
-    typeof role !== 'string' || !['user', 'admin'].includes(role)
+    typeof password !== 'string' || !password
   ) {
     return res.status(400).json({
-      message: 'Name, email, password, and a valid role are required'
+      message: 'Name, email and password are required'
     })
+  }
+  // same rule as the sign-up form, checked here too so it can't be skipped
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters long' })
   }
 
   try {
@@ -94,7 +96,7 @@ router.post('/register', async (req, res) => {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password,
-      role: safeRole
+      role: 'user'
     })
 
     await newUser.save()
@@ -119,57 +121,6 @@ router.post('/register', async (req, res) => {
 // GET /auth/me — verifies a token and returns the user
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user })
-})
-
-// PATCH /auth/change-password
-router.patch('/change-password', requireAuth, async (req, res) => {
-  const { currentPassword, newPassword, confirmPassword } = req.body || {}
-
-  if (
-    typeof currentPassword !== 'string' || !currentPassword.trim() ||
-    typeof newPassword !== 'string' || newPassword.length < 8 ||
-    typeof confirmPassword !== 'string' || confirmPassword.length < 8
-  ) {
-    return res.status(400).json({
-      message: 'Current password, a new password with at least 8 characters, and confirmation are required.'
-    })
-  }
-
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({
-      message: 'New password and confirmation password do not match.'
-    })
-  }
-
-  try {
-    const user = await User.findById(req.user._id).select('+password')
-
-    if (!user) {
-      return res.status(404).json({
-        message: 'User not found.'
-      })
-    }
-
-    const isCurrentPasswordValid = await user.comparePassword(currentPassword)
-
-    if (!isCurrentPasswordValid) {
-      return res.status(401).json({
-        message: 'Current password is incorrect.'
-      })
-    }
-
-    user.password = newPassword
-    await user.save()
-
-    return res.json({
-      message: 'Password updated successfully.'
-    })
-  } catch (error) {
-    console.error('Change password error:', error)
-    return res.status(500).json({
-      message: 'Unable to update password.'
-    })
-  }
 })
 
 module.exports = router;

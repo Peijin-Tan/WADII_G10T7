@@ -9,6 +9,19 @@ const mongoose = require('mongoose');
 const { CATEGORIES, normalizeName } = require('../src/services/shoppinglistbuilder');
 
 const { Schema } = mongoose;
+const Pantry = require('./Pantry');
+
+const basketSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 60 },
+    quantity: { type: Number, required: true, min: 0 },
+    unit: { type: String, enum: Pantry.UNITS, required: true },
+    category: { type: String, enum: Pantry.CATEGORIES, default: 'other' },
+    expiryDate: { type: Date, default: null },
+    addToPantry: { type: Boolean, default: true }, // off for things like dish soap
+  },
+  { _id: false },
+);
 
 const itemSchema = new Schema({
   name: { type: String, required: true, trim: true },
@@ -21,6 +34,18 @@ const itemSchema = new Schema({
 
   // NEW: how much of this the pantry already covers (for the "In Pantry" view).
   pantryQuantity: { type: Number, default: 0, min: 0 },
+
+  // Other amounts of the same ingredient in units that can't be converted to `unit`,
+  // e.g. ginger: quantity 1 / unit 'piece', alsoNeed [{ quantity: 1, unit: 'inch' }] -> "1 piece + 1 inch".
+  // Amounts in units that DO convert are already merged into quantity (1 tsp + 1 tbsp -> 4 tsp).
+  alsoNeed: [
+    {
+      _id: false,
+      quantity: { type: Number, min: 0, required: true },
+      unit: { type: String, trim: true, required: true },
+      pantryQuantity: { type: Number, min: 0, default: 0 },
+    },
+  ],
 
   // NEW: which recipes in this week's plan need it (shown as tags in the UI).
   usedIn: [
@@ -41,6 +66,12 @@ const itemSchema = new Schema({
   // NEW: set once a bought item has been moved into the pantry, so the
   // "Add bought items to pantry" button never adds the same item twice.
   addedToPantry: { type: Boolean, default: false },
+
+  // Shopping mode: what the user actually put in their basket, which is what
+  // goes into the pantry (e.g. list says 600 g rice, they bought a 2 kg bag).
+  // Filled in with defaults when the item is ticked; cleared when it's unticked.
+  // Units and categories are the PANTRY's (models/Pantry.js), not the list's.
+  basket: { type: basketSchema, default: undefined },
 });
 
 // Fill normalizedName automatically if it wasn't set.

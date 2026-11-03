@@ -1,74 +1,30 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { createApi, errorMessage } from '@/services/api'
+import { toISODate, daysUntil } from '@/utils/dates'
+import { PANTRY_UNITS as UNITS, PANTRY_CATEGORIES as CATEGORIES, formatQty } from '@/constants/pantry'
+import { categoryStyle } from '@/constants/categoryColors'
 import suggestionsModal from '../components/SuggestionModal.vue'
+import AppAlert from '@/components/ui/AppAlert.vue'
+import PageIntro from '@/components/ui/PageIntro.vue'
+import { useConfirm } from '@/composables/useConfirm'
 // Colours, fonts, h1/h2/h3, .btn and .form-control come from the team's shared theme.css (.fft-page).
 // The page-specific styles are in the <style scoped> block at the bottom.
 
 /* ---------- API ---------- */
-// Same setup as Planner.vue: send the JWT from the auth store, log out on 401.
-// The server works out the user from the token (requireAuth -> req.user -> req.userId).
-const auth = useAuthStore()
-const router = useRouter()
-
-function withAuth(instance) {
-  instance.interceptors.request.use((config) => {
-    if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
-    return config
-  })
-  instance.interceptors.response.use(
-    (res) => res,
-    (err) => {
-      if (err.response?.status === 401) {
-        auth.logout()
-        router.push('/login')
-      }
-      return Promise.reject(err)
-    }
-  )
-  return instance
-}
-
-// Pantry requests go to the Express router mounted at /pantry (routes/pantry/pantry.js)
-const api = withAuth(axios.create({ baseURL: 'http://localhost:8000/pantry' }))
+// Pantry requests go to the Express router mounted at /pantry (server/src/router/pantry.js).
+// createApi (services/api.js) sends the login token and logs out on 401.
+const api = createApi('/pantry')
+const confirm = useConfirm()
 
 // Works whether the model sends `id` or Mongo's `_id`
 const idOf = (item) => item.id || item._id
 
-/* ---------- Options (must match the enums in models/Pantry.js) ---------- */
-const UNITS = ['pcs', 'g', 'kg', 'ml', 'l', 'tsp', 'tbsp', 'cup']
-const CATEGORIES = [
-  { value: 'produce', label: 'Produce', icon: 'nutrition' },
-  { value: 'meat', label: 'Meat', icon: 'kebab_dining' },
-  { value: 'seafood', label: 'Seafood', icon: 'set_meal' },
-  { value: 'dairy', label: 'Dairy & Eggs', icon: 'egg' },
-  { value: 'grains', label: 'Grains & Bread', icon: 'grain' },
-  { value: 'canned', label: 'Canned', icon: 'inventory_2' },
-  { value: 'spices', label: 'Spices', icon: 'spa' },
-  { value: 'condiments', label: 'Sauces & Condiments', icon: 'water_drop' },
-  { value: 'frozen', label: 'Frozen', icon: 'ac_unit' },
-  { value: 'other', label: 'Other', icon: 'category' },
-]
-
-/* ---------- Date helpers (local time, same reason as Planner.vue) ---------- */
-function toISODate(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-
-function daysUntil(dateString) {
-  if (!dateString) return null
-  const d = new Date(dateString)
-  d.setHours(0, 0, 0, 0)
-  return Math.round((d - today) / 86400000) // ms in a day
-}
+/* ---------- Expiry ---------- */
+// UNITS and CATEGORIES come from constants/pantry.js (shared with the shopping list)
 function expiryPill(item) {
+  // Nothing left (e.g. used up by cooking a planned meal): say so instead of "0 pcs" with a use-by date
+  if (item.quantity <= 0) return { text: 'Used up', class: 'fft-pill-gray' }
   const n = daysUntil(item.expiryDate)
   if (n === null) return null
   if (n < 0) return { text: 'Expired', class: 'fft-pill-peach' }
@@ -98,7 +54,7 @@ async function loadPantry() {
     const { data } = await api.get('/')
     items.value = data.items
   } catch (err) {
-    errorMsg.value = err.response?.data?.message || 'Could not load your pantry. Is the server running?'
+    errorMsg.value = errorMessage(err, 'Could not load your pantry.')
   } finally {
     loading.value = false
   }
@@ -115,7 +71,7 @@ async function saveChange(request) {
     items.value = data.items
     return true
   } catch (err) {
-    errorMsg.value = err.response?.data?.message || 'Could not save your change. Please try again.'
+    errorMsg.value = errorMessage(err, 'Could not save your change. Please try again.')
     return false
   } finally {
     saving.value = false
@@ -124,6 +80,7 @@ async function saveChange(request) {
 
 /* ---------- Metrics ---------- */
 const expiringSoon = computed(() => items.value.filter((i) => {
+  if (i.quantity <= 0) return false // nothing left to use
   const n = daysUntil(i.expiryDate)
   return n !== null && n <= 3
 }))
@@ -131,19 +88,31 @@ const expiringSoon = computed(() => items.value.filter((i) => {
 const metrics = computed(() => [
   { label: 'Items in Pantry', value: String(items.value.length), icon: 'inventory_2', bg: 'fft-bg-green-light text-fft-primary' },
   { label: 'Categories', value: String(new Set(items.value.map((i) => i.category)).size), icon: 'category', bg: 'fft-bg-gray text-fft-muted' },
-  { label: 'Use Within 3 Days', value: String(expiringSoon.value.length), icon: 'schedule', bg: 'fft-bg-peach text-fft-secondary' },
+  { label: 'Use Within 3 Days', value: String(expiringSoon.value.length), icon: 'schedule', bg: 'fft-bg-peach text-fft-secondary', action: toggleUseSoon },
 ])
 
 /* ---------- Search + category filter ---------- */
 const search = ref('')
 const activeCategory = ref('all')
 
+// activeCategory: 'all', 'soon' (use within 3 days) or a category value
+const expiringIds = computed(() => new Set(expiringSoon.value.map(idOf)))
+const matchesFilter = (i) =>
+  activeCategory.value === 'all' ||
+  (activeCategory.value === 'soon' ? expiringIds.value.has(idOf(i)) : i.category === activeCategory.value)
+
 const visibleItems = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return items.value.filter((i) =>
-    (activeCategory.value === 'all' || i.category === activeCategory.value) &&
-    (!q || i.name.toLowerCase().includes(q)))
+  return items.value.filter((i) => matchesFilter(i) && (!q || i.name.toLowerCase().includes(q)))
 })
+
+// Clicking the "Use within 3 days" tile (or chip) shows just those items; clicking again shows everything
+function toggleUseSoon() {
+  activeCategory.value = activeCategory.value === 'soon' ? 'all' : 'soon'
+}
+
+/* ---------- Add form: always open on desktop, folded behind a button on phones ---------- */
+const showAddForm = ref(false)
 
 // [{ meta, items }] in CATEGORIES order, only categories that have items
 const groups = computed(() =>
@@ -178,7 +147,8 @@ async function onAdd() {
   if (added) {
     showNotice(`Added ${added.name}`)
   } else {
-    const merged = items.value.find((i) => i.name.toLowerCase() === name.toLowerCase())
+    const merged = items.value.find((i) => i.name.toLowerCase() === name.toLowerCase()) ||
+      items.value.find((i) => i.normalizedName && name.toLowerCase().startsWith(i.normalizedName))
     showNotice(merged ? `${merged.name} now ${merged.quantity} ${merged.unit}` : `Updated ${name}`)
   }
   form.value = emptyForm()
@@ -216,6 +186,17 @@ async function saveEdit(item) {
   }
 }
 
+/* ---------- Quick +/- buttons on each row ---------- */
+// Used one egg? Tap minus instead of opening the edit form. Steps by 1 for pcs, else by a
+// sensible amount for the unit. Never below 0 ("Used up").
+const STEP = { pcs: 1, g: 100, kg: 0.5, ml: 100, l: 0.5, tsp: 1, tbsp: 1, cup: 0.5 }
+function adjust(item, direction) {
+  const step = STEP[item.unit] || 1
+  const quantity = Math.max(0, Math.round((item.quantity + direction * step) * 1000) / 1000)
+  if (quantity === item.quantity) return
+  return saveChange(api.patch(`/${idOf(item)}`, { quantity }))
+}
+
 /* ---------- Recipe suggestions modal ---------- */
 // The modal only displays results; this page does the API call, like the planner and its addmeal modal.
 const showSuggestions = ref(false)
@@ -248,7 +229,7 @@ async function fetchSuggestions(filters) {
   } catch (err) {
     if (requestId === latestSuggest) {
       suggestions.value = { ...suggestions.value, recipes: [] }
-      suggestError.value = err.response?.data?.message || 'Could not load suggestions. Is the server running?'
+      suggestError.value = errorMessage(err, 'Could not load suggestions.')
     }
   } finally {
     if (requestId === latestSuggest) suggestLoading.value = false
@@ -257,7 +238,14 @@ async function fetchSuggestions(filters) {
 
 /* ---------- Remove ---------- */
 async function onRemove(item) {
-  if (!window.confirm(`Remove ${item.name} from your pantry?`)) return
+  const ok = await confirm({
+    title: `Remove ${item.name}?`,
+    message: item.quantity > 0
+      ? `You'll lose the ${formatQty(item.quantity, item.unit)} you have recorded. To log using some, lower the amount with the minus button instead.`
+      : 'It will no longer show in your pantry. Your shopping list will ask you to buy it when a meal needs it.',
+    confirmText: 'Remove item',
+  })
+  if (!ok) return
   if (await saveChange(api.delete(`/${idOf(item)}`))) showNotice(`Removed ${item.name}`)
 }
 </script>
@@ -293,18 +281,22 @@ async function onRemove(item) {
             </button>
           </div>
 
-          <!-- Metric tiles -->
-          <div class="row g-3 pt-1">
-            <div v-for="m in metrics" :key="m.label" class="col-6 col-md-3">
-              <div class="fft-tile d-flex align-items-center justify-content-between h-100">
+          <!-- Metric tiles (three, filling the row). "Use within 3 days" is a button that filters the list. -->
+          <div class="row g-2 g-md-3 pt-1">
+            <div v-for="m in metrics" :key="m.label" class="col-4">
+              <component :is="m.action ? 'button' : 'div'" :type="m.action ? 'button' : undefined"
+                class="fft-tile d-flex align-items-center justify-content-between h-100 w-100 text-start"
+                :class="{ 'fft-tile--action': m.action, 'is-active': m.action && activeCategory === 'soon' }"
+                :aria-pressed="m.action ? activeCategory === 'soon' : undefined"
+                :title="m.action ? 'Show only items to use within 3 days' : undefined" @click="m.action && m.action()">
                 <div class="d-flex flex-column">
                   <span class="fft-label-sm fft-upper text-fft-muted">{{ m.label }}</span>
                   <span class="fft-headline-md">{{ m.value }}</span>
                 </div>
-                <div class="fft-round-icon" :class="m.bg">
+                <div class="fft-round-icon d-none d-md-flex" :class="m.bg">
                   <span class="material-symbols-outlined" style="font-size: 20px">{{ m.icon }}</span>
                 </div>
-              </div>
+              </component>
             </div>
           </div>
         </div>
@@ -313,17 +305,23 @@ async function onRemove(item) {
       <!-- ============ PANTRY ============ -->
       <section class="px-4 py-4">
         <div class="container-fluid fft-container">
-          <div v-if="errorMsg" class="alert alert-danger d-flex align-items-center justify-content-between gap-2"
-            role="alert">
-            <span>{{ errorMsg }}</span>
-            <button type="button" class="btn-close" aria-label="Dismiss" @click="errorMsg = ''"></button>
-          </div>
+          <PageIntro page="pantry" class="mb-4" />
+
+          <AppAlert v-if="errorMsg" tone="error" title="That didn't work" @dismiss="errorMsg = ''">
+            {{ errorMsg }}
+          </AppAlert>
 
           <div class="row g-4 align-items-start">
-            <!-- Left: add form -->
-            <div class="col-12 col-lg-4">
-              <form class="fft-card fft-card-bordered fft-card-lg d-flex flex-column gap-3" data-testid="pantry-form"
-                @submit.prevent="onAdd">
+            <!-- Left: add form (stays in view on desktop; folded behind a button on phones so the list comes first) -->
+            <div class="col-12 col-lg-4 fft-sticky">
+              <button type="button" class="btn fft-btn-outline w-100 d-flex d-lg-none align-items-center justify-content-center gap-1"
+                :aria-expanded="showAddForm" aria-controls="pantry-add-form" data-testid="pantry-form-toggle"
+                @click="showAddForm = !showAddForm">
+                <span class="material-symbols-outlined" style="font-size: 18px">{{ showAddForm ? 'expand_less' : 'add' }}</span>
+                {{ showAddForm ? 'Hide form' : 'Add ingredient' }}
+              </button>
+              <form id="pantry-add-form" class="fft-card fft-card-bordered fft-card-lg flex-column gap-3 d-lg-flex mt-2 mt-lg-0"
+                :class="showAddForm ? 'd-flex' : 'd-none'" data-testid="pantry-form" @submit.prevent="onAdd">
                 <div>
                   <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Stock up</span>
                   <p class="fft-headline-sm m-0">Add Ingredient</p>
@@ -339,7 +337,7 @@ async function onRemove(item) {
                 <div class="row g-2">
                   <div class="col-6 d-flex flex-column gap-1">
                     <label class="fft-label-sm text-fft-muted" for="ing-qty">Quantity</label>
-                    <input id="ing-qty" v-model.number="form.quantity" type="number" min="0" step="any"
+                    <input id="ing-qty" v-model.number="form.quantity" type="number" min="0.01" step="any"
                       class="fft-input" data-testid="pantry-qty" />
                   </div>
                   <div class="col-6 d-flex flex-column gap-1">
@@ -379,12 +377,17 @@ async function onRemove(item) {
                   <input v-model="search" type="search" class="form-control fft-search-input w-100"
                     placeholder="Search your pantry" aria-label="Search your pantry" />
                 </div>
-                <div class="d-flex flex-wrap gap-2">
+                <div class="fft-chip-row" role="group" aria-label="Filter by category">
                   <button type="button" class="fft-chip" :class="{ active: activeCategory === 'all' }"
                     @click="activeCategory = 'all'">All</button>
-                  <button v-for="c in usedCategories" :key="c.value" type="button" class="fft-chip"
-                    :class="{ active: activeCategory === c.value }" @click="activeCategory = c.value">
-                    {{ c.label }}
+                  <button v-if="expiringSoon.length" type="button" class="fft-chip fft-chip--soon"
+                    :class="{ active: activeCategory === 'soon' }" @click="toggleUseSoon">
+                    Use soon ({{ expiringSoon.length }})
+                  </button>
+                  <button v-for="c in usedCategories" :key="c.value" type="button" class="fft-chip fft-chip--cat"
+                    :class="{ active: activeCategory === c.value }" :style="categoryStyle(c.value)"
+                    @click="activeCategory = c.value">
+                    <span class="fft-chip-dot" aria-hidden="true"></span>{{ c.label }}
                   </button>
                 </div>
               </div>
@@ -399,15 +402,19 @@ async function onRemove(item) {
 
               <!-- No search matches -->
               <p v-else-if="!loading && groups.length === 0" class="fft-body-sm text-fft-muted text-center py-4 m-0">
-                No ingredients match your search.
+                Nothing matches. Try another search or filter.
               </p>
 
               <!-- Grouped list -->
-              <div v-for="g in groups" :key="g.meta.value" class="fft-card fft-card-bordered p-0 overflow-hidden">
+              <!-- each category is colour-coded (constants/categoryColors.js, same colours as the Shopping List) -->
+              <div v-for="g in groups" :key="g.meta.value" class="fft-card fft-card-bordered p-0 overflow-hidden fft-group"
+                :style="categoryStyle(g.meta.value)">
                 <div class="d-flex align-items-center gap-2 px-3 py-2 fft-group-head">
-                  <span class="material-symbols-outlined text-fft-primary" style="font-size: 18px">{{ g.meta.icon }}</span>
-                  <span class="fft-label-sm fft-upper fw-semibold">{{ g.meta.label }}</span>
-                  <span class="fft-day-count ms-auto">{{ g.items.length }}</span>
+                  <span class="fft-group-icon" aria-hidden="true">
+                    <span class="material-symbols-outlined">{{ g.meta.icon }}</span>
+                  </span>
+                  <h3 class="fft-group-title">{{ g.meta.label }}</h3>
+                  <span class="fft-group-count ms-auto">{{ g.items.length }} {{ g.items.length === 1 ? 'item' : 'items' }}</span>
                 </div>
 
                 <div v-for="item in g.items" :key="idOf(item)" class="fft-pantry-row" data-testid="pantry-item">
@@ -420,7 +427,7 @@ async function onRemove(item) {
                           required data-testid="pantry-edit-name" />
                       </div>
                       <div class="col-6 col-md-2">
-                        <input v-model.number="editForm.quantity" type="number" min="0" step="any" class="fft-input"
+                        <input v-model.number="editForm.quantity" type="number" min="0" step="any" class="fft-input" required
                           aria-label="Quantity" data-testid="pantry-edit-qty" />
                       </div>
                       <div class="col-6 col-md-2">
@@ -446,16 +453,25 @@ async function onRemove(item) {
 
                   <!-- Normal row -->
                   <template v-else>
-                    <div class="d-flex align-items-center flex-wrap gap-2 flex-grow-1 fft-min-0">
+                    <div class="d-flex align-items-center gap-2 flex-grow-1 fft-min-0">
                       <span class="fw-semibold text-fft-dark text-truncate">{{ item.name }}</span>
                       <span v-if="expiryPill(item)" class="fft-pill fw-semibold" :class="expiryPill(item).class">
                         {{ expiryPill(item).text }}
                       </span>
                     </div>
-                    <div class="d-flex align-items-center gap-1">
-                      <span class="fft-label-md text-fft-muted me-2" data-testid="pantry-item-qty">
-                        {{ item.quantity }} {{ item.unit }}
-                      </span>
+                    <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                      <div class="fft-stepper" role="group" :aria-label="`Quantity of ${item.name}`">
+                        <button type="button" class="fft-stepper-btn" :disabled="saving || item.quantity <= 0"
+                          :aria-label="`Less ${item.name}`" @click="adjust(item, -1)">
+                          <span class="material-symbols-outlined" style="font-size: 16px">remove</span>
+                        </button>
+                        <span class="fft-label-md text-fft-dark fw-semibold text-nowrap fft-stepper-value"
+                          data-testid="pantry-item-qty">{{ item.quantity }} {{ item.unit }}</span>
+                        <button type="button" class="fft-stepper-btn" :disabled="saving"
+                          :aria-label="`More ${item.name}`" @click="adjust(item, 1)">
+                          <span class="material-symbols-outlined" style="font-size: 16px">add</span>
+                        </button>
+                      </div>
                       <button type="button" class="btn fft-btn-ghost d-flex align-items-center gap-1" :disabled="saving"
                         :aria-label="`Edit ${item.name}`" data-testid="pantry-edit" @click="startEdit(item)">
                         <span class="material-symbols-outlined" style="font-size: 16px">edit</span>
@@ -484,9 +500,30 @@ async function onRemove(item) {
 </template>
 
 <style scoped>
-/* Fonts + icons (theme.css doesn't load these, and the page may be opened before the planner) */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+/* ===== Quick +/- quantity buttons on each row ===== */
+.fft-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+  padding: 2px;
+  border-radius: 9999px;
+  background: var(--fft-surface-mid);
+}
+.fft-stepper-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fft-primary, #32533c);
+}
+.fft-stepper-btn:hover:not(:disabled) { background: #fff; }
+.fft-stepper-btn:disabled { opacity: 0.35; }
+.fft-stepper-value { min-width: 56px; text-align: center; }
 
 /* ===== Extra colours this page needs that theme.css doesn't have ===== */
 .fft-pantry {
@@ -517,10 +554,69 @@ async function onRemove(item) {
 /* ===== Layout ===== */
 .fft-main {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .fft-container {
-  max-width: 1280px;
+  /* same content width as the planner and shopping list */
+  max-width: 1140px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+@media (min-width: 992px) {
+  .fft-sticky {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+/* "Use within 3 days" tile works as a filter button */
+.fft-tile--action {
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fft-tile--action:hover,
+.fft-tile--action.is-active {
+  border-color: var(--fft-secondary, #a23e18);
+}
+
+/* category chips: wrap on desktop, one sideways-scrolling row on phones */
+.fft-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 575.98px) {
+  .fft-chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .fft-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fft-chip-row .fft-chip {
+    flex-shrink: 0;
+  }
+
+  .fft-tile {
+    padding: 12px;
+  }
+
+  .fft-tile .fft-label-sm {
+    font-size: 10px;
+    line-height: 13px;
+  }
+}
+
+.fft-chip--soon {
+  background: var(--fft-peach, #ffdbcf);
 }
 
 .fft-controls {
@@ -599,6 +695,20 @@ h3.fft-headline-sm {
 .fft-btn-primary:hover {
   background: var(--fft-primary-hover);
   color: var(--fft-on-primary);
+}
+
+.fft-btn-outline {
+  border: 1px dashed var(--fft-primary);
+  border-radius: var(--fft-radius-xl);
+  padding: 10px 16px;
+  background: var(--fft-card);
+  color: var(--fft-primary);
+  font: 600 14px/20px 'Inter', sans-serif;
+}
+
+.fft-btn-outline:hover {
+  background: var(--fft-surface-low);
+  color: var(--fft-primary);
 }
 
 .fft-btn-ghost {
@@ -769,14 +879,44 @@ h3.fft-headline-sm {
 }
 
 /* ===== Pantry list ===== */
+.fft-chip--cat { display: inline-flex; align-items: center; gap: 6px; }
+.fft-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cat-ink); }
+.fft-chip--cat.active { background: var(--cat-ink) !important; color: #fff !important; }
+.fft-chip--cat.active .fft-chip-dot { background: #fff; }
+
+.fft-group {
+  border-left: 5px solid var(--cat-ink) !important;
+}
 .fft-group-head {
-  background: var(--fft-surface-low);
-  color: var(--fft-secondary-text);
+  background: var(--cat-wash);
+}
+.fft-group-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--cat-ink);
+  color: #fff;
+}
+.fft-group-icon .material-symbols-outlined { font-size: 18px; }
+.fft-group-title {
+  margin: 0;
+  font: 600 17px/24px 'Outfit', sans-serif;
+  color: var(--cat-ink);
+}
+.fft-group-count {
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: #fff;
+  color: var(--cat-ink);
+  font: 600 12px/18px 'Inter', sans-serif;
 }
 
 .fft-pantry-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -788,9 +928,26 @@ h3.fft-headline-sm {
   border-top: 0;
 }
 
+/* phones: name (and its expiry pill) on top, the +/- and buttons on a second line,
+   so names aren't cut down to "To…" next to the quantity controls */
+@media (max-width: 575.98px) {
+  .fft-pantry-row {
+    flex-wrap: wrap;
+  }
+
+  .fft-pantry-row > .flex-grow-1 {
+    flex-basis: 100%;
+  }
+
+  .fft-pantry-row > .flex-shrink-0 {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
 /* ===== Loading spinner ===== */
 .fft-spin {
-  animation: fft-spin 1s linear infinite;
+  animation: fft-spin 0.7s linear infinite;
 }
 
 @keyframes fft-spin {
