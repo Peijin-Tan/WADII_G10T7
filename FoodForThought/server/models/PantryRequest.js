@@ -16,13 +16,13 @@ const pantryRequestSchema = new mongoose.Schema(
     },
     requestType: {
       type: String,
-      enum: ['buy', 'borrow', 'takeover'],
+      enum: ['borrow', 'takeover'],
       required: true,
     },
     items: [{
       itemId: { type: String, required: true },
       name: { type: String, required: true, trim: true },
-      quantity: { type: Number, default: 1 },
+      quantity: { type: Number, default: 1, min: 0.001 },
       unit: { type: String, default: 'pcs' },
     }],
     message: {
@@ -33,9 +33,20 @@ const pantryRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'completed'],
+      enum: ['pending', 'approved', 'rejected', 'cancelled', 'completed'],
       default: 'pending',
     },
+    collected: {
+      type: Boolean,
+      default: false,
+    },
+    repaymentOutstanding: {
+      type: Boolean,
+      default: false,
+    },
+    approvedAt: { type: Date },
+    completedAt: { type: Date },
+    cancelledAt: { type: Date },
   },
   {
     timestamps: true,

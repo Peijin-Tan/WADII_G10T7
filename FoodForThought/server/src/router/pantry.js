@@ -15,6 +15,7 @@
 
 const express = require('express')
 const axios = require('axios')
+const mongoose = require('mongoose')
 const Pantry = require('../../models/Pantry')
 const User = require('../../models/User')
 const PantryShare = require('../../models/PantryShare')
@@ -285,67 +286,128 @@ router.get('/', handle(async (req, res) => {
 
 // GET /pantry/requests
 router.get('/requests', handle(async (req, res) => {
-  const requests = await PantryRequest.find({ owner: req.userId, status: 'pending' })
+  const incoming = await PantryRequest.find({ owner: req.userId, status: { $in: ['pending', 'approved', 'completed'] } })
     .populate('requester', '_id name email')
     .sort({ createdAt: -1 })
     .lean()
 
-  res.json({ requests })
+  const outgoing = await PantryRequest.find({ requester: req.userId, status: { $in: ['pending', 'approved', 'completed'] } })
+    .populate('owner', '_id name email')
+    .sort({ createdAt: -1 })
+    .lean()
+
+  res.json({ requests: incoming, incomingRequests: incoming, outgoingRequests: outgoing, outgoing })
 }))
 
 // PATCH /pantry/requests/:requestId
 router.patch('/requests/:requestId', handle(async (req, res) => {
   const { status } = req.body || {}
-  if (!['approved', 'rejected', 'completed'].includes(status)) {
-    throw httpError(400, 'Status must be approved, rejected, or completed.')
+  if (!['approved', 'rejected', 'cancelled', 'completed'].includes(status)) {
+    throw httpError(400, 'Status must be approved, rejected, cancelled, or completed.')
   }
 
-  const request = await PantryRequest.findOne({ _id: req.params.requestId, owner: req.userId })
-  if (!request) {
-    throw httpError(404, 'Request not found')
-  }
+  const request = await PantryRequest.findById(req.params.requestId)
+  if (!request) throw httpError(404, 'Request not found')
 
-  if (request.status !== 'pending') {
-    throw httpError(409, 'This request has already been resolved.')
+  const userIsOwner = String(request.owner) === req.userId
+  const userIsRequester = String(request.requester) === req.userId
+
+  if (!userIsOwner && !userIsRequester) {
+    throw httpError(403, 'You do not have access to this request.')
   }
 
   if (status === 'approved') {
-    for (const item of request.items || []) {
-      if (!item?.itemId && !item?.name) continue
+    if (!userIsOwner) throw httpError(403, 'Only the owner can approve a request.')
+    if (request.status !== 'pending') throw httpError(409, 'This request has already been resolved.')
 
-      const normalizedName = normalizeIngredient(item.name || 'item')
-      const quantity = Number(item.quantity || 1)
+    request.status = 'approved'
+    request.approvedAt = new Date()
+    await request.save()
 
-      if (!Number.isFinite(quantity) || quantity <= 0) continue
-
-      const existing = await Pantry.findOne({ user: request.requester, normalizedName })
-
-      if (existing) {
-        const currentQty = Number(existing.quantity || 0)
-        existing.quantity = Math.round((currentQty + quantity) * 1000) / 1000
-        if (item.unit) existing.unit = item.unit
-        if (item.name) existing.name = item.name
-        await existing.save()
-      } else {
-        await Pantry.create({
-          user: request.requester,
-          name: item.name || 'Item',
-          normalizedName,
-          quantity,
-          unit: item.unit || 'pcs',
-          category: 'other',
-        })
-      }
-    }
+    return res.json({ message: 'Request approved. Collection can now be confirmed.', request })
   }
 
-  request.status = status
-  await request.save()
+  if (status === 'rejected') {
+    if (!userIsOwner) throw httpError(403, 'Only the owner can reject a request.')
+    if (request.status !== 'pending') throw httpError(409, 'This request has already been resolved.')
 
-  res.json({
-    message: `Request ${status}.`,
-    request,
-  })
+    request.status = 'rejected'
+    await request.save()
+    return res.json({ message: 'Request rejected.', request })
+  }
+
+  if (status === 'cancelled') {
+    if (!userIsRequester) throw httpError(403, 'Only the requester can cancel a request.')
+    if (!['pending', 'approved'].includes(request.status)) throw httpError(409, 'This request cannot be cancelled.')
+
+    request.status = 'cancelled'
+    request.cancelledAt = new Date()
+    await request.save()
+    return res.json({ message: 'Request cancelled.', request })
+  }
+
+  if (status === 'completed') {
+    if (!['approved', 'pending'].includes(request.status)) {
+      throw httpError(409, 'Only approved requests can be completed.')
+    }
+
+    if (request.status === 'pending') {
+      request.status = 'approved'
+      request.approvedAt = new Date()
+      await request.save()
+    }
+
+    const session = await mongoose.startSession()
+    try {
+      await session.withTransaction(async () => {
+        const approvedRequest = await PantryRequest.findOne({ _id: request._id, status: 'approved' }).session(session)
+        if (!approvedRequest) {
+          throw httpError(409, 'This request is no longer approved for collection.')
+        }
+
+        for (const item of approvedRequest.items || []) {
+          const requestedQty = Number(item.quantity || 1)
+          if (!item?.itemId || !Number.isFinite(requestedQty) || requestedQty <= 0) continue
+
+          const ownerItem = await Pantry.findOne({ _id: item.itemId, user: approvedRequest.owner }).session(session)
+          if (!ownerItem) throw httpError(404, `${item.name} is no longer in the owner pantry.`)
+          if (ownerItem.quantity < requestedQty) throw httpError(409, `Not enough ${item.name} left to complete this exchange.`)
+
+          ownerItem.quantity = Number((ownerItem.quantity - requestedQty).toFixed(3))
+          if (ownerItem.quantity <= 0) ownerItem.quantity = 0
+          await ownerItem.save({ session })
+
+          const normalized = normalizeIngredient(item.name)
+          let recipientItem = await Pantry.findOne({ user: approvedRequest.requester, normalizedName: normalized }).session(session)
+          if (recipientItem) {
+            recipientItem.quantity = Number((recipientItem.quantity + requestedQty).toFixed(3))
+            if (item.unit) recipientItem.unit = item.unit
+            await recipientItem.save({ session })
+          } else {
+            recipientItem = new Pantry({
+              user: approvedRequest.requester,
+              name: item.name,
+              normalizedName: normalized,
+              quantity: requestedQty,
+              unit: item.unit || 'pcs',
+              category: 'other',
+            })
+            await recipientItem.save({ session })
+          }
+        }
+
+        approvedRequest.status = 'completed'
+        approvedRequest.collected = true
+        approvedRequest.completedAt = new Date()
+        approvedRequest.repaymentOutstanding = approvedRequest.requestType === 'borrow'
+        await approvedRequest.save({ session })
+      })
+    } finally {
+      await session.endSession()
+    }
+
+    return res.json({ message: 'Exchange completed and inventory transferred.', request: await PantryRequest.findById(req.params.requestId).lean() })
+  }
 }))
 
 // GET /pantry/neighbours
@@ -358,22 +420,32 @@ router.get('/neighbours', handle(async (req, res) => {
   const shares = await PantryShare.find({
     $or: [
       { owner: req.userId },
-      { friend: req.userId }
+      { friend: req.userId },
     ],
-    status: 'active',
-  })
-    .populate('owner friend', '_id name email')
-    .lean()
+    status: { $in: ['active', 'pending'] },
+  }).populate('owner friend', '_id name email').lean()
 
   const friends = []
   const friendsMap = new Map()
+  const pendingIncoming = []
+  const pendingOutgoing = []
 
   for (const share of shares) {
     const ownerId = String(share.owner?._id || share.owner)
     const friendId = String(share.friend?._id || share.friend)
-    const userId = ownerId === req.userId ? friendId : ownerId
+    const isOwner = ownerId === req.userId
+    const userId = isOwner ? friendId : ownerId
 
     if (userId === req.userId) continue
+
+    if (share.status === 'pending') {
+      if (isOwner) {
+        pendingOutgoing.push({ _id: userId, name: share.friend?.name || 'Friend', email: share.friend?.email || '' })
+      } else {
+        pendingIncoming.push({ _id: userId, name: share.owner?.name || 'Friend', email: share.owner?.email || '' })
+      }
+      continue
+    }
 
     const existing = friendsMap.get(userId) || {
       _id: userId,
@@ -386,10 +458,10 @@ router.get('/neighbours', handle(async (req, res) => {
       status: share.status,
     }
 
-    if (share.owner && String(share.owner._id) === req.userId) {
+    if (isOwner) {
       existing.name = share.friend?.name || existing.name
       existing.email = share.friend?.email || existing.email
-    } else if (share.friend && String(share.friend._id) === req.userId) {
+    } else {
       existing.name = share.owner?.name || existing.name
       existing.email = share.owner?.email || existing.email
     }
@@ -406,9 +478,11 @@ router.get('/neighbours', handle(async (req, res) => {
     friends.push(friend)
   }
 
-  const availableUsers = users.filter((user) => !friendsMap.has(String(user._id)))
+  const friendIds = new Set(friends.map((friend) => String(friend._id)))
+  const pendingIds = new Set([...pendingIncoming.map((friend) => String(friend._id)), ...pendingOutgoing.map((friend) => String(friend._id))])
+  const availableUsers = users.filter((user) => !friendIds.has(String(user._id)) && !pendingIds.has(String(user._id)))
 
-  res.json({ friends, availableUsers })
+  res.json({ friends, availableUsers, pendingIncoming, pendingOutgoing, friendRequests: pendingIncoming })
 }))
 
 // POST /pantry/friends/:friendId
@@ -421,38 +495,87 @@ router.post('/friends/:friendId', handle(async (req, res) => {
   const friend = await User.findById(friendId).select('_id name email')
   if (!friend) throw httpError(404, 'Neighbour not found')
 
-  const permissions = {
-    canView: true,
-    canBuy: true,
-    canBorrow: true,
-    canTakeover: false,
+  const existing = await PantryShare.findOne({
+    $or: [
+      { owner: req.userId, friend: friendId },
+      { owner: friendId, friend: req.userId },
+    ],
+  })
+
+  if (existing) {
+    if (existing.status === 'active') {
+      throw httpError(409, 'You are already connected with this user.')
+    }
+    if (existing.status === 'pending' && String(existing.friend) === String(req.userId)) {
+      existing.status = 'active'
+      existing.canView = true
+      existing.canBorrow = true
+      existing.canBuy = true
+      existing.requestedBy = req.userId
+      await existing.save()
+      return res.status(200).json({ message: `${friend.name} is now on your neighbour list.` })
+    }
+    if (existing.status === 'pending' && String(existing.owner) === String(req.userId)) {
+      throw httpError(409, 'You already sent a friend request to this user.')
+    }
   }
 
-  await Promise.all([
-    PantryShare.findOneAndUpdate(
-      { owner: req.userId, friend: friendId },
-      { $set: { ...permissions, status: 'active' } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ),
-    PantryShare.findOneAndUpdate(
-      { owner: friendId, friend: req.userId },
-      { $set: { ...permissions, status: 'active' } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ),
-  ])
+  await PantryShare.findOneAndUpdate(
+    { owner: req.userId, friend: friendId },
+    {
+      $set: {
+        owner: req.userId,
+        friend: friendId,
+        requestedBy: req.userId,
+        status: 'pending',
+        canView: true,
+        canBuy: true,
+        canBorrow: true,
+        canTakeover: false,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  )
 
   res.status(201).json({
-    message: `${friend.name} is now on your neighbour list.`,
+    message: `Friend request sent to ${friend.name}.`,
   })
+}))
+
+// PATCH /pantry/friends/:friendId
+router.patch('/friends/:friendId', handle(async (req, res) => {
+  const { decision } = req.body || {}
+  if (!['accept', 'reject'].includes(decision)) {
+    throw httpError(400, 'Decision must be accept or reject.')
+  }
+
+  const share = await PantryShare.findOne({ owner: req.params.friendId, friend: req.userId, status: 'pending' })
+  if (!share) throw httpError(404, 'No pending friend request found.')
+
+  if (decision === 'accept') {
+    share.status = 'active'
+    share.canView = true
+    share.canBuy = true
+    share.canBorrow = true
+    share.canTakeover = false
+    await share.save()
+    return res.json({ message: 'Friend request accepted.' })
+  }
+
+  share.status = 'rejected'
+  await share.save()
+  return res.json({ message: 'Friend request rejected.' })
 }))
 
 // GET /pantry/neighbours/:friendId
 router.get('/neighbours/:friendId', handle(async (req, res) => {
   const friendId = req.params.friendId
   const share = await PantryShare.findOne({
-    owner: friendId,
-    friend: req.userId,
     status: 'active',
+    $or: [
+      { owner: req.userId, friend: friendId },
+      { owner: friendId, friend: req.userId },
+    ],
   }).lean()
 
   if (!share || !share.canView) {
@@ -484,29 +607,29 @@ router.post('/requests', handle(async (req, res) => {
     throw httpError(400, 'Neighbour and request type are required.')
   }
 
-  if (!['buy', 'borrow', 'takeover'].includes(requestType)) {
-    throw httpError(400, 'Request type must be buy, borrow, or takeover.')
+  if (friendId === req.userId) {
+    throw httpError(400, 'You cannot request ingredients from yourself.')
+  }
+
+  if (!['borrow', 'takeover'].includes(requestType)) {
+    throw httpError(400, 'Request type must be borrow or takeover.')
   }
 
   const selectedItems = Array.isArray(items) ? items : []
-  const hasSelectedItems = selectedItems.length > 0
-
-  if (['borrow', 'takeover'].includes(requestType) && !hasSelectedItems) {
-    throw httpError(400, 'Please select at least one item to borrow or take over.')
+  if (selectedItems.length === 0) {
+    throw httpError(400, 'Please select at least one item to request.')
   }
 
   const share = await PantryShare.findOne({
-    owner: friendId,
-    friend: req.userId,
     status: 'active',
+    $or: [
+      { owner: req.userId, friend: friendId },
+      { owner: friendId, friend: req.userId },
+    ],
   })
 
   if (!share) {
     throw httpError(403, 'You need an active neighbour connection before making a pantry request.')
-  }
-
-  if (requestType === 'buy' && !share.canBuy) {
-    throw httpError(403, 'This neighbour has disabled buy requests.')
   }
 
   if (requestType === 'borrow' && !share.canBorrow) {
@@ -517,21 +640,42 @@ router.post('/requests', handle(async (req, res) => {
     throw httpError(403, 'This neighbour has disabled takeover requests.')
   }
 
-  const payload = {
+  const payloadItems = []
+  for (const item of selectedItems) {
+    const itemId = item.itemId || item._id || item.id
+    const name = String(item.name || '').trim()
+    const quantity = Number(item.quantity || 1)
+    if (!itemId || !name) continue
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw httpError(400, `Quantity for ${name || 'item'} must be greater than zero.`)
+    }
+
+    const pantryItem = await Pantry.findOne({ user: friendId, _id: itemId })
+    if (!pantryItem) throw httpError(404, `${name} is no longer available in this pantry.`)
+    if (pantryItem.quantity < quantity) {
+      throw httpError(409, `Only ${pantryItem.quantity} ${pantryItem.unit} of ${name} is currently available.`)
+    }
+
+    payloadItems.push({
+      itemId: String(itemId),
+      name,
+      quantity,
+      unit: item.unit || pantryItem.unit || 'pcs',
+    })
+  }
+
+  if (payloadItems.length === 0) {
+    throw httpError(400, 'Please select valid pantry items to request.')
+  }
+
+  const request = await PantryRequest.create({
     requester: req.userId,
     owner: friendId,
     requestType,
-    items: selectedItems.map((item) => ({
-      itemId: item.itemId || item._id || String(item.id || ''),
-      name: item.name || 'Item',
-      quantity: Number(item.quantity || 1),
-      unit: item.unit || 'pcs',
-    })).filter((item) => item.itemId),
+    items: payloadItems,
     message: String(message || '').trim().slice(0, 500),
     status: 'pending',
-  }
-
-  const request = await PantryRequest.create(payload)
+  })
 
   res.status(201).json({
     message: `Your ${requestType} request has been sent.`,

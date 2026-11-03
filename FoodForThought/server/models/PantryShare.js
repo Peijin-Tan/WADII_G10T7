@@ -14,10 +14,15 @@ const pantryShareSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     status: {
       type: String,
-      enum: ['active', 'blocked'],
-      default: 'active',
+      enum: ['pending', 'active', 'rejected', 'blocked'],
+      default: 'pending',
     },
     canView: {
       type: Boolean,

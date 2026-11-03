@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -12,6 +12,7 @@ import suggestionsModal from '../components/SuggestionModal.vue'
 // The server works out the user from the token (requireAuth -> req.user -> req.userId).
 const auth = useAuthStore()
 const router = useRouter()
+const currentUserId = computed(() => auth.user?._id || auth.user?.id || null)
 
 function withAuth(instance) {
   instance.interceptors.request.use((config) => {
@@ -105,6 +106,8 @@ async function loadPantry() {
 }
 const neighbours = ref([])
 const availableUsers = ref([])
+const friendRequests = ref([])
+const outgoingFriendRequests = ref([])
 const selectedNeighbourId = ref('')
 const selectedNeighbour = ref(null)
 const neighbourPantry = ref([])
@@ -113,12 +116,18 @@ const neighbourNotice = ref('')
 const neighbourLoading = ref(false)
 const neighbourDebug = ref('')
 const pendingRequests = ref([])
+const incomingRequests = ref([])
+const outgoingRequests = ref([])
 
 async function loadRequests() {
   try {
     const { data } = await api.get('/requests')
-    pendingRequests.value = (data.requests || []).filter((request) => (request.status || 'pending') === 'pending')
+    incomingRequests.value = data.incomingRequests || []
+    outgoingRequests.value = data.outgoingRequests || []
+    pendingRequests.value = [...(incomingRequests.value || [])].filter((request) => (request.status || 'pending') === 'pending')
   } catch (err) {
+    incomingRequests.value = []
+    outgoingRequests.value = []
     pendingRequests.value = []
   }
 }
@@ -133,16 +142,31 @@ async function updateRequestStatus(requestId, status) {
   }
 }
 
+async function respondToFriendRequest(friendId, decision) {
+  try {
+    const { data } = await api.patch(`/friends/${friendId}`, { decision })
+    neighbourNotice.value = data.message
+    await loadNeighbours()
+    await loadRequests()
+  } catch (err) {
+    neighbourNotice.value = err.response?.data?.message || 'Could not respond to this request.'
+  }
+}
+
 async function loadNeighbours() {
   neighbourDebug.value = ''
   try {
     const { data } = await api.get('/neighbours')
     neighbours.value = data.friends || []
     availableUsers.value = data.availableUsers || []
+    friendRequests.value = data.pendingIncoming || []
+    outgoingFriendRequests.value = data.pendingOutgoing || []
     neighbourDebug.value = `Loaded neighbours: ${neighbours.value.length} friends, ${availableUsers.value.length} available users.`
   } catch (err) {
     neighbours.value = []
     availableUsers.value = []
+    friendRequests.value = []
+    outgoingFriendRequests.value = []
     const message = err.response?.data?.message || 'Could not load your neighbour list.'
     neighbourDebug.value = `Neighbour request failed: ${message}`
     errorMsg.value = message
@@ -193,9 +217,17 @@ function toggleBorrowItem(item) {
   selectedBorrowItems.value.push({
     itemId: id,
     name: item.name,
-    quantity: item.quantity,
-    unit: item.unit,
+    quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+    unit: item.unit || 'pcs',
   })
+}
+
+function updateSelectedBorrowItemQuantity(itemId, quantity) {
+  const item = selectedBorrowItems.value.find((selected) => (selected.itemId || selected._id || selected.id) === itemId)
+  if (!item) return
+
+  const numericQuantity = Number(quantity)
+  item.quantity = Number.isFinite(numericQuantity) && numericQuantity > 0 ? numericQuantity : 1
 }
 
 async function requestNeighbourAction(type) {
@@ -215,6 +247,8 @@ async function requestNeighbourAction(type) {
     })
     neighbourNotice.value = data.message
     selectedBorrowItems.value = []
+    await loadNeighbours()
+    await loadRequests()
   } catch (err) {
     neighbourNotice.value = err.response?.data?.message || 'Could not send the request.'
   }
@@ -224,6 +258,15 @@ onMounted(() => {
   loadPantry()
   loadNeighbours()
   loadRequests()
+
+  const refreshTimer = window.setInterval(() => {
+    loadNeighbours()
+    loadRequests()
+  }, 10000)
+
+  onBeforeUnmount(() => {
+    window.clearInterval(refreshTimer)
+  })
 })
 
 // Every write returns the whole updated pantry ({ items }), so we just replace our copy.
@@ -489,7 +532,6 @@ async function onRemove(item) {
                     <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
                       <h3 class="fft-headline-sm m-0">{{ selectedNeighbour.name }}'s pantry</h3>
                       <div class="d-flex gap-2 flex-wrap">
-                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('buy')">Buy</button>
                         <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('borrow')">Borrow</button>
                         <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('takeover')">Takeover</button>
                       </div>
@@ -505,6 +547,19 @@ async function onRemove(item) {
                           <div>
                             <div class="fw-semibold">{{ item.name }}</div>
                             <small class="text-fft-muted">{{ item.quantity }} {{ item.unit }} · {{ item.category }}</small>
+                            <div v-if="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))" class="mt-2 d-flex align-items-center gap-2">
+                              <label class="small text-fft-muted mb-0">Qty</label>
+                              <input
+                                type="number"
+                                min="0.001"
+                                step="any"
+                                class="form-control form-control-sm"
+                                style="width: 90px;"
+                                :value="selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity ?? item.quantity"
+                                @input="updateSelectedBorrowItemQuantity(item._id || item.id, $event.target.value)"
+                              />
+                              <span class="small text-fft-muted">{{ item.unit }}</span>
+                            </div>
                           </div>
                         </div>
                         <span v-if="item.expiryDate" class="fft-pill fft-pill-gray">{{ item.expiryDate.slice(0,10) }}</span>
@@ -529,35 +584,63 @@ async function onRemove(item) {
               </div>
             </div>
 
-            <div v-if="pendingRequests.length === 0" class="text-fft-muted">
-              No pending requests yet.
-            </div>
-
-            <div v-else class="d-flex flex-column gap-3">
-              <div v-for="request in pendingRequests" :key="request._id" class="border rounded p-3">
-                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div v-if="friendRequests.length || outgoingFriendRequests.length || pendingRequests.length" class="d-flex flex-column gap-4">
+              <div v-if="friendRequests.length" class="border rounded p-3">
+                <div class="fw-semibold mb-2">Friend requests</div>
+                <div v-for="friend in friendRequests" :key="friend._id" class="d-flex justify-content-between align-items-center gap-2 flex-wrap border-top pt-2 mt-2 first:mt-0 first:border-top-0 first:pt-0">
                   <div>
-                    <div class="fw-semibold">{{ request.requester?.name || 'Neighbour' }} requested to {{ request.requestType }}</div>
-                    <small class="text-fft-muted">{{ new Date(request.createdAt).toLocaleString() }}</small>
+                    <div class="fw-medium">{{ friend.name }}</div>
+                    <small class="text-fft-muted">Wants to connect with you</small>
                   </div>
-                  <span class="fft-pill fft-pill-amber">{{ request.status }}</span>
-                </div>
-
-                <div v-if="request.items?.length" class="mt-3 d-flex flex-column gap-1">
-                  <div v-for="item in request.items" :key="item.itemId" class="small text-fft-muted">
-                    • {{ item.name }} · {{ item.quantity }} {{ item.unit }}
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm fft-btn-primary" @click="respondToFriendRequest(friend._id, 'accept')">Accept</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="respondToFriendRequest(friend._id, 'reject')">Reject</button>
                   </div>
-                </div>
-
-                <div v-if="request.message" class="mt-2 small text-fft-muted">
-                  {{ request.message }}
-                </div>
-
-                <div class="d-flex gap-2 mt-3">
-                  <button type="button" class="btn btn-sm fft-btn-primary" @click="updateRequestStatus(request._id, 'approved')">Approve</button>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="updateRequestStatus(request._id, 'rejected')">Reject</button>
                 </div>
               </div>
+
+              <div v-if="pendingRequests.length" class="d-flex flex-column gap-3">
+                <div v-for="request in pendingRequests" :key="request._id" class="border rounded p-3">
+                  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                      <div class="fw-semibold">{{ request.requester?.name || 'Neighbour' }} requested to {{ request.requestType }}</div>
+                      <small class="text-fft-muted">{{ new Date(request.createdAt).toLocaleString() }}</small>
+                    </div>
+                    <span class="fft-pill fft-pill-amber">{{ request.status }}</span>
+                  </div>
+
+                  <div v-if="request.items?.length" class="mt-3 d-flex flex-column gap-1">
+                    <div v-for="item in request.items" :key="item.itemId" class="small text-fft-muted">
+                      • {{ item.name }} · {{ item.quantity }} {{ item.unit }}
+                    </div>
+                  </div>
+
+                  <div v-if="request.message" class="mt-2 small text-fft-muted">
+                    {{ request.message }}
+                  </div>
+
+                  <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-sm fft-btn-primary" @click="updateRequestStatus(request._id, 'approved')">Approve</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="updateRequestStatus(request._id, 'rejected')">Reject</button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="incomingRequests.length || outgoingRequests.length" class="border rounded p-3">
+                <div class="fw-semibold mb-2">My request history</div>
+                <div v-for="request in [...incomingRequests, ...outgoingRequests].slice(0, 6)" :key="request._id" class="d-flex justify-content-between align-items-center gap-2 flex-wrap border-top pt-2 mt-2 first:mt-0 first:border-top-0 first:pt-0">
+                  <div>
+                    <div class="fw-medium">{{ request.requestType }}</div>
+                    <small class="text-fft-muted">{{ request.requester?.name || request.owner?.name || 'Request' }} · {{ request.status }}</small>
+                  </div>
+                  <button v-if="request.status === 'pending' && String(request.requester?._id || request.requester) !== String(currentUserId)" type="button" class="btn btn-sm btn-outline-secondary" @click="updateRequestStatus(request._id, 'rejected')">Close</button>
+                  <button v-else-if="request.status === 'pending' && String(request.requester?._id || request.requester) === String(currentUserId)" type="button" class="btn btn-sm btn-outline-secondary" @click="updateRequestStatus(request._id, 'cancelled')">Cancel</button>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="text-fft-muted">
+              No pending requests yet.
             </div>
           </div>
         </div>
