@@ -15,7 +15,7 @@ const router = express.Router()
 
 
 // Create uploads folder if it doesn't exist
-const uploadDir = path.join(__dirname, '../../uploads')
+const uploadDir = path.join(__dirname, '../../../public/img')
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true })
@@ -713,7 +713,7 @@ router.post(
         })
       }
 
-      const imageUrl = `/uploads/${req.file.filename}`
+      const imageUrl = `/img/${req.file.filename}`
 
       return res.status(200).json({
         message: 'Image uploaded successfully',
