@@ -2,17 +2,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
-import { createApi } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
-import {
-  buildPantryRequestItem,
-  clampPantryRequestQuantity,
-} from '@/utils/pantryRequest'
-import { applyPantryQuantityChange } from '@/utils/pantryQuantity'
+import NeighbourPantry from '@/components/community/NeighbourPantry.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
-const pantryApi = createApi('/pantry')
 
 const activeTab = ref('comments')
 
@@ -36,29 +30,16 @@ function onTabKey(event) {
 
 const comments = ref([])
 const likes = ref([])
-const neighbours = ref([])
-const pantryItems = ref([])
-const selectedNeighbourId = ref('')
-const selectedNeighbour = ref(null)
-const selectedBorrowItems = ref([])
-const pantryRequests = ref([])
-const outgoingPantryRequests = ref([])
-const pantrySearch = ref('')
-const pantryCategory = ref('all')
-const pantryAvailability = ref('all')
-const pantrySort = ref('name')
-const pantryPageSize = ref(8)
+// Invites + borrow requests waiting for an answer, shown on the Neighbour Pantry tab (sent by NeighbourPantry.vue)
+const pantryWaiting = ref(0)
 
 const loadingComments = ref(false)
 const loadingLikes = ref(false)
-const pantryLoading = ref(false)
 
 const commentsError = ref('')
 const likesError = ref('')
-const pantryError = ref('')
 const actionError = ref('')
 const success = ref('')
-const pantryNotice = ref('')
 
 const editingCommentId = ref('')
 const editContent = ref('')
@@ -195,218 +176,12 @@ async function loadLikes() {
   }
 }
 
-async function loadPantryActivity() {
-  if (!auth.token) {
-    neighbours.value = []
-    pantryItems.value = []
-    selectedBorrowItems.value = []
-    pantryRequests.value = []
-    outgoingPantryRequests.value = []
-    return
-  }
-
-  const token = auth.token
-  pantryLoading.value = true
-  pantryError.value = ''
-  pantryNotice.value = ''
-
-  try {
-    const [friendsResponse, requestsResponse] = await Promise.all([
-      pantryApi.get('/neighbours'),
-      pantryApi.get('/requests'),
-    ])
-
-    if (token !== auth.token) return
-
-    neighbours.value = friendsResponse.data.friends || []
-    pantryRequests.value = requestsResponse.data.incoming || requestsResponse.data.requests || []
-    outgoingPantryRequests.value = requestsResponse.data.outgoing || []
-
-    if (!selectedNeighbourId.value && neighbours.value.length > 0) {
-      selectedNeighbourId.value = neighbours.value[0]._id
-      await loadNeighbourPantry(neighbours.value[0]._id)
-    } else if (!selectedNeighbourId.value) {
-      selectedNeighbour.value = null
-      pantryItems.value = []
-    }
-  } catch (err) {
-    if (token === auth.token) {
-      pantryError.value = getErrorMessage(err, 'Unable to load your neighbour pantry.')
-    }
-  } finally {
-    if (token === auth.token) {
-      pantryLoading.value = false
-    }
-  }
-}
-
-async function loadNeighbourPantry(friendId) {
-  if (!friendId || !auth.token) return
-
-  pantryLoading.value = true
-  pantryError.value = ''
-  pantryNotice.value = ''
-
-  try {
-    const response = await pantryApi.get(`/neighbours/${friendId}`)
-    selectedNeighbourId.value = friendId
-    selectedNeighbour.value = response.data.friend || null
-    pantryItems.value = response.data.items || []
-    selectedBorrowItems.value = []
-  } catch (err) {
-    selectedNeighbour.value = null
-    pantryItems.value = []
-    pantryError.value = getErrorMessage(err, 'Unable to load this neighbour pantry.')
-  } finally {
-    pantryLoading.value = false
-  }
-}
-
-function toggleBorrowItem(item) {
-  const id = item._id || item.id || item.itemId
-  const existing = selectedBorrowItems.value.find(
-    (selected) => (selected.itemId || selected._id || selected.id) === id
-  )
-
-  if (existing) {
-    selectedBorrowItems.value = selectedBorrowItems.value.filter(
-      (selected) => (selected.itemId || selected._id || selected.id) !== id
-    )
-    return
-  }
-
-  selectedBorrowItems.value.push(
-    buildPantryRequestItem(item, clampPantryRequestQuantity(Number(item.quantity) || 1, 1))
-  )
-}
-
-function updateBorrowQuantity(item, rawValue) {
-  const id = item.itemId || item._id || item.id
-  const safeValue = clampPantryRequestQuantity(
-    Number(item.availableQuantity ?? item.quantity ?? 1) || 1,
-    Number(rawValue) || 1
-  )
-
-  const existingIndex = selectedBorrowItems.value.findIndex(
-    (selected) => (selected.itemId || selected._id || selected.id) === id
-  )
-
-  if (existingIndex === -1) {
-    selectedBorrowItems.value.push(buildPantryRequestItem(item, safeValue))
-    return
-  }
-
-  const nextItems = selectedBorrowItems.value.map((selected) => {
-    const currentId = selected.itemId || selected._id || selected.id
-    if (String(currentId) !== String(id)) {
-      return selected
-    }
-
-    return {
-      ...selected,
-      quantity: safeValue,
-      availableQuantity: Number(item.availableQuantity ?? item.quantity ?? safeValue),
-      name: item.name || selected.name,
-      unit: item.unit || selected.unit,
-    }
-  })
-
-  selectedBorrowItems.value = nextItems
-}
-
-const pantryCategories = computed(() => {
-  const categories = new Set((pantryItems.value || []).map((item) => item.category || 'other'))
-  return ['all', ...Array.from(categories).sort((a, b) => a.localeCompare(b))]
-})
-
-const filteredPantryItems = computed(() => {
-  const query = pantrySearch.value.trim().toLowerCase()
-
-  const items = (pantryItems.value || []).filter((item) => {
-    const itemName = (item.name || '').toLowerCase()
-    const itemCategory = item.category || 'other'
-    const isAvailable = Number(item.quantity || 0) > 0
-
-    const matchesSearch = !query || itemName.includes(query)
-    const matchesCategory = pantryCategory.value === 'all' || itemCategory === pantryCategory.value
-    const matchesAvailability = pantryAvailability.value === 'all' ||
-      (pantryAvailability.value === 'available' ? isAvailable : !isAvailable)
-
-    return matchesSearch && matchesCategory && matchesAvailability
-  })
-
-  return [...items].sort((a, b) => {
-    if (pantrySort.value === 'expiry') {
-      const expiryA = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
-      const expiryB = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
-      return expiryA - expiryB || (a.name || '').localeCompare(b.name || '')
-    }
-
-    return (a.name || '').localeCompare(b.name || '')
-  })
-})
-
-const visiblePantryItems = computed(() => filteredPantryItems.value.slice(0, pantryPageSize.value))
-
-function resetPantryFilters() {
-  pantrySearch.value = ''
-  pantryCategory.value = 'all'
-  pantryAvailability.value = 'all'
-  pantrySort.value = 'name'
-  pantryPageSize.value = 8
-}
-
-function loadMorePantryItems() {
-  pantryPageSize.value = Math.min(filteredPantryItems.value.length, pantryPageSize.value + 8)
-}
-
-watch(() => pantryItems.value, () => {
-  pantryPageSize.value = 8
-})
-
-watch([() => pantrySearch.value, () => pantryCategory.value, () => pantryAvailability.value, () => pantrySort.value], () => {
-  pantryPageSize.value = 8
-})
-
-async function requestNeighbourAction(requestType = 'borrow') {
-  if (!selectedNeighbourId.value || selectedBorrowItems.value.length === 0) {
-    pantryNotice.value = 'Please select at least one item before sending this request.'
-    return
-  }
-
-  try {
-    const response = await pantryApi.post('/requests', {
-      friendId: selectedNeighbourId.value,
-      requestType,
-      items: selectedBorrowItems.value.map((item) => buildPantryRequestItem(item, item.quantity)),
-      message: `Please approve this ${requestType} request.`,
-    })
-
-    pantryNotice.value = response.data.message
-    selectedBorrowItems.value = []
-    await loadPantryActivity()
-  } catch (err) {
-    pantryNotice.value = getErrorMessage(err, 'Could not send this request.')
-  }
-}
-
-async function updatePantryRequestStatus(requestId, status) {
-  try {
-    const response = await pantryApi.patch(`/requests/${requestId}`, { status })
-    pantryNotice.value = response.data.message
-    await loadPantryActivity()
-  } catch (err) {
-    pantryNotice.value = getErrorMessage(err, 'Could not update this request.')
-  }
-}
-
 function loadActivity() {
   comments.value = []
   likes.value = []
 
   commentsError.value = ''
   likesError.value = ''
-  pantryError.value = ''
   actionError.value = ''
   success.value = ''
 
@@ -418,12 +193,10 @@ function loadActivity() {
 
   loadingComments.value = false
   loadingLikes.value = false
-  pantryLoading.value = false
 
   if (auth.token) {
     loadComments()
     loadLikes()
-    loadPantryActivity()
   }
 }
 
@@ -624,7 +397,8 @@ watch(() => auth.token, loadActivity)
             :tabindex="activeTab === tab.id ? 0 : -1"
             @click="activeTab = tab.id"
             @keydown="onTabKey"
-          >{{ tab.label }}</button>
+          >{{ tab.label }}<span v-if="tab.id === 'pantry' && pantryWaiting" class="cm-tab-badge"
+            :aria-label="`${pantryWaiting} waiting for your answer`">{{ pantryWaiting }}</span></button>
         </div>
 
         <!-- Messages -->
@@ -1023,196 +797,10 @@ watch(() => auth.token, loadActivity)
           </div>
         </section>
 
-        <section v-else-if="activeTab === 'pantry'" class="row g-4" role="tabpanel" aria-labelledby="cm-tab-pantry">
-          <div class="col-12 col-lg-5">
-            <div class="card activity-card h-100">
-              <div class="card-body p-4">
-                <h2 class="h4 mb-3">Neighbour Pantry</h2>
-
-                <div v-if="pantryLoading" class="text-muted">Loading pantry...</div>
-                <div v-else-if="pantryError" class="alert alert-danger">{{ pantryError }}</div>
-
-                <div v-else-if="neighbours.length === 0" class="text-muted">
-                  You have no neighbour pantry access yet.
-                </div>
-
-                <div v-else class="list-group list-group-flush">
-                  <button
-                    v-for="friend in neighbours"
-                    :key="friend._id"
-                    type="button"
-                    class="list-group-item list-group-item-action text-start"
-                    :class="selectedNeighbourId === friend._id ? 'active' : ''"
-                    @click="loadNeighbourPantry(friend._id)"
-                  >
-                    <strong>{{ friend.name || 'Neighbour' }}</strong>
-                    <div class="small text-muted">{{ friend.email }}</div>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-12 col-lg-7">
-            <div class="card activity-card h-100">
-              <div class="card-body p-4">
-                <div v-if="selectedNeighbour" class="mb-3">
-                  <h3 class="h5 mb-1">{{ selectedNeighbour.name }}'s pantry</h3>
-                  <p class="text-muted small mb-0">Borrow requests stay within your accepted friends.</p>
-                </div>
-
-                <div v-if="pantryNotice" class="alert alert-success mb-3">{{ pantryNotice }}</div>
-
-                <div v-if="pantryLoading" class="text-muted">Loading ingredients...</div>
-
-                <div v-else-if="!selectedNeighbour" class="text-muted">
-                  Select a neighbour to view their pantry.
-                </div>
-
-                <div v-else-if="pantryItems.length === 0" class="text-muted">
-                  This pantry has no available items right now.
-                </div>
-
-                <div v-else class="d-grid gap-3">
-                  <div class="row g-2 align-items-center">
-                    <div class="col-12 col-md-6">
-                      <label class="visually-hidden" for="neighbour-pantry-search">Search pantry ingredients</label>
-                      <div class="input-group">
-                        <input
-                          id="neighbour-pantry-search"
-                          v-model="pantrySearch"
-                          type="search"
-                          class="form-control"
-                          placeholder="Search ingredients..."
-                        >
-                        <button v-if="pantrySearch" type="button" class="btn btn-outline-secondary" @click="pantrySearch = ''">Clear</button>
-                      </div>
-                    </div>
-                    <div class="col-md-3 col-12">
-                      <select v-model="pantryCategory" class="form-select">
-                        <option v-for="category in pantryCategories" :key="category" :value="category">
-                          {{ category === 'all' ? 'All categories' : category }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="col-md-3 col-12">
-                      <select v-model="pantryAvailability" class="form-select">
-                        <option value="all">All availability</option>
-                        <option value="available">Available</option>
-                        <option value="unavailable">Unavailable</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="row g-2 align-items-center">
-                    <div class="col-12 col-md-6">
-                      <select v-model="pantrySort" class="form-select">
-                        <option value="name">Sort by name</option>
-                        <option value="expiry">Sort by expiry</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div v-if="filteredPantryItems.length === 0" class="alert alert-light border mb-0">
-                    No matching ingredients found for this neighbour's pantry.
-                    <button type="button" class="btn btn-link p-0 ms-2" @click="resetPantryFilters()">Clear filters</button>
-                  </div>
-
-                  <div v-else class="row g-3">
-                    <div
-                      v-for="item in visiblePantryItems"
-                      :key="item._id || item.id"
-                      class="col-12 col-sm-6 col-xl-4"
-                    >
-                      <div class="border rounded-4 p-3 h-100 d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                          <div>
-                            <div class="fw-semibold">{{ item.name }}</div>
-                            <div class="small text-muted">
-                              {{ item.quantity }} {{ item.unit }}
-                            </div>
-                          </div>
-                          <span class="badge" :class="Number(item.quantity) > 0 ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'">
-                            {{ Number(item.quantity) > 0 ? 'Available' : 'Unavailable' }}
-                          </span>
-                        </div>
-
-                        <div class="small text-muted mb-3">
-                          Expires {{ item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No date' }}
-                        </div>
-
-                        <div class="mt-auto d-flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            class="btn btn-sm flex-fill"
-                            :class="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id)) ? 'activity-button' : 'activity-outline'"
-                            @click="toggleBorrowItem(item)"
-                          >
-                            {{ selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id)) ? 'Borrow selected' : 'Borrow' }}
-                          </button>
-                        </div>
-
-                        <div v-if="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))" class="mt-3">
-                          <label class="form-label small mb-1">Requested quantity</label>
-                          <input
-                            :value="selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity || 1"
-                            type="number"
-                            min="1"
-                            :max="Number(item.quantity) || 1"
-                            class="form-control"
-                            @input="updateBorrowQuantity({
-                              itemId: item._id || item.id,
-                              name: item.name,
-                              quantity: selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity || 1,
-                              availableQuantity: Number(item.quantity) || 1,
-                              unit: item.unit,
-                            }, $event.target.value)"
-                          >
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-if="filteredPantryItems.length > visiblePantryItems.length" class="text-center pt-2">
-                    <button type="button" class="btn activity-outline" @click="loadMorePantryItems()">Show more</button>
-                  </div>
-                </div>
-
-                <div v-if="selectedBorrowItems.length > 0" class="mt-4 border rounded-4 p-3 bg-light">
-                  <h3 class="h6 mb-3">Borrow request</h3>
-                  <ul class="mb-3 ps-3">
-                    <li v-for="selected in selectedBorrowItems" :key="selected.itemId || selected._id || selected.id">
-                      {{ selected.name }} — {{ selected.quantity }} {{ selected.unit }}
-                    </li>
-                  </ul>
-                  <button type="button" class="btn activity-button" @click="requestNeighbourAction('borrow')">
-                    Send Borrow Request
-                  </button>
-                </div>
-
-                <div v-if="pantryRequests.length > 0" class="mt-4">
-                  <h3 class="h6 mb-3">Incoming requests</h3>
-                  <div v-for="request in pantryRequests" :key="request._id" class="border rounded-4 p-3 mb-2">
-                    <div class="fw-semibold">{{ request.requestType }} request from {{ request.requester?.name || 'Someone' }}</div>
-                    <div class="small text-muted mb-2">{{ request.items.map((entry) => `${entry.name} × ${entry.quantity}`).join(', ') }}</div>
-                    <div class="d-flex gap-2">
-                      <button type="button" class="btn btn-sm btn-success" @click="updatePantryRequestStatus(request._id, 'approved')">Approve</button>
-                      <button type="button" class="btn btn-sm btn-outline-danger" @click="updatePantryRequestStatus(request._id, 'rejected')">Reject</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="outgoingPantryRequests.length > 0" class="mt-4">
-                  <h3 class="h6 mb-3">Outgoing requests</h3>
-                  <div v-for="request in outgoingPantryRequests" :key="request._id" class="border rounded-4 p-3 mb-2">
-                    <div class="fw-semibold">{{ request.requestType }} request to {{ request.owner?.name || 'Neighbour' }}</div>
-                    <div class="small text-muted mb-2">{{ request.items.map((entry) => `${entry.name} × ${entry.quantity}`).join(', ') }}</div>
-                    <div class="small text-muted">Status: {{ request.status }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- Neighbour Pantry: components/community/NeighbourPantry.vue. v-show (not v-if) so it loads with the page
+             and the tab can show how many invites/requests are waiting. -->
+        <section v-show="activeTab === 'pantry'" role="tabpanel" aria-labelledby="cm-tab-pantry">
+          <NeighbourPantry @counts="pantryWaiting = $event.waiting" />
         </section>
       </div>
     </main>
@@ -1244,6 +832,18 @@ watch(() => auth.token, loadActivity)
   white-space: nowrap;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
+}
+.cm-tab-badge {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e9a23b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
 }
 .cm-tab:hover {
   color: #2a2d27;

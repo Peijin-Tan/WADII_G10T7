@@ -33,8 +33,13 @@ const pantryRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'completed'],
+      // cancelled: the borrower took it back, or one of them removed the other as a neighbour
+      enum: ['pending', 'approved', 'rejected', 'completed', 'cancelled'],
       default: 'pending',
+    },
+    // When the owner approved/rejected it (or it was cancelled), shown in the borrower's history
+    respondedAt: {
+      type: Date,
     },
   },
   {

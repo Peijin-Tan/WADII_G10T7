@@ -5,6 +5,7 @@
 //   POST   /pantry                  -> add an ingredient (adds to the quantity if it's already there)
 //   PATCH  /pantry/:itemId          -> change name, quantity, unit, category or expiry date
 //   DELETE /pantry/:itemId          -> remove an ingredient
+//   Neighbour Pantry (sharing + borrowing): see pantrysharing.js
 //
 // Every write returns the whole updated pantry as { items }, so the frontend just replaces its copy.
 //
@@ -15,12 +16,11 @@ const express = require('express')
 const mongoose = require('mongoose')
 const axios = require('axios')
 const Pantry = require('../../models/Pantry')
-const PantryLegacy = mongoose.models.PantryLegacy || mongoose.model('PantryLegacy', new mongoose.Schema({}, { strict: false, collection: 'pantries' }), 'pantries')
-const User = require('../../models/User')
-const PantryShare = require('../../models/PantryShare')
-const PantryRequest = require('../../models/PantryRequest')
+// Reads the same 'pantries' collection as models/Pantry.js, but accepts older documents whose "user" is a string.
+// strictQuery: false is needed: index.js turns strictQuery on for every model, and with an empty schema that makes
+// Mongoose silently DROP "user" / "normalizedName" from every filter, so a query would return everyone's pantry.
+const PantryLegacy = mongoose.models.PantryLegacy || mongoose.model('PantryLegacy', new mongoose.Schema({}, { strict: false, strictQuery: false, collection: 'pantries' }), 'pantries')
 const requireAuth = require('../middleware/auth') // same path as Planner.js
-const { getApprovedPantryChange, normalizePantryItemName } = require('../services/pantryrequestapproval')
 
 const router = express.Router()
 
@@ -279,315 +279,9 @@ router.get('/', handle(async (req, res) => {
   res.json({ items: await loadPantry(req.userId) })
 }))
 
-// GET /pantry/requests
-router.get('/requests', handle(async (req, res) => {
-  const allPending = await PantryRequest.find({
-    $or: [{ owner: req.userId }, { requester: req.userId }],
-    status: 'pending',
-    requestType: 'borrow',
-  })
-    .populate('requester', '_id name email')
-    .populate('owner', '_id name email')
-    .sort({ createdAt: -1 })
-    .lean()
-
-  const incoming = allPending.filter((request) => String(request.owner?._id || request.owner) === String(req.userId))
-  const outgoing = allPending.filter((request) => String(request.requester?._id || request.requester) === String(req.userId))
-
-  res.json({
-    requests: allPending,
-    incoming,
-    outgoing,
-  })
-}))
-
-// PATCH /pantry/requests/:requestId
-router.patch('/requests/:requestId', handle(async (req, res) => {
-  const { status } = req.body || {}
-  if (!['approved', 'rejected', 'completed'].includes(status)) {
-    throw httpError(400, 'Status must be approved, rejected, or completed.')
-  }
-
-  const session = await mongoose.startSession()
-  let request
-
-  try {
-    await session.withTransaction(async () => {
-      request = await PantryRequest.findOne({
-        _id: req.params.requestId,
-        owner: req.userId,
-        requestType: 'borrow',
-        status: 'pending',
-      }).session(session)
-
-      if (!request) {
-        throw httpError(404, 'Request not found')
-      }
-
-      if (status === 'rejected') {
-        request.status = 'rejected'
-        await request.save({ session })
-        return
-      }
-
-      if (status === 'approved' || status === 'completed') {
-        const requesterId = String(request.requester)
-        if (String(requesterId) === String(req.userId)) {
-          throw httpError(400, 'You cannot borrow from yourself.')
-        }
-
-        const ownerId = req.userId
-        for (const item of request.items || []) {
-          const quantity = Number(item.quantity || 1)
-          if (!Number.isFinite(quantity) || quantity <= 0) {
-            throw httpError(400, `Borrow quantity for ${item.name || 'this item'} must be positive.`)
-          }
-
-          const ownerItem = await PantryLegacy.findOne({
-            ...pantryUserQuery(ownerId),
-            $or: [
-              { _id: item.itemId },
-              { normalizedName: normalizePantryItemName(item.name) },
-            ],
-          }).session(session)
-
-          if (!ownerItem) {
-            throw httpError(409, `This ingredient is no longer available in the pantry.`)
-          }
-
-          const ownerUnit = String(ownerItem.unit || 'pcs')
-          const requestedUnit = String(item.unit || ownerUnit)
-          const convertedQty = convertAmount(quantity, requestedUnit, ownerUnit)
-          const transferQty = Number.isFinite(convertedQty) ? convertedQty : quantity
-
-          if (Number(ownerItem.quantity || 0) < transferQty) {
-            throw httpError(409, `Not enough ${item.name || 'this ingredient'} left to approve this request.`)
-          }
-
-          const remainingQty = Number(ownerItem.quantity || 0) - transferQty
-          if (remainingQty <= 0) {
-            await PantryLegacy.deleteOne({ _id: ownerItem._id }, { session })
-          } else {
-            const nextOwnerQty = Math.round(remainingQty * 1000) / 1000
-            await PantryLegacy.updateOne({ _id: ownerItem._id }, { $set: { quantity: nextOwnerQty, unit: ownerUnit } }, { session })
-          }
-
-          const requesterItem = await PantryLegacy.findOne({
-            ...pantryUserQuery(requesterId),
-            normalizedName: normalizePantryItemName(item.name),
-          }).session(session)
-
-          if (requesterItem) {
-            const nextRequesterQty = Math.round((Number(requesterItem.quantity || 0) + transferQty) * 1000) / 1000
-            await PantryLegacy.updateOne({ _id: requesterItem._id }, { $set: { quantity: nextRequesterQty, unit: requesterItem.unit || ownerUnit } }, { session })
-          } else {
-            await Pantry.create([{ 
-              user: requesterId,
-              name: item.name || 'Item',
-              normalizedName: normalizePantryItemName(item.name),
-              quantity: Math.round(transferQty * 1000) / 1000,
-              unit: ownerUnit,
-              category: 'other',
-            }], { session })
-          }
-        }
-
-        request.status = status
-        await request.save({ session })
-      }
-    })
-  } finally {
-    await session.endSession()
-  }
-
-  res.json({
-    message: `Request ${status}.`,
-    request,
-  })
-}))
-
-// GET /pantry/neighbours
-router.get('/neighbours', handle(async (req, res) => {
-  const users = await User.find({ _id: { $ne: req.userId }, role: { $ne: 'admin' } })
-    .select('_id name email')
-    .sort({ name: 1 })
-    .lean()
-
-  const shares = await PantryShare.find({
-    $or: [
-      { owner: req.userId },
-      { friend: req.userId }
-    ],
-    status: 'active',
-  })
-    .populate('owner friend', '_id name email')
-    .lean()
-
-  const friends = []
-  const friendsMap = new Map()
-
-  for (const share of shares) {
-    const ownerId = String(share.owner?._id || share.owner)
-    const friendId = String(share.friend?._id || share.friend)
-    const userId = ownerId === req.userId ? friendId : ownerId
-
-    if (userId === req.userId) continue
-
-    const existing = friendsMap.get(userId) || {
-      _id: userId,
-      name: null,
-      email: null,
-      canView: share.canView,
-      canBuy: share.canBuy,
-      canBorrow: share.canBorrow,
-      canTakeover: share.canTakeover,
-      status: share.status,
-    }
-
-    if (share.owner && String(share.owner._id) === req.userId) {
-      existing.name = share.friend?.name || existing.name
-      existing.email = share.friend?.email || existing.email
-    } else if (share.friend && String(share.friend._id) === req.userId) {
-      existing.name = share.owner?.name || existing.name
-      existing.email = share.owner?.email || existing.email
-    }
-
-    existing.canView = existing.canView || share.canView
-    existing.canBuy = existing.canBuy || share.canBuy
-    existing.canBorrow = existing.canBorrow || share.canBorrow
-    existing.canTakeover = existing.canTakeover || share.canTakeover
-
-    friendsMap.set(userId, existing)
-  }
-
-  for (const friend of friendsMap.values()) {
-    friends.push(friend)
-  }
-
-  const availableUsers = users.filter((user) => !friendsMap.has(String(user._id)))
-
-  res.json({ friends, availableUsers })
-}))
-
-// POST /pantry/friends/:friendId
-router.post('/friends/:friendId', handle(async (req, res) => {
-  const friendId = req.params.friendId
-  if (!friendId || friendId === req.userId) {
-    throw httpError(400, 'Choose another user to share your pantry with.')
-  }
-
-  const friend = await User.findById(friendId).select('_id name email')
-  if (!friend) throw httpError(404, 'Neighbour not found')
-
-  const permissions = {
-    canView: true,
-    canBuy: true,
-    canBorrow: true,
-    canTakeover: false,
-  }
-
-  await Promise.all([
-    PantryShare.findOneAndUpdate(
-      { owner: req.userId, friend: friendId },
-      { $set: { ...permissions, status: 'active' } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ),
-    PantryShare.findOneAndUpdate(
-      { owner: friendId, friend: req.userId },
-      { $set: { ...permissions, status: 'active' } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ),
-  ])
-
-  res.status(201).json({
-    message: `${friend.name} is now on your neighbour list.`,
-  })
-}))
-
-// GET /pantry/neighbours/:friendId
-router.get('/neighbours/:friendId', handle(async (req, res) => {
-  const friendId = req.params.friendId
-  const share = await PantryShare.findOne({
-    owner: friendId,
-    friend: req.userId,
-    status: 'active',
-  }).lean()
-
-  if (!share || !share.canView) {
-    throw httpError(403, 'This neighbour has not shared their pantry with you.')
-  }
-
-  const friend = await User.findById(friendId).select('_id name email').lean()
-  if (!friend) throw httpError(404, 'Neighbour not found')
-
-  const items = await Pantry.find({ user: friendId }).sort({ category: 1, name: 1 }).lean()
-
-  res.json({
-    friend,
-    access: {
-      canView: share.canView,
-      canBuy: share.canBuy,
-      canBorrow: share.canBorrow,
-      canTakeover: share.canTakeover,
-    },
-    items,
-  })
-}))
-
-// POST /pantry/requests
-router.post('/requests', handle(async (req, res) => {
-  const { friendId, requestType, message, items } = req.body || {}
-
-  if (!friendId || !requestType) {
-    throw httpError(400, 'Neighbour and request type are required.')
-  }
-
-  if (requestType !== 'borrow') {
-    throw httpError(400, 'Only borrow requests are supported.')
-  }
-
-  const selectedItems = Array.isArray(items) ? items : []
-  const hasSelectedItems = selectedItems.length > 0
-
-  if (!hasSelectedItems) {
-    throw httpError(400, 'Please select at least one item to borrow or take over.')
-  }
-
-  const share = await PantryShare.findOne({
-    owner: friendId,
-    friend: req.userId,
-    status: 'active',
-  })
-
-  if (!share) {
-    throw httpError(403, 'You need an active neighbour connection before making a pantry request.')
-  }
-
-  if (requestType === 'borrow' && !share.canBorrow) {
-    throw httpError(403, 'This neighbour has disabled borrow requests.')
-  }
-
-  const payload = {
-    requester: req.userId,
-    owner: friendId,
-    requestType,
-    items: selectedItems.map((item) => ({
-      itemId: item.itemId || item._id || String(item.id || ''),
-      name: item.name || 'Item',
-      quantity: Number(item.quantity || 1),
-      unit: item.unit || 'pcs',
-    })).filter((item) => item.itemId),
-    message: String(message || '').trim().slice(0, 500),
-    status: 'pending',
-  }
-
-  const request = await PantryRequest.create(payload)
-
-  res.status(201).json({
-    message: `Your ${requestType} request has been sent.`,
-    request,
-  })
-}))
+// Neighbour Pantry routes (/pantry/neighbours..., /pantry/friends..., /pantry/requests...)
+// live in pantrysharing.js. Mounted here, before the /:itemId routes below.
+router.use(require('./pantrysharing')({ PantryLegacy, pantryUserQuery, handle }))
 
 // POST /pantry
 // body: { name, quantity, unit, category, expiryDate? }
@@ -611,8 +305,9 @@ router.post('/', handle(async (req, res) => {
     if (added === null) {
       throw httpError(409, `You already have ${existing.name} in ${existing.unit}. Add it in a matching unit, or edit the item instead.`)
     }
-    existing.quantity = Math.round((existing.quantity + added) * 1000) / 1000
-    if (req.body.expiryDate) existing.expiryDate = req.body.expiryDate
+    // .set() (not existing.quantity = ...): PantryLegacy has an empty schema, so plain assignment isn't saved
+    existing.set('quantity', Math.round((existing.quantity + added) * 1000) / 1000)
+    if (req.body.expiryDate) existing.set('expiryDate', req.body.expiryDate)
     await existing.save()
     return res.json({ items: await loadPantry(req.userId) })
   }
@@ -639,6 +334,9 @@ function checkEdits(body) {
     if (!Number.isFinite(quantity) || quantity < 0) throw httpError(400, 'Quantity must be 0 or more')
     edits.quantity = quantity
   }
+  // Saved through PantryLegacy (no schema), so check these here instead of relying on models/Pantry.js
+  if (edits.unit !== undefined && !Pantry.UNITS.includes(edits.unit)) throw httpError(400, `Unit must be one of: ${Pantry.UNITS.join(', ')}`)
+  if (edits.category !== undefined && !Pantry.CATEGORIES.includes(edits.category)) throw httpError(400, 'Choose a category from the list')
   if (edits.expiryDate === '') edits.expiryDate = null // empty date box = no use-by date
   if (edits.expiryDate && Number.isNaN(new Date(edits.expiryDate).getTime())) {
     throw httpError(400, 'Use-by date must be a valid date')
@@ -656,8 +354,9 @@ router.patch('/:itemId', handle(async (req, res) => {
     const clash = await PantryLegacy.findOne({ ...pantryUserQuery(req.userId), normalizedName: normalizeIngredient(edits.name), _id: { $ne: item._id } })
     if (clash) throw httpError(409, `${clash.name} is already in your pantry. Edit that item instead, or pick another name.`)
   }
-  Object.assign(item, edits)
-  if (req.body.name !== undefined) item.normalizedName = normalizeIngredient(req.body.name)
+  // .set() (not Object.assign): PantryLegacy has an empty schema, so plain assignment isn't saved
+  item.set(edits)
+  if (req.body.name !== undefined) item.set('normalizedName', normalizeIngredient(req.body.name))
   await item.save() // runs validation
   res.json({ items: await loadPantry(req.userId) })
 }))

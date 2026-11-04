@@ -19,6 +19,9 @@ import { useConfirm } from '@/composables/useConfirm'
 // The server works out the user from the token (requireAuth -> req.user -> req.userId).
 const auth = useAuthStore()
 const router = useRouter()
+// Themed confirm box (components/ui/ConfirmDialog.vue). Without this line, confirm() below would be the
+// browser's own window.confirm, which shows a grey box saying "[object Object]".
+const confirm = useConfirm()
 
 function withAuth(instance) {
   instance.interceptors.request.use((config) => {
