@@ -499,12 +499,6 @@ onMounted(() => {
                 loading="lazy"
               />
 
-              <div
-                v-if="pantryMatchMode"
-                class="pantry-match-badge"
-              >
-                {{ recipe.matchCount }} pantry ingredients matched
-              </div>
 
               <span v-if="recipe.totalTime" class="rp-time">
                 <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
@@ -560,6 +554,16 @@ onMounted(() => {
                   by {{ recipe.createdBy?.name || 'a community member' }}
                 </span>
               </p>
+
+                <div v-if="pantryMatchMode" class="pantry-match-badge">
+                <strong>
+                  {{ recipe.matchCount }} pantry ingredients matched
+                </strong>
+
+                <small>
+                  {{ recipe.matchedIngredients.join(', ') }}
+                </small>
+              </div>
             </div>
           </li>
         </ul>
@@ -1055,14 +1059,27 @@ div.rp-grid {
   cursor: not-allowed;
 }
 
+
 .pantry-match-badge {
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   margin-top: 8px;
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: #e5f0e6;
   color: #32533c;
   font-size: 12px;
+}
+
+.pantry-match-badge strong {
   font-weight: 600;
 }
+
+.pantry-match-badge small {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
 </style>
