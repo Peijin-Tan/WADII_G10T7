@@ -39,6 +39,7 @@ const resultLabel = computed(() => {
 
 function clearSearch() {
   search.value = ''
+  pantryMatchMode.value = false
   fetchRecipes()
 }
 
@@ -69,6 +70,7 @@ async function fetchRecipes() {
 
 async function searchRecipes() {
   const searchTerm = search.value.trim()
+  pantryMatchMode.value = false
 
   if (!searchTerm) {
     await fetchRecipes()
@@ -111,18 +113,25 @@ async function searchRecipes() {
     const savedRecipes = savedResponse.data.data
     const externalRecipes = spoonacularResponse.data.data
 
-    // Avoid displaying duplicate recipes by title
+    // Filter community recipes by title
+    const matchingSavedRecipes = savedRecipes.filter(recipe =>
+      recipe.title?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+
+    // Prevent duplicate recipes from Spoonacular
     const savedTitles = new Set(
-      savedRecipes.map(recipe => recipe.title.trim().toLowerCase())
+      matchingSavedRecipes.map(recipe =>
+        recipe.title.trim().toLowerCase()
+      )
     )
 
-    const uniqueExternalRecipes = externalRecipes.filter(
-      recipe => !savedTitles.has(recipe.title.trim().toLowerCase())
+    const uniqueExternalRecipes = externalRecipes.filter(recipe =>
+      !savedTitles.has(recipe.title.trim().toLowerCase())
     )
 
-    // Display both MongoDB and Spoonacular results
+    // Display matching community recipes + external recipes
     recipes.value = [
-      ...savedRecipes,
+      ...matchingSavedRecipes,
       ...uniqueExternalRecipes
     ]
 
