@@ -15,6 +15,7 @@ const likeMessage = ref('')
 const likingRecipeIds = ref([])
 const loadingLikes = ref(true)
 const lastQuery = ref('') // the search shown in "4 results for …"
+const sortBy = ref('shortest')
 
 // Line above the grid, e.g. "3 recipes" or "4 results for "chicken""
 const resultLabel = computed(() => {
@@ -227,6 +228,24 @@ function getRecipeLink(recipe) {
   return '/recipes/external/' + recipe.externalId
 }
 
+const sortedRecipes = computed(() => {
+  const list = [...recipes.value]
+
+  if (sortBy.value === 'shortest') {
+    return list.sort((a, b) => {
+      return (a.totalTime || Infinity) - (b.totalTime || Infinity)
+    })
+  }
+
+  if (sortBy.value === 'longest') {
+    return list.sort((a, b) => {
+      return (b.totalTime || 0) - (a.totalTime || 0)
+    })
+  }
+
+  return list
+})
+
 onMounted(() => {
   fetchRecipes()
   loadMyLikes()
@@ -314,11 +333,20 @@ onMounted(() => {
       </div>
 
       <template v-else>
+        <div class="rp-toolbar">
         <p class="rp-count" aria-live="polite">{{ resultLabel }}</p>
+        <div class="sort-container">
+        <p class="sort-label">Sort by</p>
+        <select v-model="sortBy">
+          <option value="shortest">Shortest time</option>
+          <option value="longest">Longest time</option>
+        </select>
+      </div>
+      </div>
 
         <ul class="rp-grid">
           <li
-            v-for="recipe in recipes"
+            v-for="recipe in sortedRecipes"
             :key="recipe._id || recipe.externalId"
             class="rp-card"
           >
@@ -811,6 +839,48 @@ div.rp-grid {
 
   .rp-card:hover .rp-media img {
     transform: none;
+  }
+}
+
+.rp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rp-toolbar .rp-count {
+  margin: 0;
+}
+
+.rp-sort {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--fft-border);
+  border-radius: 12px;
+  background: var(--fft-card);
+  color: var(--fft-text);
+  font-size: 14px;
+  justify-content: space-around;
+}
+
+.sort-container {  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.sort-label {
+  margin: 0;
+  font-size: 14px;
+}
+
+@media (max-width: 575.98px) {
+  .rp-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>
