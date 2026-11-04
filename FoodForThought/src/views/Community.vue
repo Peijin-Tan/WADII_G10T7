@@ -42,6 +42,11 @@ const selectedNeighbourId = ref('')
 const selectedNeighbour = ref(null)
 const selectedBorrowItems = ref([])
 const pantryRequests = ref([])
+const pantrySearch = ref('')
+const pantryCategory = ref('all')
+const pantryAvailability = ref('all')
+const pantrySort = ref('name')
+const pantryPageSize = ref(8)
 
 const loadingComments = ref(false)
 const loadingLikes = ref(false)
@@ -305,6 +310,60 @@ function updateBorrowQuantity(item, rawValue) {
 
   selectedBorrowItems.value = nextItems
 }
+
+const pantryCategories = computed(() => {
+  const categories = new Set((pantryItems.value || []).map((item) => item.category || 'other'))
+  return ['all', ...Array.from(categories).sort((a, b) => a.localeCompare(b))]
+})
+
+const filteredPantryItems = computed(() => {
+  const query = pantrySearch.value.trim().toLowerCase()
+
+  const items = (pantryItems.value || []).filter((item) => {
+    const itemName = (item.name || '').toLowerCase()
+    const itemCategory = item.category || 'other'
+    const isAvailable = Number(item.quantity || 0) > 0
+
+    const matchesSearch = !query || itemName.includes(query)
+    const matchesCategory = pantryCategory.value === 'all' || itemCategory === pantryCategory.value
+    const matchesAvailability = pantryAvailability.value === 'all' ||
+      (pantryAvailability.value === 'available' ? isAvailable : !isAvailable)
+
+    return matchesSearch && matchesCategory && matchesAvailability
+  })
+
+  return [...items].sort((a, b) => {
+    if (pantrySort.value === 'expiry') {
+      const expiryA = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
+      const expiryB = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.MAX_SAFE_INTEGER
+      return expiryA - expiryB || (a.name || '').localeCompare(b.name || '')
+    }
+
+    return (a.name || '').localeCompare(b.name || '')
+  })
+})
+
+const visiblePantryItems = computed(() => filteredPantryItems.value.slice(0, pantryPageSize.value))
+
+function resetPantryFilters() {
+  pantrySearch.value = ''
+  pantryCategory.value = 'all'
+  pantryAvailability.value = 'all'
+  pantrySort.value = 'name'
+  pantryPageSize.value = 8
+}
+
+function loadMorePantryItems() {
+  pantryPageSize.value = Math.min(filteredPantryItems.value.length, pantryPageSize.value + 8)
+}
+
+watch(() => pantryItems.value, () => {
+  pantryPageSize.value = 8
+})
+
+watch([() => pantrySearch.value, () => pantryCategory.value, () => pantryAvailability.value, () => pantrySort.value], () => {
+  pantryPageSize.value = 8
+})
 
 async function requestNeighbourAction(requestType = 'borrow') {
   if (!selectedNeighbourId.value || selectedBorrowItems.value.length === 0) {
@@ -1012,46 +1071,107 @@ watch(() => auth.token, loadActivity)
                 </div>
 
                 <div v-else class="d-grid gap-3">
-                  <div
-                    v-for="item in pantryItems"
-                    :key="item._id || item.id"
-                    class="border rounded-4 p-3"
-                  >
-                    <div class="d-flex justify-content-between align-items-start gap-3">
-                      <div>
-                        <strong>{{ item.name }}</strong>
-                        <div class="small text-muted">
-                          {{ item.quantity }} {{ item.unit }} · Expires {{ item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No date' }}
+                  <div class="row g-2 align-items-center">
+                    <div class="col-12 col-md-6">
+                      <label class="visually-hidden" for="neighbour-pantry-search">Search pantry ingredients</label>
+                      <div class="input-group">
+                        <input
+                          id="neighbour-pantry-search"
+                          v-model="pantrySearch"
+                          type="search"
+                          class="form-control"
+                          placeholder="Search ingredients..."
+                        >
+                        <button v-if="pantrySearch" type="button" class="btn btn-outline-secondary" @click="pantrySearch = ''">Clear</button>
+                      </div>
+                    </div>
+                    <div class="col-md-3 col-12">
+                      <select v-model="pantryCategory" class="form-select">
+                        <option v-for="category in pantryCategories" :key="category" :value="category">
+                          {{ category === 'all' ? 'All categories' : category }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="col-md-3 col-12">
+                      <select v-model="pantryAvailability" class="form-select">
+                        <option value="all">All availability</option>
+                        <option value="available">Available</option>
+                        <option value="unavailable">Unavailable</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="row g-2 align-items-center">
+                    <div class="col-12 col-md-6">
+                      <select v-model="pantrySort" class="form-select">
+                        <option value="name">Sort by name</option>
+                        <option value="expiry">Sort by expiry</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div v-if="filteredPantryItems.length === 0" class="alert alert-light border mb-0">
+                    No matching ingredients found for this neighbour's pantry.
+                    <button type="button" class="btn btn-link p-0 ms-2" @click="resetPantryFilters()">Clear filters</button>
+                  </div>
+
+                  <div v-else class="row g-3">
+                    <div
+                      v-for="item in visiblePantryItems"
+                      :key="item._id || item.id"
+                      class="col-12 col-sm-6 col-xl-4"
+                    >
+                      <div class="border rounded-4 p-3 h-100 d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                          <div>
+                            <div class="fw-semibold">{{ item.name }}</div>
+                            <div class="small text-muted">
+                              {{ item.quantity }} {{ item.unit }}
+                            </div>
+                          </div>
+                          <span class="badge" :class="Number(item.quantity) > 0 ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'">
+                            {{ Number(item.quantity) > 0 ? 'Available' : 'Unavailable' }}
+                          </span>
+                        </div>
+
+                        <div class="small text-muted mb-3">
+                          Expires {{ item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No date' }}
+                        </div>
+
+                        <div class="mt-auto d-flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            class="btn btn-sm flex-fill"
+                            :class="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id)) ? 'activity-button' : 'activity-outline'"
+                            @click="toggleBorrowItem(item)"
+                          >
+                            {{ selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id)) ? 'Borrow selected' : 'Borrow' }}
+                          </button>
+                        </div>
+
+                        <div v-if="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))" class="mt-3">
+                          <label class="form-label small mb-1">Requested quantity</label>
+                          <input
+                            :value="selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity || 1"
+                            type="number"
+                            min="1"
+                            :max="Number(item.quantity) || 1"
+                            class="form-control"
+                            @input="updateBorrowQuantity({
+                              itemId: item._id || item.id,
+                              name: item.name,
+                              quantity: selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity || 1,
+                              availableQuantity: Number(item.quantity) || 1,
+                              unit: item.unit,
+                            }, $event.target.value)"
+                          >
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        class="btn btn-sm"
-                        :class="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id)) ? 'activity-button' : 'activity-outline'"
-                        @click="toggleBorrowItem(item)"
-                      >
-                        {{ selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id)) ? 'Selected' : 'Select' }}
-                      </button>
                     </div>
+                  </div>
 
-                    <div v-if="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))" class="mt-3">
-                      <label class="form-label small mb-1">Requested quantity</label>
-                      <input
-                        :value="selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity || 1"
-                        type="number"
-                        min="1"
-                        :max="Number(item.quantity) || 1"
-                        class="form-control"
-                        @input="updateBorrowQuantity({
-                          itemId: item._id || item.id,
-                          name: item.name,
-                          quantity: selectedBorrowItems.find((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))?.quantity || 1,
-                          availableQuantity: Number(item.quantity) || 1,
-                          unit: item.unit,
-                        }, $event.target.value)"
-                      >
-                    </div>
+                  <div v-if="filteredPantryItems.length > visiblePantryItems.length" class="text-center pt-2">
+                    <button type="button" class="btn activity-outline" @click="loadMorePantryItems()">Show more</button>
                   </div>
                 </div>
 

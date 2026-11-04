@@ -497,8 +497,8 @@ router.post('/requests', handle(async (req, res) => {
     throw httpError(400, 'Neighbour and request type are required.')
   }
 
-  if (!['borrow', 'takeover'].includes(requestType)) {
-    throw httpError(400, 'Request type must be borrow or takeover.')
+  if (requestType !== 'borrow') {
+    throw httpError(400, 'Only borrow requests are supported.')
   }
 
   const selectedItems = Array.isArray(items) ? items : []
@@ -520,10 +520,6 @@ router.post('/requests', handle(async (req, res) => {
 
   if (requestType === 'borrow' && !share.canBorrow) {
     throw httpError(403, 'This neighbour has disabled borrow requests.')
-  }
-
-  if (requestType === 'takeover' && !share.canTakeover) {
-    throw httpError(403, 'This neighbour has disabled takeover requests.')
   }
 
   const payload = {

@@ -15,13 +15,8 @@ test('approved borrow request subtracts from owner and adds to requester totals'
   })
 })
 
-test('approved takeover request retains item names and quantities in a single aggregated change', () => {
-  const result = getApprovedPantryChange('takeover', [
-    { name: 'Black Beans', quantity: 1, unit: 'can' },
-    { name: 'black beans', quantity: 2, unit: 'can' },
-  ])
-
-  assert.equal(result.requesterAdditions[0].quantity, 3)
-  assert.equal(result.ownerDeductions[0].quantity, 3)
-  assert.equal(result.requesterAdditions[0].name, 'Black Beans')
+test('takeover requests are rejected in the borrow-only flow', () => {
+  assert.throws(() => {
+    getApprovedPantryChange('takeover', [{ name: 'Black Beans', quantity: 1, unit: 'can' }])
+  }, /borrow/i)
 })

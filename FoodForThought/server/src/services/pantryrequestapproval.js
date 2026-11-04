@@ -1,8 +1,8 @@
 const { normalizeIngredient } = require('./ingredientnames')
 
 function getApprovedPantryChange(requestType, items = []) {
-  if (!['borrow', 'takeover'].includes(requestType)) {
-    return { requesterAdditions: [], ownerDeductions: [] }
+  if (requestType !== 'borrow') {
+    throw new Error('Only borrow requests are supported.')
   }
 
   const byName = new Map()
