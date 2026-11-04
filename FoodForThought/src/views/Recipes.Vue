@@ -16,13 +16,24 @@ const likingRecipeIds = ref([])
 const loadingLikes = ref(true)
 const lastQuery = ref('') // the search shown in "4 results for …"
 const sortBy = ref('shortest')
+const pantryIngredients = ref([])
+const pantryMatchMode = ref(false)
+const pantryLoading = ref(false)
+const pantryError = ref('')
 
 // Line above the grid, e.g. "3 recipes" or "4 results for "chicken""
 const resultLabel = computed(() => {
+  if (pantryMatchMode.value) {
+    const count = pantryMatchedRecipes.value.length
+    return `${count} ${count === 1 ? 'recipe' : 'recipes'} using pantry ingredients`
+  }
+
   const count = recipes.value.length
+
   if (searchMode.value) {
     return `${count} ${count === 1 ? 'result' : 'results'} for "${lastQuery.value}"`
   }
+
   return `${count} ${count === 1 ? 'recipe' : 'recipes'}`
 })
 
@@ -229,21 +240,114 @@ function getRecipeLink(recipe) {
 }
 
 const sortedRecipes = computed(() => {
-  const list = [...recipes.value]
+  const list = pantryMatchMode.value
+    ? [...pantryMatchedRecipes.value]
+    : [...recipes.value]
+
+  if (sortBy.value === 'matches') {
+    return list.sort((a, b) => b.matchCount - a.matchCount)
+  }
 
   if (sortBy.value === 'shortest') {
-    return list.sort((a, b) => {
-      return (a.totalTime || Infinity) - (b.totalTime || Infinity)
-    })
+    return list.sort(
+      (a, b) => (a.totalTime ?? Infinity) - (b.totalTime ?? Infinity)
+    )
   }
 
   if (sortBy.value === 'longest') {
-    return list.sort((a, b) => {
-      return (b.totalTime || 0) - (a.totalTime || 0)
-    })
+    return list.sort(
+      (a, b) => (b.totalTime ?? 0) - (a.totalTime ?? 0)
+    )
   }
 
   return list
+})
+
+async function togglePantryMatch() {
+  if (!pantryMatchMode.value) {
+    await loadPantryIngredients()
+
+    if (pantryError.value) return
+
+    pantryMatchMode.value = true
+    sortBy.value = 'matches'
+  } else {
+    pantryMatchMode.value = false
+    sortBy.value = 'shortest'
+  }
+}
+
+async function loadPantryIngredients() {
+  pantryLoading.value = true
+  pantryError.value = ''
+
+  try {
+    const token = auth.token
+
+    const { data } = await axios.get('http://localhost:8000/pantry/', {
+      headers: token
+        ? { Authorization: `Bearer ${token}` }
+        : {},
+    })
+
+    pantryIngredients.value = (data.items || [])
+      .filter(item => item.quantity > 0)
+      .map(item => item.name.trim().toLowerCase())
+  } catch (err) {
+    pantryError.value = 'Could not load your pantry ingredients.'
+    console.error(err)
+  } finally {
+    pantryLoading.value = false
+  }
+}
+
+// Convert ingredient names into a consistent format
+function normalizeIngredient(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+}
+
+// Extract ingredient names from a recipe
+function getRecipeIngredients(recipe) {
+  return (recipe.ingredients || [])
+    .map(ingredient => {
+      if (typeof ingredient === 'string') return ingredient
+
+      return ingredient.name ||
+        ingredient.ingredient ||
+        ingredient.original ||
+        ingredient.description ||
+        ''
+    })
+    .map(normalizeIngredient)
+    .filter(Boolean)
+}
+
+// Calculate matching pantry ingredients
+function getMatchingIngredients(recipe) {
+  const pantrySet = new Set(
+    pantryIngredients.value.map(normalizeIngredient)
+  )
+
+  return getRecipeIngredients(recipe).filter(ingredient =>
+    pantrySet.has(ingredient)
+  )
+}
+
+// Match only existing community recipes
+const pantryMatchedRecipes = computed(() => {
+  return recipes.value
+    .filter(recipe => recipe.source !== 'spoonacular')
+    .map(recipe => ({
+      ...recipe,
+      matchedIngredients: getMatchingIngredients(recipe),
+      matchCount: getMatchingIngredients(recipe).length,
+    }))
+    .filter(recipe => recipe.matchCount > 0)
+    .sort((a, b) => b.matchCount - a.matchCount)
 })
 
 onMounted(() => {
@@ -295,6 +399,19 @@ onMounted(() => {
         </button>
       </form>
 
+      <div class="pantry-match-section">
+      <button
+        class="pantry-match-btn"
+        @click="togglePantryMatch"
+      >
+        {{ pantryMatchMode ? 'Show All Recipes' : 'Find Recipes Using Pantry' }}
+      </button>
+
+      <p v-if="pantryError" class="error-message">
+        {{ pantryError }}
+      </p>
+    </div>
+
       <p v-if="likeMessage" class="rp-notice" role="alert">
         <span class="material-symbols-outlined" aria-hidden="true">info</span>
         {{ likeMessage }}
@@ -337,9 +454,18 @@ onMounted(() => {
         <p class="rp-count" aria-live="polite">{{ resultLabel }}</p>
         <div class="sort-container">
         <p class="sort-label">Sort by</p>
+
         <select v-model="sortBy">
-          <option value="shortest">Shortest time</option>
-          <option value="longest">Longest time</option>
+          <template v-if="pantryMatchMode">
+            <option value="matches">Most ingredients matched</option>
+            <option value="shortest">Shortest time</option>
+            <option value="longest">Longest time</option>
+          </template>
+
+          <template v-else>
+            <option value="shortest">Shortest time</option>
+            <option value="longest">Longest time</option>
+          </template>
         </select>
       </div>
       </div>
@@ -356,6 +482,13 @@ onMounted(() => {
                 :alt="''"
                 loading="lazy"
               />
+
+              <div
+                v-if="pantryMatchMode"
+                class="pantry-match-badge"
+              >
+                {{ recipe.matchCount }} pantry ingredients matched
+              </div>
 
               <span v-if="recipe.totalTime" class="rp-time">
                 <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
@@ -882,5 +1015,38 @@ div.rp-grid {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.pantry-match-section {
+  margin: 16px 0;
+}
+
+.pantry-match-btn {
+  padding: 10px 16px;
+  border: 1px solid #32533c;
+  border-radius: 8px;
+  background: #32533c;
+  color: white;
+  cursor: pointer;
+}
+
+.pantry-match-btn:hover {
+  background: #26432f;
+}
+
+.pantry-match-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pantry-match-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #e5f0e6;
+  color: #32533c;
+  font-size: 12px;
+  font-weight: 600;
 }
 </style>
