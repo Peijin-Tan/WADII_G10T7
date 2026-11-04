@@ -260,6 +260,18 @@ const sortedRecipes = computed(() => {
     )
   }
 
+  if (sortBy.value === 'serving-low') {
+    return list.sort(
+      (a, b) => (a.servings ?? Infinity) - (b.servings ?? Infinity)
+    )
+  }
+
+  if (sortBy.value === 'serving-high') {
+    return list.sort(
+      (a, b) => (b.servings ?? 0) - (a.servings ?? 0)
+    )
+  }
+
   return list
 })
 
@@ -460,11 +472,15 @@ onMounted(() => {
             <option value="matches">Most ingredients matched</option>
             <option value="shortest">Shortest time</option>
             <option value="longest">Longest time</option>
+            <option value="serving-low">Lowest servings</option>
+            <option value="serving-high">Highest servings</option>
           </template>
 
           <template v-else>
             <option value="shortest">Shortest time</option>
             <option value="longest">Longest time</option>
+            <option value="serving-low">Lowest servings</option>
+            <option value="serving-high">Highest servings</option>
           </template>
         </select>
       </div>
