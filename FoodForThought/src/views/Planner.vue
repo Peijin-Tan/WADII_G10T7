@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createApi, errorMessage } from '@/services/api'
 import { addDays, toISODate, mondayOf, startOfToday } from '@/utils/dates'
@@ -288,10 +288,40 @@ async function addMealToPlan(payload) {
 
 // from viewRecipe.vue and the status dropdown on each card: { entryId, status }
 async function onStatusChange({ entryId, status }) {
-  // Marking a meal Cooked still takes its ingredients from the pantry (server side, see pantrysync.js);
-  // no message is shown for it, so the page doesn't fill up with notices.
-  await saveChange(api.patch(`/entries/${entryId}`, { status }))
+  // Marking a meal Cooked takes its ingredients from the pantry (server side, Planner.js deductFromPantry);
+  // the response says what changed, shown as a small message at the bottom for a few seconds.
+  const data = await saveChange(api.patch(`/entries/${entryId}`, { status }))
+  if (data) showPantryToast(data.pantryUpdate)
 }
+
+/* ---------- Small pantry message after a status change ---------- */
+// pantryUpdate from the server: { deducted: [{ name }], skipped: [...] } when a meal is marked Cooked,
+// { restored: [{ name }] } when a Cooked meal goes back to Planned/Skipped, or null.
+const pantryToast = ref('')
+let toastTimer
+
+// ['rice', 'dal', 'oil', 'salt', 'ginger'] -> "rice, dal, oil and 2 more"
+function shortList(names) {
+  if (names.length <= 3) return names.join(', ')
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+}
+
+function showPantryToast(update) {
+  if (!update) return
+  let text = ''
+  if (update.restored?.length) {
+    text = `Put back in your pantry: ${shortList(update.restored.map((d) => d.name))}`
+  } else if (update.deducted?.length) {
+    text = `Deducted from your pantry: ${shortList(update.deducted.map((d) => d.name))}`
+  } else if (update.skipped?.length) {
+    text = "Marked as cooked. None of its ingredients were in your pantry."
+  }
+  if (!text) return
+  pantryToast.value = text
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (pantryToast.value = ''), 4000)
+}
+onBeforeUnmount(() => clearTimeout(toastTimer))
 
 /* ---------- Card controls: status + meal time ---------- */
 // value = what the database stores, label/icon/tone = how the picker on the card looks
@@ -635,14 +665,12 @@ async function sendToGrocery() {
                           <span v-if="entry.recipe.prepMinutes">{{ entry.recipe.prepMinutes }}m prep</span>
                         </div>
 
-                        <div v-if="entry.recipe.ingredients.length" class="d-flex align-items-center flex-wrap gap-2">
+                        <!-- Up to 4 ingredients you already have (only shown when there's at least one) -->
+                        <div v-if="entry.recipe.ingredients.some((i) => i.inPantry)" class="d-flex align-items-center flex-wrap gap-2">
                           <span class="fft-label-sm text-fft-outline">Pantry:</span>
                           <span v-for="ing in entry.recipe.ingredients.filter((i) => i.inPantry).slice(0, 4)"
                             :key="ing.name" class="fft-label-sm text-fft-primary d-flex align-items-center">
                             <span class="material-symbols-outlined" style="font-size: 14px">check</span>{{ ing.name }}
-                          </span>
-                          <span v-if="entry.recipe.ingredients.some((i) => !i.inPantry)" class="fft-pill fft-pill-peach fw-semibold">
-                            {{ entry.recipe.ingredients.filter((i) => !i.inPantry).length }} to buy
                           </span>
                         </div>
                       </div>
@@ -710,9 +738,66 @@ async function sendToGrocery() {
         </div>
       </section>
     </main>
+
+    <!-- Small message after marking a meal Cooked (see showPantryToast). Tap to close. -->
+    <Transition name="pantry-toast">
+      <button v-if="pantryToast" type="button" class="pantry-toast" role="status" aria-live="polite"
+        title="Close" @click="pantryToast = ''">
+        <span class="material-symbols-outlined" aria-hidden="true">kitchen</span>
+        <span>{{ pantryToast }}</span>
+      </button>
+    </Transition>
   </div>
 </template>
 <style scoped>
+/* ---------- Small pantry message (bottom of the screen) ---------- */
+.pantry-toast {
+  position: fixed;
+  right: 0;
+  bottom: 24px;
+  left: 0;
+  z-index: 1060;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content; /* centred by left/right 0 + margin auto, and as wide as the text needs */
+  max-width: min(520px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: #1f3a27;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: #fff;
+  font: 500 14px/20px 'Inter', sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.pantry-toast .material-symbols-outlined {
+  flex: none;
+  color: #c7ecce;
+  font-size: 20px;
+}
+.pantry-toast-enter-active,
+.pantry-toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.pantry-toast-enter-from,
+.pantry-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pantry-toast-enter-active,
+  .pantry-toast-leave-active {
+    transition: opacity 0.2s ease;
+  }
+  .pantry-toast-enter-from,
+  .pantry-toast-leave-to {
+    transform: none;
+  }
+}
+
 /* ===== Design tokens (from the original Tailwind config) ===== */
 .foodforthought {
   --fft-background: #fafaf3;
