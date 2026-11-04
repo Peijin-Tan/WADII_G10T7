@@ -50,7 +50,7 @@ function adminError(err, fallback) {
     return 'The server does not have this admin route. Restart the backend (in the server folder: npm start) so it loads the latest code.'
   }
   if (status === 429) {
-    return 'Too many requests: the server allows 100 requests every 15 minutes per person. Wait a few minutes, or raise "max" in the rateLimit settings in server/index.js.'
+    return 'Too many requests: the server allows 1000 requests every 15 minutes per person. Wait a few minutes, or raise "max" in the rateLimit settings in server/index.js.'
   }
   return errorMessage(err, fallback)
 }

@@ -44,14 +44,30 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 
-// Rate limiting (apply globally or to specific paths)
+// Rate limiting
+// General: 1000 requests per 15 minutes per IP. One page can make several requests (the dashboard
+// loads about 6), so the old limit of 100 ran out after a few minutes of normal use.
+// Images (/img above) are served before this, so they don't count.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  message: { message: 'Too many requests. Please wait a few minutes and try again.' },
 })
 app.use(limiter)
+
+// Logging in / signing up keeps a tight limit so passwords can't be guessed quickly:
+// 10 FAILED attempts per 15 minutes per IP (successful logins don't count).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many failed attempts. Please wait 15 minutes and try again.' },
+})
+app.use(['/auth/login', '/auth/register'], authLimiter)
 
 // Mount routes
 app.use('/auth', authRouter)

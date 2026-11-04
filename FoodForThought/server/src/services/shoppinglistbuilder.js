@@ -129,13 +129,68 @@ const AISLE_KEYWORDS = [
   ['spices-condiments', ['spice', 'seasoning', 'oil', 'vinegar', 'condiment', 'honey', 'jam']],
 ];
 
+/* Recipes people create themselves (and most community recipes) have no aisle, so before this
+   every one of their ingredients landed in "Other". This guesses the section from the ingredient's
+   own name instead. Whole words only ("egg" doesn't match "eggplant"), and the ORDER matters:
+   a section earlier in the list wins, so
+     "coconut milk", "chicken stock", "fish sauce"  -> sauces (checked before dairy / meat)
+     "rice vinegar", "chilli powder", "black pepper" -> spices (checked before grains / produce)
+     "egg noodles"                                    -> noodles (checked before eggs)
+   Names are singular here because normalizeName() already turns "eggs" into "egg". It also makes a few odd
+   singulars ("leaves" -> "leave", "chillies" -> "chilly", "ikan bilis" -> "ikan bili"), so those are listed as-is. */
+const NAME_KEYWORDS = [
+  ['frozen', ['frozen', 'ice cream']],
+  ['produce', ['bell pepper', 'capsicum', 'sweet potato']], // before "pepper" (spice) and "potato"
+  ['canned-sauces', [
+    'sauce', 'stock', 'broth', 'coconut milk', 'coconut cream', 'paste', 'canned', 'ketchup', 'mayonnaise',
+    'mayo', 'sambal', 'gochujang', 'miso', 'pesto', 'salsa', 'passata', 'tomato puree', 'baked bean',
+    'kecap manis', 'mirin', 'cooking wine', 'shaoxing wine', 'luncheon meat', 'evaporated milk', 'condensed milk',
+  ]],
+  ['spices-condiments', [
+    'salt', 'pepper', 'peppercorn', 'sugar', 'oil', 'vinegar', 'spice', 'powder', 'cumin', 'turmeric', 'paprika',
+    'cinnamon', 'star anise', 'bay leaf', 'oregano', 'msg', 'stock cube', 'bouillon', 'honey', 'jam', 'mustard',
+    'sesame seed', 'cornstarch', 'corn starch', 'cornflour', 'baking soda', 'yeast', 'vanilla', 'cocoa', 'syrup',
+    'peanut butter', 'bay leave',
+  ]],
+  ['grains-noodles', [
+    'rice', 'noodle', 'pasta', 'spaghetti', 'macaroni', 'penne', 'fusilli', 'vermicelli', 'bee hoon', 'beehoon',
+    'kway teow', 'mee', 'udon', 'ramen', 'soba', 'bread', 'bun', 'tortilla', 'wrap', 'flour', 'oat', 'quinoa',
+    'couscous', 'cereal', 'cracker', 'barley', 'breadcrumb', 'panko',
+  ]],
+  ['meat-seafood', [
+    'chicken', 'beef', 'pork', 'lamb', 'mutton', 'duck', 'turkey', 'bacon', 'ham', 'sausage', 'mince', 'minced meat',
+    'steak', 'fish', 'salmon', 'tuna', 'cod', 'snapper', 'seabass', 'sea bass', 'prawn', 'shrimp', 'squid', 'crab',
+    'clam', 'mussel', 'scallop', 'oyster', 'anchovy', 'ikan bili', 'fishball', 'fish ball',
+  ]],
+  ['dairy-eggs', ['egg', 'milk', 'butter', 'cheese', 'yogurt', 'yoghurt', 'cream', 'ghee', 'tofu', 'beancurd']],
+  ['produce', [
+    'garlic', 'onion', 'shallot', 'ginger', 'galangal', 'lemongrass', 'chilli', 'chili', 'tomato', 'potato', 'carrot',
+    'cabbage', 'lettuce', 'spinach', 'kailan', 'kai lan', 'bok choy', 'pak choy', 'choy sum', 'kangkong', 'broccoli',
+    'cauliflower', 'cucumber', 'eggplant', 'brinjal', 'mushroom', 'bean sprout', 'beansprout', 'long bean',
+    'french bean', 'green bean', 'pea', 'corn', 'pumpkin', 'zucchini', 'celery', 'leek', 'radish', 'okra', 'yam',
+    'coriander', 'cilantro', 'parsley', 'basil', 'mint', 'thyme', 'rosemary', 'dill', 'scallion', 'spring onion',
+    'pandan', 'curry leaf', 'curry leave', 'lime leaf', 'lime leave', 'chilly', 'chive', 'lime', 'lemon', 'apple', 'banana', 'orange', 'mango', 'pineapple',
+    'avocado', 'berry', 'strawberry', 'blueberry', 'grape', 'pear', 'kiwi', 'papaya', 'watermelon', 'coconut',
+    'herb', 'vegetable', 'fruit', 'salad', 'leaf', 'leave', // any other leaves (laksa, kaffir lime) are fresh herbs
+  ]],
+];
+
+function categoryFromName(name) {
+  const padded = ` ${normalizeName(name)} `;
+  for (const [category, words] of NAME_KEYWORDS) {
+    if (words.some((w) => padded.includes(` ${w} `))) return category;
+  }
+  return null;
+}
+
+// 1. a valid category on the ingredient  2. Spoonacular's aisle  3. a guess from the name  4. "other"
 function categorize(ingredient) {
   if (CATEGORIES.includes(ingredient.category)) return ingredient.category;
   const aisle = cleanText(ingredient.aisle);
   for (const [category, words] of AISLE_KEYWORDS) {
     if (words.some((w) => aisle.includes(w))) return category;
   }
-  return 'other';
+  return categoryFromName(ingredient.name) || 'other';
 }
 
 /* ---------------------------------------------------------------
@@ -439,6 +494,7 @@ module.exports = {
   normalizeUnit,
   roundQuantity,
   categorize,
+  categoryFromName,
   countsTowardList,
   sortItems,
   buildShoppingItems,
