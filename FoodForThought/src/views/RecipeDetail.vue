@@ -1,12 +1,30 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import { createApi, errorMessage } from '@/services/api'
 import RecipeComments from '@/components/RecipeComments.vue'
-
+import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
+const auth = useAuthStore()
+const router = useRouter()
+const plannerApi = createApi('/planner')
 
+// Meal planner modal states
+const showTodayModal = ref(false)
+const showMultiModal = ref(false)
+
+const selectedDate = ref('')
+const dateToAdd = ref('')
+const selectedDates = ref([])
+
+const mealSlot = ref('lunch')
+const servings = ref(1)
+
+const plannerSaving = ref(false)
+const plannerMessage = ref('')
+const plannerError = ref('')
 const recipe = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -65,6 +83,179 @@ function toggleIngredient(index) {
     : [...checked.value, index]
 }
 
+// Get today's date in local timezone
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+// Convert YYYY-MM-DD to local Date
+function parseLocalDate(dateString) {
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+// Get Monday of the selected week
+function getMonday(date) {
+  const monday = new Date(date)
+  const day = (monday.getDay() + 6) % 7
+
+  monday.setDate(monday.getDate() - day)
+
+  return getLocalDateString(monday)
+}
+
+// Convert Sunday-based JS day to Monday-based index
+function getDayOfWeek(date) {
+  return (date.getDay() + 6) % 7
+}
+
+// Open today's meal plan modal
+function openTodayModal() {
+  selectedDate.value = getLocalDateString()
+  mealSlot.value = 'lunch'
+  servings.value = Math.min(12, Math.max(1, recipe.value?.servings || 1))
+
+  plannerMessage.value = ''
+  plannerError.value = ''
+
+  showTodayModal.value = true
+}
+
+// Open multiple days modal
+function openMultiModal() {
+  selectedDates.value = []
+  dateToAdd.value = ''
+
+  mealSlot.value = 'lunch'
+  servings.value = Math.min(12, Math.max(1, recipe.value?.servings || 1))
+
+  plannerMessage.value = ''
+  plannerError.value = ''
+
+  showMultiModal.value = true
+}
+
+// Add a date to selected dates
+function addSelectedDate() {
+  if (!dateToAdd.value) return
+
+  if (selectedDates.value.includes(dateToAdd.value)) {
+    plannerError.value = 'This date has already been selected.'
+    return
+  }
+
+  selectedDates.value.push(dateToAdd.value)
+  selectedDates.value.sort()
+
+  dateToAdd.value = ''
+  plannerError.value = ''
+}
+
+// Remove a selected date
+function removeSelectedDate(date) {
+  selectedDates.value = selectedDates.value.filter(d => d !== date)
+}
+
+// Send one meal plan entry to backend
+async function createPlannerEntry(dateString) {
+  const date = parseLocalDate(dateString)
+
+  const payload = {
+    start: getMonday(date),
+    dayOfWeek: getDayOfWeek(date),
+    mealSlot: mealSlot.value,
+    servings: Number(servings.value),
+    recipeId: recipe.value._id
+  }
+
+  // Uses the same authenticated API service as Planner.vue
+  const response = await plannerApi.post('/entries', payload)
+
+  return response.data
+}
+
+
+// Add recipe to today's meal plan
+async function addToToday() {
+  if (!auth.token) {
+    plannerError.value = 'Please log in to add recipes to your meal plan.'
+    return
+  }
+
+  if (!recipe.value?._id) {
+    plannerError.value = 'This recipe cannot be added to your meal plan.'
+    return
+  }
+
+  plannerSaving.value = true
+  plannerError.value = ''
+
+  try {
+    await createPlannerEntry(selectedDate.value)
+
+    showTodayModal.value = false
+
+    // Redirect to Planner after successfully saving
+    await router.push('/planner')
+  } catch (err) {
+    console.error('Meal plan error:', err.response?.data || err)
+
+    plannerError.value = errorMessage(
+      err,
+      'Failed to add recipe. Please try again.'
+    )
+  } finally {
+    plannerSaving.value = false
+  }
+}
+
+
+// Add recipe to multiple selected dates
+async function addToMultipleDays() {
+  if (!auth.token) {
+    plannerError.value = 'Please log in to add recipes to your meal plan.'
+    return
+  }
+
+  if (!recipe.value?._id) {
+    plannerError.value = 'This recipe cannot be added to your meal plan.'
+    return
+  }
+
+  if (selectedDates.value.length === 0) {
+    plannerError.value = 'Please select at least one date.'
+    return
+  }
+
+  plannerSaving.value = true
+  plannerError.value = ''
+
+  try {
+    for (const date of selectedDates.value) {
+      await createPlannerEntry(date)
+    }
+
+    showMultiModal.value = false
+
+    // Redirect to Planner after all dates are saved
+    await router.push('/planner')
+  } catch (err) {
+    console.error('Meal plan error:', err.response?.data || err)
+
+    plannerError.value = errorMessage(
+      err,
+      'Failed to add recipe. Please try again.'
+    )
+  } finally {
+    plannerSaving.value = false
+  }
+}
+
+
 onMounted(fetchRecipe)
 </script>
 
@@ -112,6 +303,28 @@ onMounted(fetchRecipe)
             <p class="rd-summary">
               {{ recipe.summary || 'No description yet.' }}
             </p>
+
+            <!-- Meal Plan Buttons -->
+            <div class="rd-planner-actions">
+              <button
+                class="rd-planner-btn"
+                @click="openTodayModal"
+              >
+                + Add to Today's Meal Plan
+              </button>
+
+              <button
+                class="rd-planner-btn rd-planner-btn-secondary"
+                @click="openMultiModal"
+              >
+                + Add to Multiple Days
+              </button>
+            </div>
+
+            <!-- Success Message -->
+            <div v-if="plannerMessage" class="rd-planner-success">
+              {{ plannerMessage }}
+            </div>
 
             <dl v-if="stats.length" class="rd-stats">
               <div v-for="stat in stats" :key="stat.label" class="rd-stat">
@@ -220,6 +433,153 @@ onMounted(fetchRecipe)
       </article>
     </main>
   </div>
+  <!-- Today's Meal Plan Modal -->
+<div
+  v-if="showTodayModal"
+  class="rd-modal-overlay"
+  @click.self="showTodayModal = false"
+>
+  <div class="rd-modal">
+    <h2>Add to Today's Meal Plan</h2>
+
+    <p>{{ recipe?.title }}</p>
+
+    <label>Date</label>
+    <input
+      v-model="selectedDate"
+      type="date"
+      class="rd-modal-input"
+    />
+
+    <label>Meal Slot</label>
+    <select v-model="mealSlot" class="rd-modal-input">
+      <option value="breakfast">Breakfast</option>
+      <option value="lunch">Lunch</option>
+      <option value="dinner">Dinner</option>
+      <option value="snack">Snack</option>
+    </select>
+
+    <label>Servings</label>
+    <input
+      v-model.number="servings"
+      type="number"
+      min="1"
+      max="12"
+      class="rd-modal-input"
+    />
+
+    <p v-if="plannerError" class="rd-planner-error">
+      {{ plannerError }}
+    </p>
+
+    <div class="rd-modal-actions">
+      <button
+        class="rd-planner-btn rd-planner-btn-secondary"
+        @click="showTodayModal = false"
+      >
+        Cancel
+      </button>
+
+      <button
+        class="rd-planner-btn"
+        :disabled="plannerSaving"
+        @click="addToToday"
+      >
+        {{ plannerSaving ? 'Adding...' : 'Add Recipe' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Multiple Days Modal -->
+<div
+  v-if="showMultiModal"
+  class="rd-modal-overlay"
+  @click.self="showMultiModal = false"
+>
+  <div class="rd-modal">
+    <h2>Add to Multiple Days</h2>
+
+    <p>{{ recipe?.title }}</p>
+
+    <label>Select Dates</label>
+
+    <div class="rd-date-picker-row">
+      <input
+        v-model="dateToAdd"
+        type="date"
+        class="rd-modal-input"
+      />
+
+      <button
+        class="rd-planner-btn"
+        @click="addSelectedDate"
+      >
+        Add Date
+      </button>
+    </div>
+
+    <!-- Selected Dates -->
+    <div class="rd-selected-dates">
+      <div
+        v-for="date in selectedDates"
+        :key="date"
+        class="rd-selected-date"
+      >
+        <span>{{ date }}</span>
+
+        <button
+          type="button"
+          @click="removeSelectedDate(date)"
+        >
+          ×
+        </button>
+      </div>
+
+      <p v-if="selectedDates.length === 0">
+        No dates selected yet.
+      </p>
+    </div>
+
+    <label>Meal Slot</label>
+    <select v-model="mealSlot" class="rd-modal-input">
+      <option value="breakfast">Breakfast</option>
+      <option value="lunch">Lunch</option>
+      <option value="dinner">Dinner</option>
+      <option value="snack">Snack</option>
+    </select>
+
+    <label>Servings</label>
+    <input
+      v-model.number="servings"
+      type="number"
+      min="1"
+      max="12"
+      class="rd-modal-input"
+    />
+
+    <p v-if="plannerError" class="rd-planner-error">
+      {{ plannerError }}
+    </p>
+
+    <div class="rd-modal-actions">
+      <button
+        class="rd-planner-btn rd-planner-btn-secondary"
+        @click="showMultiModal = false"
+      >
+        Cancel
+      </button>
+
+      <button
+        class="rd-planner-btn"
+        :disabled="plannerSaving || selectedDates.length === 0"
+        @click="addToMultipleDays"
+      >
+        {{ plannerSaving ? 'Adding...' : 'Add Recipe' }}
+      </button>
+    </div>
+  </div>
+</div>
 </template>
 
 <style scoped>
@@ -686,5 +1046,138 @@ onMounted(fetchRecipe)
   .rd-skeleton {
     animation: none;
   }
+}
+
+/* Meal Planner Buttons */
+.rd-planner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.rd-planner-btn {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 10px;
+  background: #e879a9;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.rd-planner-btn:hover {
+  background: #d85c91;
+}
+
+.rd-planner-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rd-planner-btn-secondary {
+  background: #f3e4ec;
+  color: #8c4268;
+}
+
+.rd-planner-btn-secondary:hover {
+  background: #ead2df;
+}
+
+/* Modal */
+.rd-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 9999;
+}
+
+.rd-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: white;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.rd-modal h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.rd-modal label {
+  display: block;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.rd-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+}
+
+.rd-date-picker-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.rd-date-picker-row .rd-modal-input {
+  flex: 1;
+}
+
+.rd-selected-dates {
+  margin-top: 12px;
+}
+
+.rd-selected-date {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: #f9edf3;
+  border-radius: 8px;
+}
+
+.rd-selected-date button {
+  border: none;
+  background: transparent;
+  color: #c44c80;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.rd-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.rd-planner-success {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #e8f7ed;
+  color: #247543;
+}
+
+.rd-planner-error {
+  margin-top: 12px;
+  color: #d33;
 }
 </style>
