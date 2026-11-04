@@ -12,8 +12,10 @@
 //   const { getPantryNames } = require('./pantry')
 
 const express = require('express')
+const mongoose = require('mongoose')
 const axios = require('axios')
 const Pantry = require('../../models/Pantry')
+const PantryLegacy = mongoose.models.PantryLegacy || mongoose.model('PantryLegacy', new mongoose.Schema({}, { strict: false, collection: 'pantries' }), 'pantries')
 const User = require('../../models/User')
 const PantryShare = require('../../models/PantryShare')
 const PantryRequest = require('../../models/PantryRequest')
@@ -208,21 +210,29 @@ router.use((req, res, next) => {
 
 const EDITABLE = ['name', 'quantity', 'unit', 'category', 'expiryDate']
 
+function pantryUserQuery(userId) {
+  const value = String(userId || '')
+  const values = [value]
+  if (mongoose.isValidObjectId(value)) values.push(new mongoose.Types.ObjectId(value))
+
+  return { user: { $in: values } }
+}
+
 // The user's whole pantry, sorted for the page
 function loadPantry(userId) {
-  return Pantry.find({ user: userId }).sort({ category: 1, name: 1 })
+  return PantryLegacy.find(pantryUserQuery(userId)).sort({ category: 1, name: 1 })
 }
 
 // Finds one item, making sure it belongs to the logged-in user
 async function findUserItem(userId, itemId) {
-  const item = await Pantry.findOne({ _id: itemId, user: userId })
+  const item = await PantryLegacy.findOne({ _id: itemId, ...pantryUserQuery(userId) })
   if (!item) throw httpError(404, 'Pantry item not found')
   return item
 }
 
 // Normalized names of everything the user has (quantity above 0). Also used by the planner.
 async function getPantryNames(userId) {
-  const items = await Pantry.find({ user: userId, quantity: { $gt: 0 } }).select('normalizedName').lean()
+  const items = await PantryLegacy.find({ ...pantryUserQuery(userId), quantity: { $gt: 0 } }).select('normalizedName').lean()
   return items.map((i) => i.normalizedName)
 }
 
@@ -271,12 +281,24 @@ router.get('/', handle(async (req, res) => {
 
 // GET /pantry/requests
 router.get('/requests', handle(async (req, res) => {
-  const requests = await PantryRequest.find({ owner: req.userId, status: 'pending' })
+  const allPending = await PantryRequest.find({
+    $or: [{ owner: req.userId }, { requester: req.userId }],
+    status: 'pending',
+    requestType: 'borrow',
+  })
     .populate('requester', '_id name email')
+    .populate('owner', '_id name email')
     .sort({ createdAt: -1 })
     .lean()
 
-  res.json({ requests })
+  const incoming = allPending.filter((request) => String(request.owner?._id || request.owner) === String(req.userId))
+  const outgoing = allPending.filter((request) => String(request.requester?._id || request.requester) === String(req.userId))
+
+  res.json({
+    requests: allPending,
+    incoming,
+    outgoing,
+  })
 }))
 
 // PATCH /pantry/requests/:requestId
@@ -286,74 +308,97 @@ router.patch('/requests/:requestId', handle(async (req, res) => {
     throw httpError(400, 'Status must be approved, rejected, or completed.')
   }
 
-  const request = await PantryRequest.findOne({ _id: req.params.requestId, owner: req.userId })
-  if (!request) {
-    throw httpError(404, 'Request not found')
+  const session = await mongoose.startSession()
+  let request
+
+  try {
+    await session.withTransaction(async () => {
+      request = await PantryRequest.findOne({
+        _id: req.params.requestId,
+        owner: req.userId,
+        requestType: 'borrow',
+        status: 'pending',
+      }).session(session)
+
+      if (!request) {
+        throw httpError(404, 'Request not found')
+      }
+
+      if (status === 'rejected') {
+        request.status = 'rejected'
+        await request.save({ session })
+        return
+      }
+
+      if (status === 'approved' || status === 'completed') {
+        const requesterId = String(request.requester)
+        if (String(requesterId) === String(req.userId)) {
+          throw httpError(400, 'You cannot borrow from yourself.')
+        }
+
+        const ownerId = req.userId
+        for (const item of request.items || []) {
+          const quantity = Number(item.quantity || 1)
+          if (!Number.isFinite(quantity) || quantity <= 0) {
+            throw httpError(400, `Borrow quantity for ${item.name || 'this item'} must be positive.`)
+          }
+
+          const ownerItem = await PantryLegacy.findOne({
+            ...pantryUserQuery(ownerId),
+            $or: [
+              { _id: item.itemId },
+              { normalizedName: normalizePantryItemName(item.name) },
+            ],
+          }).session(session)
+
+          if (!ownerItem) {
+            throw httpError(409, `This ingredient is no longer available in the pantry.`)
+          }
+
+          const ownerUnit = String(ownerItem.unit || 'pcs')
+          const requestedUnit = String(item.unit || ownerUnit)
+          const convertedQty = convertAmount(quantity, requestedUnit, ownerUnit)
+          const transferQty = Number.isFinite(convertedQty) ? convertedQty : quantity
+
+          if (Number(ownerItem.quantity || 0) < transferQty) {
+            throw httpError(409, `Not enough ${item.name || 'this ingredient'} left to approve this request.`)
+          }
+
+          const remainingQty = Number(ownerItem.quantity || 0) - transferQty
+          if (remainingQty <= 0) {
+            await PantryLegacy.deleteOne({ _id: ownerItem._id }, { session })
+          } else {
+            const nextOwnerQty = Math.round(remainingQty * 1000) / 1000
+            await PantryLegacy.updateOne({ _id: ownerItem._id }, { $set: { quantity: nextOwnerQty, unit: ownerUnit } }, { session })
+          }
+
+          const requesterItem = await PantryLegacy.findOne({
+            ...pantryUserQuery(requesterId),
+            normalizedName: normalizePantryItemName(item.name),
+          }).session(session)
+
+          if (requesterItem) {
+            const nextRequesterQty = Math.round((Number(requesterItem.quantity || 0) + transferQty) * 1000) / 1000
+            await PantryLegacy.updateOne({ _id: requesterItem._id }, { $set: { quantity: nextRequesterQty, unit: requesterItem.unit || ownerUnit } }, { session })
+          } else {
+            await Pantry.create([{ 
+              user: requesterId,
+              name: item.name || 'Item',
+              normalizedName: normalizePantryItemName(item.name),
+              quantity: Math.round(transferQty * 1000) / 1000,
+              unit: ownerUnit,
+              category: 'other',
+            }], { session })
+          }
+        }
+
+        request.status = status
+        await request.save({ session })
+      }
+    })
+  } finally {
+    await session.endSession()
   }
-
-  if (request.status !== 'pending') {
-    throw httpError(409, 'This request has already been resolved.')
-  }
-
-  if (status === 'approved') {
-    const { requesterAdditions, ownerDeductions } = getApprovedPantryChange(request.requestType, request.items || [])
-
-    for (const item of ownerDeductions) {
-      const normalizedName = normalizePantryItemName(item.name)
-      const quantity = Number(item.quantity || 1)
-
-      if (!Number.isFinite(quantity) || quantity <= 0) continue
-
-      const pantryItem = await Pantry.findOne({ user: request.owner, normalizedName })
-      if (!pantryItem) {
-        throw httpError(409, `Not enough ${item.name} left in this pantry to approve this request.`)
-      }
-
-      const currentQty = Number(pantryItem.quantity || 0)
-      if (currentQty < quantity) {
-        throw httpError(409, `Not enough ${item.name} left in this pantry to approve this request.`)
-      }
-
-      const remainingQty = currentQty - quantity
-      if (remainingQty <= 0) {
-        await Pantry.deleteOne({ _id: pantryItem._id })
-      } else {
-        pantryItem.quantity = Math.round((remainingQty) * 1000) / 1000
-        if (item.unit) pantryItem.unit = item.unit
-        if (item.name) pantryItem.name = item.name
-        await pantryItem.save()
-      }
-    }
-
-    for (const item of requesterAdditions) {
-      const normalizedName = normalizePantryItemName(item.name)
-      const quantity = Number(item.quantity || 1)
-
-      if (!Number.isFinite(quantity) || quantity <= 0) continue
-
-      const existing = await Pantry.findOne({ user: request.requester, normalizedName })
-
-      if (existing) {
-        const currentQty = Number(existing.quantity || 0)
-        existing.quantity = Math.round((currentQty + quantity) * 1000) / 1000
-        if (item.unit) existing.unit = item.unit
-        if (item.name) existing.name = item.name
-        await existing.save()
-      } else {
-        await Pantry.create({
-          user: request.requester,
-          name: item.name || 'Item',
-          normalizedName,
-          quantity,
-          unit: item.unit || 'pcs',
-          category: 'other',
-        })
-      }
-    }
-  }
-
-  request.status = status
-  await request.save()
 
   res.json({
     message: `Request ${status}.`,
@@ -556,7 +601,7 @@ router.post('/', handle(async (req, res) => {
     throw httpError(400, 'Use-by date must be a valid date')
   }
 
-  const existing = await Pantry.findOne({ user: req.userId, normalizedName })
+  const existing = await PantryLegacy.findOne({ ...pantryUserQuery(req.userId), normalizedName })
 
   if (existing) {
     // Already in the pantry -> add to the quantity instead of making a duplicate.
@@ -608,7 +653,7 @@ router.patch('/:itemId', handle(async (req, res) => {
   const edits = checkEdits(req.body)
   if (edits.name !== undefined) {
     // renaming onto another item ("Garlic" -> "Milk" when Milk exists): say which one, instead of a vague 409
-    const clash = await Pantry.findOne({ user: req.userId, normalizedName: normalizeIngredient(edits.name), _id: { $ne: item._id } })
+    const clash = await PantryLegacy.findOne({ ...pantryUserQuery(req.userId), normalizedName: normalizeIngredient(edits.name), _id: { $ne: item._id } })
     if (clash) throw httpError(409, `${clash.name} is already in your pantry. Edit that item instead, or pick another name.`)
   }
   Object.assign(item, edits)

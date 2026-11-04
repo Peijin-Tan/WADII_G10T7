@@ -16,7 +16,7 @@ const pantryRequestSchema = new mongoose.Schema(
     },
     requestType: {
       type: String,
-      enum: ['buy', 'borrow'],
+      enum: ['borrow'],
       required: true,
     },
     items: [{

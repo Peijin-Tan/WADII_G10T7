@@ -42,6 +42,7 @@ const selectedNeighbourId = ref('')
 const selectedNeighbour = ref(null)
 const selectedBorrowItems = ref([])
 const pantryRequests = ref([])
+const outgoingPantryRequests = ref([])
 const pantrySearch = ref('')
 const pantryCategory = ref('all')
 const pantryAvailability = ref('all')
@@ -200,6 +201,7 @@ async function loadPantryActivity() {
     pantryItems.value = []
     selectedBorrowItems.value = []
     pantryRequests.value = []
+    outgoingPantryRequests.value = []
     return
   }
 
@@ -217,7 +219,8 @@ async function loadPantryActivity() {
     if (token !== auth.token) return
 
     neighbours.value = friendsResponse.data.friends || []
-    pantryRequests.value = requestsResponse.data.requests || []
+    pantryRequests.value = requestsResponse.data.incoming || requestsResponse.data.requests || []
+    outgoingPantryRequests.value = requestsResponse.data.outgoing || []
 
     if (!selectedNeighbourId.value && neighbours.value.length > 0) {
       selectedNeighbourId.value = neighbours.value[0]._id
@@ -1188,7 +1191,7 @@ watch(() => auth.token, loadActivity)
                 </div>
 
                 <div v-if="pantryRequests.length > 0" class="mt-4">
-                  <h3 class="h6 mb-3">Pending requests</h3>
+                  <h3 class="h6 mb-3">Incoming requests</h3>
                   <div v-for="request in pantryRequests" :key="request._id" class="border rounded-4 p-3 mb-2">
                     <div class="fw-semibold">{{ request.requestType }} request from {{ request.requester?.name || 'Someone' }}</div>
                     <div class="small text-muted mb-2">{{ request.items.map((entry) => `${entry.name} × ${entry.quantity}`).join(', ') }}</div>
@@ -1196,6 +1199,15 @@ watch(() => auth.token, loadActivity)
                       <button type="button" class="btn btn-sm btn-success" @click="updatePantryRequestStatus(request._id, 'approved')">Approve</button>
                       <button type="button" class="btn btn-sm btn-outline-danger" @click="updatePantryRequestStatus(request._id, 'rejected')">Reject</button>
                     </div>
+                  </div>
+                </div>
+
+                <div v-if="outgoingPantryRequests.length > 0" class="mt-4">
+                  <h3 class="h6 mb-3">Outgoing requests</h3>
+                  <div v-for="request in outgoingPantryRequests" :key="request._id" class="border rounded-4 p-3 mb-2">
+                    <div class="fw-semibold">{{ request.requestType }} request to {{ request.owner?.name || 'Neighbour' }}</div>
+                    <div class="small text-muted mb-2">{{ request.items.map((entry) => `${entry.name} × ${entry.quantity}`).join(', ') }}</div>
+                    <div class="small text-muted">Status: {{ request.status }}</div>
                   </div>
                 </div>
               </div>
