@@ -2,6 +2,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { API_URL } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -48,7 +49,7 @@ async function loadPreferences() {
       return
     }
 
-    const response = await axios.get('/api/preferences', {
+    const response = await axios.get(`${API_URL}/preferences`, {
       headers: authHeaders()
     })
 
@@ -79,7 +80,7 @@ async function savePreferences() {
 
   try {
     const response = await axios.put(
-      '/api/preferences',
+      `${API_URL}/preferences`,
       {
         dietaryPreferences: dietaryPreferences.value,
         allergens: allergens.value
