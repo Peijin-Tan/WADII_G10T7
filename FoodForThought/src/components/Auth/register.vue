@@ -73,17 +73,8 @@
             {{ showPassword ? 'Hide' : 'Show' }}
           </button>
         </div>
-        <!-- Always visible, so people know the rule before they type; turns green once it's met -->
-        <p
-          id="registerPasswordHint"
-          class="auth-hint"
-          :class="{ 'is-ok': isPasswordValid, 'is-error': form.password && !isPasswordValid }"
-        >
-          <span class="material-symbols-outlined" aria-hidden="true">
-            {{ isPasswordValid ? 'check_circle' : 'info' }}
-          </span>
-          At least 8 characters
-        </p>
+        <!-- Always visible, so people know the rules before they type; each turns green once it's met -->
+        <PasswordChecklist id="registerPasswordHint" :password="form.password" />
       </div>
 
       <button type="submit" class="auth-submit" :disabled="isLoading || !isFormValid">
@@ -105,6 +96,8 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { API_URL } from '@/services/api'
 import AuthShell from './AuthShell.vue'
+import PasswordChecklist from './PasswordChecklist.vue'
+import { isStrongPassword } from '@/utils/passwordRules'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -123,7 +116,7 @@ const successMessage = ref('')
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const isEmailValid = computed(() => emailRegex.test(form.email))
-const isPasswordValid = computed(() => form.password.length >= 8)
+const isPasswordValid = computed(() => isStrongPassword(form.password))
 
 const isFormValid = computed(() => {
   return (

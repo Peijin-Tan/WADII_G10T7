@@ -1,13 +1,4 @@
 <script setup>
-/* Dashboard: "This week" grid + next-open-slot suggestion + "Today" checklist.
-
-   Data (all from the planner API, so it matches the Weekly Plan page exactly):
-     GET   /planner?start=YYYY-MM-DD       -> this week's meals { entries: [{ id, dayOfWeek, mealSlot, status, recipe }] }
-     GET   /planner/recipe-options          -> saved recipes, each with pantryMatch (% of ingredients in the pantry)
-     PATCH /planner/entries/:id { status }  -> Cooked / Skipped / Planned (Cooked also takes ingredients from the pantry)
-     POST  /planner/entries                 -> "Plan it for Thursday dinner"
-
-   Using recipe-options for the suggestion means no Spoonacular quota is used on every dashboard visit. */
 import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApi, errorMessage } from '@/services/api'
@@ -15,13 +6,12 @@ import { addDays, toISODate, mondayOf, startOfToday } from '@/utils/dates'
 
 const api = createApi('/planner')
 
-// Tells the Dashboard heading how today is going, e.g. "2 meals left to log today"
 const emit = defineEmits(['summary'])
 const router = useRouter()
 
 /* ---------- Dates ---------- */
 const today = startOfToday()
-const todayIndex = (today.getDay() + 6) % 7 // Monday = 0
+const todayIndex = (today.getDay() + 6) % 7
 const weekStart = mondayOf(today)
 const weekStartISO = toISODate(weekStart)
 
@@ -29,8 +19,8 @@ const days = Array.from({ length: 7 }, (_, i) => {
   const date = addDays(weekStart, i)
   return {
     index: i,
-    short: date.toLocaleDateString('en-SG', { weekday: 'short' }), // "Mon"
-    long: date.toLocaleDateString('en-SG', { weekday: 'long' }), //   "Monday"
+    short: date.toLocaleDateString('en-SG', { weekday: 'short' }),
+    long: date.toLocaleDateString('en-SG', { weekday: 'long' }),
     dayNumber: date.getDate(),
   }
 })
@@ -48,11 +38,11 @@ const entries = ref([])
 const recipes = ref([])
 const loading = ref(true)
 const error = ref('')
-const busyIds = ref([]) // entries currently being saved
-const justChanged = ref('') // entry id that plays the "pop" animation after a change
+const busyIds = ref([])
+const justChanged = ref('')
 
 /* ---------- Little message bar under the grid ("Mee goreng marked cooked · Undo") ---------- */
-const notice = ref(null) // { text, tone: 'success' | 'info' | 'error', undo: fn | null }
+const notice = ref(null)
 let noticeTimer = null
 
 function showNotice(text, { tone = 'success', undo = null } = {}) {
@@ -74,7 +64,7 @@ async function load() {
   try {
     const [week, options] = await Promise.all([
       api.get('/', { params: { start: weekStartISO } }),
-      api.get('/recipe-options', { params: { limit: 100 } }).catch(() => ({ data: [] })), // suggestion is optional
+      api.get('/recipe-options', { params: { limit: 100 } }).catch(() => ({ data: [] })),
     ])
     entries.value = week.data.entries
     recipes.value = options.data
@@ -90,12 +80,10 @@ onMounted(load)
 const BASE_SLOTS = ['breakfast', 'lunch', 'dinner']
 const SLOT_LABEL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' }
 
-// Snack row only appears if a snack is actually planned this week
 const slots = computed(() =>
   entries.value.some((e) => e.mealSlot === 'snack') ? [...BASE_SLOTS, 'snack'] : BASE_SLOTS,
 )
 
-// grid['2-dinner'] = the entry for Wednesday dinner (the first one, if there are several)
 const grid = computed(() => {
   const map = {}
   for (const e of entries.value) {
@@ -106,17 +94,15 @@ const grid = computed(() => {
 })
 
 const cellFor = (day, slot) => grid.value[`${day}-${slot}`]
-const canChange = (day) => day <= todayIndex // you can only log meals that have happened (up to today)
+const canChange = (day) => day <= todayIndex
 
 /* ---------- Changing a meal's status ---------- */
 const NEXT_STATUS = { Planned: 'Cooked', Cooked: 'Skipped', Skipped: 'Planned' }
 
-// Tapping a grid cell cycles Planned → Cooked → Skipped → Planned
 function cycle(entry) {
   return setStatus(entry, NEXT_STATUS[entry.status] || 'Cooked')
 }
 
-// Today's Cooked / Skipped buttons: pressing the active one again puts it back to Planned
 function toggle(entry, status) {
   return setStatus(entry, entry.status === status ? 'Planned' : status)
 }
@@ -128,11 +114,10 @@ async function setStatus(entry, status, { quiet = false } = {}) {
   busyIds.value.push(entry.id)
   try {
     const { data } = await api.patch(`/entries/${entry.id}`, { status })
-    entries.value = data.entries // the server sends back the whole updated week
+    entries.value = data.entries
     popCell(entry.id)
     if (quiet) return
 
-    // e.g. "Mee goreng marked cooked · 4 pantry items used"
     const used = data.pantryUpdate?.deducted?.length || 0
     const extra = status === 'Cooked' && used ? ` · ${used} pantry ${used === 1 ? 'item' : 'items'} used` : ''
     const done = !wasTodayDone && todayDone.value ? " That's all of today's meals logged!" : ''
@@ -155,13 +140,11 @@ function popCell(id) {
   })
 }
 
-// "+ Plan" → Weekly Plan page with the Add Meal modal open for that day and meal
 function planSlot(day, slot) {
   router.push({ path: '/planner', query: { day, add: slot } })
 }
 
 /* ---------- Suggestion for the next open slot ---------- */
-// After these hours, today's meal is "over" and we don't suggest planning it
 const SLOT_ENDS_AT = { breakfast: 11, lunch: 15, dinner: 21 }
 
 const openSlot = computed(() => {
@@ -172,11 +155,9 @@ const openSlot = computed(() => {
       if (!cellFor(day, slot)) return { day, slot }
     }
   }
-  return null // the rest of the week is planned
+  return null
 })
 
-// Best saved recipe for it: most ingredients already in the pantry, not already on this week's plan,
-// quicker recipes first when it's a tie
 const suggestion = computed(() => {
   if (!openSlot.value) return null
   const plannedIds = new Set(entries.value.map((e) => e.recipe?.id).filter(Boolean))
@@ -200,7 +181,7 @@ async function planSuggestion() {
   if (!suggestion.value || !openSlot.value || planningSuggestion.value) return
   const { recipe } = suggestion.value
   const { day, slot } = openSlot.value
-  const label = openSlotLabel.value.replace("Today's", "today's") // "Thursday dinner" or "today's dinner"
+  const label = openSlotLabel.value.replace("Today's", "today's")
   planningSuggestion.value = true
   try {
     const before = new Set(entries.value.map((e) => e.id))
@@ -237,7 +218,6 @@ const todayEntries = computed(() =>
     .sort((a, b) => SLOT_ORDER.indexOf(a.mealSlot) - SLOT_ORDER.indexOf(b.mealSlot)),
 )
 const todayCooked = computed(() => todayEntries.value.filter((e) => e.status === 'Cooked').length)
-// "Done" = every meal today is either Cooked or Skipped
 const todayDone = computed(
   () => todayEntries.value.length > 0 && todayEntries.value.every((e) => e.status !== 'Planned'),
 )
@@ -453,8 +433,6 @@ watch(
 </template>
 
 <style scoped>
-/* Colours come from theme.css (the Dashboard page has class="fft-page").
-   Peach is the "suggestion" colour: it marks the one thing the app is recommending. */
 .wag {
   --wag-ink: var(--fft-text);
   --wag-leaf: var(--fft-primary);
@@ -468,8 +446,7 @@ watch(
   gap: 20px;
 }
 
-/* ---------- Shared bits ---------- */
-.wag-title {
+/* ---------- Shared bits ---------- */.wag-title {
   margin: 0;
   font: 600 22px/28px 'Outfit', sans-serif;
   letter-spacing: -0.01em;
@@ -531,8 +508,7 @@ watch(
   color: #8c1d18;
 }
 
-/* ---------- This week (the hero) ---------- */
-.wag-week {
+/* ---------- This week (the hero) ---------- */.wag-week {
   background: var(--fft-card);
   border: 1px solid rgb(194 200 192 / 45%);
   border-radius: var(--wag-radius-lg);
@@ -551,8 +527,7 @@ watch(
 .wag-scroll {
   overflow-x: auto;
   margin: -4px;
-  padding: 4px; /* room for focus rings and the pop animation */
-}
+  padding: 4px;}
 
 .wag-grid {
   display: grid;
@@ -579,7 +554,6 @@ watch(
   color: var(--fft-secondary-text);
 }
 
-/* Today's column header: underlined in leaf green */
 .wag-dayhead.is-today {
   border-bottom-color: var(--wag-leaf);
   color: var(--wag-leaf);
@@ -596,8 +570,7 @@ watch(
 
 .wag-slot,
 .wag-corner {
-  position: sticky; /* stays visible when the grid scrolls sideways on phones */
-  left: 0;
+  position: sticky;  left: 0;
   z-index: 1;
   background: var(--fft-card);
 }
@@ -623,8 +596,7 @@ watch(
   text-align: left;
   font: 400 13.5px/18px 'Inter', sans-serif;
   cursor: pointer;
-  animation: wag-in 0.32s var(--ease-out, ease) both; /* cells settle in one after another (delay set inline) */
-  transition:
+  animation: wag-in 0.32s var(--ease-out, ease) both;  transition:
     transform var(--dur-fast, 150ms) var(--ease-out, ease),
     box-shadow var(--dur-fast, 150ms),
     background-color 0.25s,
@@ -646,8 +618,7 @@ watch(
 }
 
 .wag-meal {
-  display: -webkit-box; /* two lines max, then "…" */
-  -webkit-line-clamp: 2;
+  display: -webkit-box;  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-weight: 500;
@@ -670,7 +641,6 @@ watch(
   flex-shrink: 0;
 }
 
-/* Cooked: solid leaf green */
 .wag-cell.is-cooked {
   background: var(--wag-leaf);
   color: #fff;
@@ -684,13 +654,11 @@ watch(
   background: currentColor;
 }
 
-/* Planned: white with a soft outline so it reads as "still to do" */
 .wag-cell.is-planned {
   background: var(--fft-card);
   border-color: var(--fft-surface-high);
 }
 
-/* Skipped: crossed out, faded, dash instead of a dot */
 .wag-cell.is-skipped {
   background: transparent;
   border: 1px solid var(--fft-surface-high);
@@ -708,7 +676,6 @@ watch(
   border-width: 1.5px 0 0;
 }
 
-/* Today's column: leaf outline on planned meals */
 .wag-cell.is-today.is-planned {
   border: 1.5px solid var(--wag-leaf);
 }
@@ -726,7 +693,6 @@ watch(
   pointer-events: none;
 }
 
-/* Open slot: quiet dashed "+ Plan" */
 .wag-cell.is-open {
   flex-direction: row;
   justify-content: center;
@@ -752,7 +718,6 @@ watch(
   background: var(--fft-surface-low);
 }
 
-/* The open slot the suggestion card is about: peach, so the two visibly connect */
 .wag-cell.is-next {
   background: var(--wag-peach-bg);
   border: 1.5px dashed #e3a58c;
@@ -772,7 +737,6 @@ watch(
   cursor: default;
 }
 
-/* Legend */
 .wag-legend {
   display: flex;
   flex-wrap: wrap;
@@ -819,7 +783,6 @@ watch(
   border-color: var(--fft-border);
 }
 
-/* Message bar */
 .wag-notice {
   display: flex;
   align-items: center;
@@ -851,8 +814,7 @@ watch(
   background: rgb(199 236 206 / 24%);
 }
 
-/* ---------- Today + suggestion row ---------- */
-.wag-lower {
+/* ---------- Today + suggestion row ---------- */.wag-lower {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   gap: 20px;
@@ -936,7 +898,6 @@ watch(
   animation: wag-pop-soft 0.4s ease;
 }
 
-/* Cooked / Skipped as one segmented control */
 .wag-seg {
   display: inline-flex;
   padding: 3px;
@@ -1009,8 +970,7 @@ watch(
   border-radius: 12px;
 }
 
-/* ---------- Suggestion card ---------- */
-.wag-next {
+/* ---------- Suggestion card ---------- */.wag-next {
   display: flex;
   flex-direction: column;
   min-height: 260px;
@@ -1119,7 +1079,6 @@ watch(
   outline-offset: 3px;
 }
 
-/* Whole week planned */
 .wag-next.is-full {
   background: var(--fft-card);
   border-color: rgb(194 200 192 / 45%);
@@ -1131,8 +1090,7 @@ watch(
   color: var(--wag-leaf);
 }
 
-/* ---------- Animations ---------- */
-@keyframes wag-in {
+/* ---------- Animations ---------- */@keyframes wag-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
@@ -1169,8 +1127,7 @@ watch(
   transform: translateY(4px);
 }
 
-/* ---------- Tablets ---------- */
-@media (max-width: 991.98px) {
+/* ---------- Tablets ---------- */@media (max-width: 991.98px) {
   .wag-lower {
     grid-template-columns: 1fr;
   }
@@ -1180,8 +1137,7 @@ watch(
   }
 }
 
-/* ---------- Phones ---------- */
-@media (max-width: 767.98px) {
+/* ---------- Phones ---------- */@media (max-width: 767.98px) {
   .wag-week,
   .wag-today,
   .wag-next {
@@ -1211,8 +1167,7 @@ watch(
   }
 
   .wag-link span:not(.material-symbols-outlined) {
-    display: none; /* icon only on phones */
-  }
+    display: none;  }
 
   .wag-link {
     padding: 8px;

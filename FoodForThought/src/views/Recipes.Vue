@@ -15,18 +15,31 @@ const likeMessage = ref('')
 const likingRecipeIds = ref([])
 const loadingLikes = ref(true)
 const lastQuery = ref('') // the search shown in "4 results for …"
+const sortBy = ref('shortest')
+const pantryIngredients = ref([])
+const pantryMatchMode = ref(false)
+const pantryLoading = ref(false)
+const pantryError = ref('')
 
 // Line above the grid, e.g. "3 recipes" or "4 results for "chicken""
 const resultLabel = computed(() => {
+  if (pantryMatchMode.value) {
+    const count = pantryMatchedRecipes.value.length
+    return `${count} ${count === 1 ? 'recipe' : 'recipes'} using pantry ingredients`
+  }
+
   const count = recipes.value.length
+
   if (searchMode.value) {
     return `${count} ${count === 1 ? 'result' : 'results'} for "${lastQuery.value}"`
   }
+
   return `${count} ${count === 1 ? 'recipe' : 'recipes'}`
 })
 
 function clearSearch() {
   search.value = ''
+  pantryMatchMode.value = false
   fetchRecipes()
 }
 
@@ -36,7 +49,15 @@ async function fetchRecipes() {
   searchMode.value = false
 
   try {
-    const response = await axios.get('/api/recipes')
+    const config = auth.token
+      ? {
+          headers: {
+            Authorization: `Bearer ${auth.token}`
+          }
+        }
+      : {}
+
+    const response = await axios.get('/api/recipes', config)
     recipes.value = response.data.data
   } catch (err) {
     console.error(err)
@@ -49,6 +70,7 @@ async function fetchRecipes() {
 
 async function searchRecipes() {
   const searchTerm = search.value.trim()
+  pantryMatchMode.value = false
 
   if (!searchTerm) {
     await fetchRecipes()
@@ -71,12 +93,14 @@ async function searchRecipes() {
 
     const [savedResponse, spoonacularResponse] = await Promise.all([
       // Search MongoDB recipes, including user-created recipes
-      axios.get('/api/recipes', {
-        ...config,
-        params: {
-          search: searchTerm
-        }
-      }),
+      axios.get('/api/recipes', auth.token
+        ? {
+            headers: {
+              Authorization: `Bearer ${auth.token}`
+            }
+          }
+        : {}
+      ),
 
       // Search Spoonacular recipes
       axios.get('/api/recipes/search', {
@@ -89,18 +113,25 @@ async function searchRecipes() {
     const savedRecipes = savedResponse.data.data
     const externalRecipes = spoonacularResponse.data.data
 
-    // Avoid displaying duplicate recipes by title
+    // Filter community recipes by title
+    const matchingSavedRecipes = savedRecipes.filter(recipe =>
+      recipe.title?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+
+    // Prevent duplicate recipes from Spoonacular
     const savedTitles = new Set(
-      savedRecipes.map(recipe => recipe.title.trim().toLowerCase())
+      matchingSavedRecipes.map(recipe =>
+        recipe.title.trim().toLowerCase()
+      )
     )
 
-    const uniqueExternalRecipes = externalRecipes.filter(
-      recipe => !savedTitles.has(recipe.title.trim().toLowerCase())
+    const uniqueExternalRecipes = externalRecipes.filter(recipe =>
+      !savedTitles.has(recipe.title.trim().toLowerCase())
     )
 
-    // Display both MongoDB and Spoonacular results
+    // Display matching community recipes + external recipes
     recipes.value = [
-      ...savedRecipes,
+      ...matchingSavedRecipes,
       ...uniqueExternalRecipes
     ]
 
@@ -217,6 +248,129 @@ function getRecipeLink(recipe) {
   return '/recipes/external/' + recipe.externalId
 }
 
+const sortedRecipes = computed(() => {
+  const list = pantryMatchMode.value
+    ? [...pantryMatchedRecipes.value]
+    : [...recipes.value]
+
+  if (sortBy.value === 'matches') {
+    return list.sort((a, b) => b.matchCount - a.matchCount)
+  }
+
+  if (sortBy.value === 'shortest') {
+    return list.sort(
+      (a, b) => (a.totalTime ?? Infinity) - (b.totalTime ?? Infinity)
+    )
+  }
+
+  if (sortBy.value === 'longest') {
+    return list.sort(
+      (a, b) => (b.totalTime ?? 0) - (a.totalTime ?? 0)
+    )
+  }
+
+  if (sortBy.value === 'serving-low') {
+    return list.sort(
+      (a, b) => (a.servings ?? Infinity) - (b.servings ?? Infinity)
+    )
+  }
+
+  if (sortBy.value === 'serving-high') {
+    return list.sort(
+      (a, b) => (b.servings ?? 0) - (a.servings ?? 0)
+    )
+  }
+
+  return list
+})
+
+async function togglePantryMatch() {
+  if (!pantryMatchMode.value) {
+    await loadPantryIngredients()
+
+    if (pantryError.value) return
+
+    pantryMatchMode.value = true
+    sortBy.value = 'matches'
+  } else {
+    pantryMatchMode.value = false
+    sortBy.value = 'shortest'
+  }
+}
+
+async function loadPantryIngredients() {
+  pantryLoading.value = true
+  pantryError.value = ''
+
+  try {
+    const token = auth.token
+
+    const { data } = await axios.get('http://localhost:8000/pantry/', {
+      headers: token
+        ? { Authorization: `Bearer ${token}` }
+        : {},
+    })
+
+    pantryIngredients.value = (data.items || [])
+      .filter(item => item.quantity > 0)
+      .map(item => item.name.trim().toLowerCase())
+  } catch (err) {
+    pantryError.value = 'Could not load your pantry ingredients.'
+    console.error(err)
+  } finally {
+    pantryLoading.value = false
+  }
+}
+
+// Convert ingredient names into a consistent format
+function normalizeIngredient(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+}
+
+// Extract ingredient names from a recipe
+function getRecipeIngredients(recipe) {
+  return (recipe.ingredients || [])
+    .map(ingredient => {
+      if (typeof ingredient === 'string') return ingredient
+
+      return ingredient.name ||
+        ingredient.ingredient ||
+        ingredient.original ||
+        ingredient.description ||
+        ''
+    })
+    .map(normalizeIngredient)
+    .filter(Boolean)
+}
+
+// Calculate matching pantry ingredients
+function getMatchingIngredients(recipe) {
+  const pantrySet = new Set(
+    pantryIngredients.value.map(normalizeIngredient)
+  )
+
+  return getRecipeIngredients(recipe).filter(ingredient =>
+    pantrySet.has(ingredient)
+  )
+}
+
+// Match only existing community recipes
+const pantryMatchedRecipes = computed(() => {
+  return recipes.value
+    .filter(recipe => recipe.source !== 'spoonacular')
+    .map(recipe => ({
+      ...recipe,
+      matchedIngredients: getMatchingIngredients(recipe),
+      matchCount: getMatchingIngredients(recipe).length,
+    }))
+    .filter(recipe => recipe.matchCount > 0)
+    .sort((a, b) => b.matchCount - a.matchCount)
+})
+
 onMounted(() => {
   fetchRecipes()
   loadMyLikes()
@@ -266,6 +420,19 @@ onMounted(() => {
         </button>
       </form>
 
+      <div class="pantry-match-section">
+      <button
+        class="pantry-match-btn"
+        @click="togglePantryMatch"
+      >
+        {{ pantryMatchMode ? 'Show All Recipes' : 'Find Recipes Using Pantry' }}
+      </button>
+
+      <p v-if="pantryError" class="error-message">
+        {{ pantryError }}
+      </p>
+    </div>
+
       <p v-if="likeMessage" class="rp-notice" role="alert">
         <span class="material-symbols-outlined" aria-hidden="true">info</span>
         {{ likeMessage }}
@@ -304,11 +471,33 @@ onMounted(() => {
       </div>
 
       <template v-else>
+        <div class="rp-toolbar">
         <p class="rp-count" aria-live="polite">{{ resultLabel }}</p>
+        <div class="sort-container">
+        <p class="sort-label">Sort by</p>
+
+        <select v-model="sortBy">
+          <template v-if="pantryMatchMode">
+            <option value="matches">Most ingredients matched</option>
+            <option value="shortest">Shortest time</option>
+            <option value="longest">Longest time</option>
+            <option value="serving-low">Lowest servings</option>
+            <option value="serving-high">Highest servings</option>
+          </template>
+
+          <template v-else>
+            <option value="shortest">Shortest time</option>
+            <option value="longest">Longest time</option>
+            <option value="serving-low">Lowest servings</option>
+            <option value="serving-high">Highest servings</option>
+          </template>
+        </select>
+      </div>
+      </div>
 
         <ul class="rp-grid">
           <li
-            v-for="recipe in recipes"
+            v-for="recipe in sortedRecipes"
             :key="recipe._id || recipe.externalId"
             class="rp-card"
           >
@@ -318,6 +507,7 @@ onMounted(() => {
                 :alt="''"
                 loading="lazy"
               />
+
 
               <span v-if="recipe.totalTime" class="rp-time">
                 <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
@@ -373,6 +563,16 @@ onMounted(() => {
                   by {{ recipe.createdBy?.name || 'a community member' }}
                 </span>
               </p>
+
+                <div v-if="pantryMatchMode" class="pantry-match-badge">
+                <strong>
+                  {{ recipe.matchCount }} pantry ingredients matched
+                </strong>
+
+                <small>
+                  {{ recipe.matchedIngredients.join(', ') }}
+                </small>
+              </div>
             </div>
           </li>
         </ul>
@@ -803,4 +1003,92 @@ div.rp-grid {
     transform: none;
   }
 }
+
+.rp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rp-toolbar .rp-count {
+  margin: 0;
+}
+
+.rp-sort {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--fft-border);
+  border-radius: 12px;
+  background: var(--fft-card);
+  color: var(--fft-text);
+  font-size: 14px;
+  justify-content: space-around;
+}
+
+.sort-container {  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.sort-label {
+  margin: 0;
+  font-size: 14px;
+}
+
+@media (max-width: 575.98px) {
+  .rp-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.pantry-match-section {
+  margin: 16px 0;
+}
+
+.pantry-match-btn {
+  padding: 10px 16px;
+  border: 1px solid #32533c;
+  border-radius: 8px;
+  background: #32533c;
+  color: white;
+  cursor: pointer;
+}
+
+.pantry-match-btn:hover {
+  background: #26432f;
+}
+
+.pantry-match-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+.pantry-match-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #e5f0e6;
+  color: #32533c;
+  font-size: 12px;
+}
+
+.pantry-match-badge strong {
+  font-weight: 600;
+}
+
+.pantry-match-badge small {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
 </style>

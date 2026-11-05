@@ -1,7 +1,3 @@
-// Unit tests for shopping mode: the basket details that decide what goes into the pantry.
-// Run from the server folder with:   npm test
-// No database: the Pantry model's database methods are replaced with fakes.
-
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
@@ -22,7 +18,7 @@ test('basket starts from the list: amount, pantry unit and pantry category', () 
 test('things the pantry cannot store start switched off', () => {
   const soap = defaultBasket({ name: 'Dish soap', quantity: 1, unit: 'bottle', category: 'other' })
   assert.equal(soap.addToPantry, false)
-  assert.equal(soap.unit, 'pcs') // still a valid pantry unit, in case the user switches it on
+  assert.equal(soap.unit, 'pcs')
 })
 
 /* ---------- Checking what the user typed ---------- */
@@ -31,7 +27,7 @@ test('basket details are cleaned up and the use-by date is a Singapore calendar 
   const b = checkBasket({ name: '  Jasmine rice ', quantity: '2', unit: 'kg', category: 'grains', expiryDate: '2026-11-30' })
   assert.equal(b.name, 'Jasmine rice')
   assert.equal(b.quantity, 2)
-  assert.equal(b.expiryDate.toISOString(), '2026-11-29T16:00:00.000Z') // 30 Nov 00:00 in Singapore
+  assert.equal(b.expiryDate.toISOString(), '2026-11-29T16:00:00.000Z')
   assert.equal(b.addToPantry, true)
   assert.equal(checkBasket({ name: 'Rice', quantity: 1, unit: 'kg', category: 'nonsense' }).category, 'other')
 })
@@ -48,10 +44,9 @@ test('bad basket details get a clear message', () => {
 test('only bought items switched on for the pantry are added, and never twice', () => {
   const basket = (on) => ({ name: 'x', quantity: 1, unit: 'pcs', addToPantry: on })
   assert.equal(readyForPantry({ purchased: true, basket: basket(true) }), true)
-  assert.equal(readyForPantry({ purchased: true, basket: basket(false) }), false) // e.g. dish soap
+  assert.equal(readyForPantry({ purchased: true, basket: basket(false) }), false)
   assert.equal(readyForPantry({ purchased: false, basket: basket(true) }), false)
   assert.equal(readyForPantry({ purchased: true, addedToPantry: true, basket: basket(true) }), false)
-  // ticked before shopping mode existed (no basket): goes in if the pantry has a unit for it
   assert.equal(readyForPantry({ purchased: true, quantity: 200, unit: 'g' }), true)
   assert.equal(readyForPantry({ purchased: true, quantity: 1, unit: 'bottle' }), false)
 })
@@ -61,14 +56,12 @@ test('regenerating the list keeps basket details on items still ticked', () => {
   const old = [{ _id: 'a', name: 'Jasmine rice', unit: 'g', quantity: 600, purchased: true, basket, source: 'auto' }]
   const fresh = [{ name: 'Jasmine rice', unit: 'g', quantity: 600, purchased: false, source: 'auto' }]
   assert.deepEqual(reconcileItems(old, fresh)[0].basket, basket)
-  // the plan now needs MORE than was bought -> unticked, so the details go too
   const more = [{ name: 'Jasmine rice', unit: 'g', quantity: 900, purchased: false, source: 'auto' }]
   assert.equal(reconcileItems(old, more)[0].basket, undefined)
 })
 
 /* ---------- Putting the basket into the pantry ---------- */
 
-// A fake pantry row with the bits addBasketItem uses
 function pantryRow(fields) {
   return { ...fields, saved: false, async save() { this.saved = true } }
 }
@@ -87,7 +80,7 @@ test('buying more of something you have adds to it, in the unit it is stored in'
   const row = pantryRow({ name: 'Jasmine rice', quantity: 500, unit: 'g' })
   t.mock.method(Pantry, 'findOne', async () => row)
   await addBasketItem('u1', { name: 'Jasmine rice', quantity: 2, unit: 'kg' })
-  assert.equal(row.quantity, 2500) // 500 g + 2 kg
+  assert.equal(row.quantity, 2500)
   assert.equal(row.saved, true)
 })
 
@@ -99,7 +92,6 @@ test('the earlier use-by date is kept, so older stock is used first', async (t) 
   await addBasketItem('u1', { name: 'Milk', quantity: 1, unit: 'l', expiryDate: newer })
   assert.equal(row.expiryDate, older)
 
-  // ...unless the old stock was used up, then the new date is the one that matters
   const empty = pantryRow({ name: 'Milk', quantity: 0, unit: 'l', expiryDate: older })
   t.mock.method(Pantry, 'findOne', async () => empty)
   await addBasketItem('u1', { name: 'Milk', quantity: 1, unit: 'l', expiryDate: newer })
@@ -107,9 +99,9 @@ test('the earlier use-by date is kept, so older stock is used first', async (t) 
 })
 
 test('units that cannot be converted are skipped with a reason', async (t) => {
-  const row = pantryRow({ name: 'Rice', quantity: 2, unit: 'cup' })
+  const row = pantryRow({ name: 'Spinach', quantity: 200, unit: 'g' })
   t.mock.method(Pantry, 'findOne', async () => row)
-  const reason = await addBasketItem('u1', { name: 'Rice', quantity: 1, unit: 'kg' })
-  assert.match(reason, /stores it in cup/)
+  const reason = await addBasketItem('u1', { name: 'Spinach', quantity: 2, unit: 'cup' })
+  assert.match(reason, /stores it in g/)
   assert.equal(row.saved, false)
 })

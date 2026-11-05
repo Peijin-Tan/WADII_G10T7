@@ -26,7 +26,7 @@ watch(
       cancelBtn.value?.focus()
     } else {
       window.removeEventListener('keydown', onKey)
-      lastFocused?.focus?.() // back to the button that opened it
+      lastFocused?.focus?.()
     }
   },
 )
@@ -138,17 +138,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .cd-btn--confirm { background: var(--tone); color: #fff; }
 .cd-btn--confirm:hover { background: var(--tone-hover); }
 
-/* opens with a small lift so it's clear what appeared */
-<<<<<<< Updated upstream
-.cd-enter-active, .cd-leave-active { transition: opacity 0.18s ease; }
-.cd-enter-active .cd-card, .cd-leave-active .cd-card { transition: transform 0.18s ease; }
-=======
-/* Enter/exit use ease-out (starts fast = feels responsive). Exit is quicker than enter. */
 .cd-enter-active { transition: opacity var(--dur-modal) var(--ease-out); }
 .cd-leave-active { transition: opacity var(--dur-exit) var(--ease-out); }
 .cd-enter-active .cd-card { transition: transform var(--dur-modal) var(--ease-out); }
 .cd-leave-active .cd-card { transition: transform var(--dur-exit) var(--ease-out); }
->>>>>>> Stashed changes
 .cd-enter-from, .cd-leave-to { opacity: 0; }
 .cd-enter-from .cd-card, .cd-leave-to .cd-card { transform: translateY(8px) scale(0.98); }
 

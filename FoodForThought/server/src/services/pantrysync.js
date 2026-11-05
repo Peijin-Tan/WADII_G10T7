@@ -1,51 +1,34 @@
-// pantrySync.js
-// The places the shopping list talks to James's pantry collection:
-//   getPantry(userId)                     -> what the user has at home, to subtract from the list
-//   addBoughtItemsToPantry(userId, items) -> move ticked items into the pantry
-//
-// It uses the Pantry model directly (models/Pantry.js) and follows the same rule as
-// POST /pantry: if the ingredient is already there, increase its quantity, otherwise create it.
-// The difference is that this converts units first (300 g into a row stored in kg adds 0.3 kg),
-// which POST /pantry doesn't do yet.
-
 const Pantry = require('../../models/Pantry')
 const { normalizeName, pantryAmount, pantryCategory } = require('./shoppinglistbuilder')
-const { convertAmount } = require('./units')
+const { convertAmount, toPantryUnit } = require('./units')
 
-const PANTRY_NAME_MAX = 60 // same as maxlength on Pantry.name
+const PANTRY_NAME_MAX = 60
 
-// Everything the user has (quantity above 0), as [{ name, quantity, unit }]
 async function getPantry(userId) {
   return Pantry.find({ user: userId, quantity: { $gt: 0 } }).select('name quantity unit').lean()
 }
 
-// Shopping mode: add one item using what the user put in their basket
-// (item.basket = { name, quantity, unit, category, expiryDate }, in pantry units).
-// Returns null if added, or a reason it was skipped.
 async function addBasketItem(userId, basket) {
   const existing = await Pantry.findOne({ user: userId, normalizedName: normalizeName(basket.name) })
+  const stored = toPantryUnit(basket.quantity, basket.unit, basket.name)
 
   if (!existing) {
-    // normalizedName is filled in by the Pantry model's pre('validate') hook
     await Pantry.create({
       user: userId,
       name: basket.name.slice(0, PANTRY_NAME_MAX),
-      quantity: basket.quantity,
-      unit: basket.unit,
+      quantity: stored.quantity,
+      unit: stored.unit,
       category: basket.category,
       expiryDate: basket.expiryDate || undefined,
     })
     return null
   }
 
-  // Already in the pantry: add to it in the unit it's stored in (2 kg into a row kept in g adds 2000 g)
-  const amount = convertAmount(basket.quantity, basket.unit, existing.unit)
+  const amount = convertAmount(stored.quantity, stored.unit, existing.unit, basket.name)
   if (amount === null) return `your pantry stores it in ${existing.unit}`
 
   const hadStock = existing.quantity > 0
   existing.quantity = Math.round((existing.quantity + amount) * 1000) / 1000
-  // One row has one use-by date. Keep the EARLIER one, so "use soon" never misses the older pack at home.
-  // (If the old stock was used up, its date no longer matters.)
   if (basket.expiryDate) {
     const newDate = new Date(basket.expiryDate)
     if (!hadStock || !existing.expiryDate || newDate < existing.expiryDate) existing.expiryDate = newDate
@@ -54,17 +37,12 @@ async function addBasketItem(userId, basket) {
   return null
 }
 
-// items = shopping-list item subdocuments that are ticked and not yet added.
-// Each item is handled on its own, so one problem (e.g. a unit the pantry
-// doesn't support) doesn't stop the others.
-// Returns { added: [the items that were added], skipped: [{ name, reason }] }
 async function addBoughtItemsToPantry(userId, items) {
   const added = []
   const skipped = []
 
   for (const item of items) {
     try {
-      // Shopping mode filled in what was actually bought: use that
       if (item.basket) {
         const reason = await addBasketItem(userId, item.basket)
         if (reason) skipped.push({ name: item.basket.name, reason })
@@ -72,7 +50,6 @@ async function addBoughtItemsToPantry(userId, items) {
         continue
       }
 
-      // Ticked on the list without basket details (older lists): use the list's amount
       const existing = await Pantry.findOne({ user: userId, normalizedName: normalizeName(item.name) })
       const amount = pantryAmount(item, existing ? existing.unit : null)
 
@@ -85,7 +62,6 @@ async function addBoughtItemsToPantry(userId, items) {
         existing.quantity = Math.round((existing.quantity + amount.quantity) * 1000) / 1000
         await existing.save()
       } else {
-        // normalizedName is filled in by the Pantry model's pre('validate') hook
         await Pantry.create({
           user: userId,
           name: item.name.slice(0, PANTRY_NAME_MAX),

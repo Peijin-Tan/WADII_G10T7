@@ -1,14 +1,4 @@
 <script setup>
-/* Admin dashboard (/admindashboard, admins only: see the guard in router/index.js).
-   Built as a separate "admin console" so it is clearly not a normal page:
-   App.vue hides the site navbar/footer here, and this page has its own dark sidebar.
-
-   Sections (kept in the URL as ?tab=users, so a refresh or a shared link opens the same one):
-     Overview  - counts from GET /admin/stats, latest comments, most-liked recipes
-     Users     - GET /users, PATCH /users/:id/role, DELETE /users/:id
-     Recipes   - GET /admin/recipes, DELETE /recipes/:id
-     Comments  - GET /comments, DELETE /comments/:id
-   Every route also checks for an admin on the server, so hiding this page is not the only protection. */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -17,7 +7,6 @@ import { useConfirm } from '@/composables/useConfirm'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import appIcon from '@/assets/foodforthought-app-icon.svg'
 
-// createApi sends the login token and logs out on 401 (expired login), like the other pages
 const api = createApi()
 const auth = useAuthStore()
 const confirm = useConfirm()
@@ -42,15 +31,13 @@ function openTab(key) {
 }
 
 /* ---------- Toast + errors ---------- */
-// errorMessage() uses the server's own message when it sends one. Two failures don't send one,
-// so name them here instead of showing a vague "Could not load ...".
 function adminError(err, fallback) {
   const status = err.response?.status
   if (status === 404 && !err.response?.data?.message) {
     return 'The server does not have this admin route. Restart the backend (in the server folder: npm start) so it loads the latest code.'
   }
   if (status === 429) {
-    return 'Too many requests: the server allows 100 requests every 15 minutes per person. Wait a few minutes, or raise "max" in the rateLimit settings in server/index.js.'
+    return 'Too many requests: the server allows 1000 requests every 15 minutes per person. Wait a few minutes, or raise "max" in the rateLimit settings in server/index.js.'
   }
   return errorMessage(err, fallback)
 }
@@ -90,15 +77,13 @@ const kpis = computed(() => [
   { label: 'Likes', value: n('totalLikes'), delta: 'across all recipes', icon: 'favorite', tone: 'rose', tab: null },
 ])
 
-// Counts on the sidebar links
 const navCounts = computed(() => (stats.value
   ? { users: n('totalUsers'), recipes: n('communityRecipes'), comments: n('totalComments') }
   : {}))
 
 /* ---------- Lists (each loads the first time it's needed) ---------- */
 const lists = reactive({ users: [], recipes: [], comments: [] })
-const listState = reactive({ users: 'idle', recipes: 'idle', comments: 'idle' }) // idle | loading | ready | error
-// Recipes: only community recipes (GET /admin/recipes defaults to source=user)
+const listState = reactive({ users: 'idle', recipes: 'idle', comments: 'idle' })
 const endpoint = (key) => (key === 'recipes' ? '/admin/recipes' : `/${key}`)
 
 async function loadList(key) {
@@ -117,13 +102,11 @@ function ensureLoaded(key) {
   if (listState[key] === 'idle') loadList(key)
 }
 
-// After a delete, refresh what else it changed
 function refreshAfterChange({ comments = false } = {}) {
   loadStats()
   if (comments && listState.comments !== 'idle') loadList('comments')
 }
 
-// "Refresh" button: numbers + whatever lists are already loaded
 const refreshing = ref(false)
 async function refreshAll() {
   refreshing.value = true
@@ -137,8 +120,8 @@ async function refreshAll() {
 
 onMounted(() => {
   loadStats()
-  ensureLoaded('comments') // Overview: latest comments
-  ensureLoaded('recipes') // Overview: most-liked recipes
+  ensureLoaded('comments')
+  ensureLoaded('recipes')
   ensureLoaded(activeTab.value)
 })
 
@@ -151,7 +134,6 @@ const ROLE_FILTERS = [
   { value: 'admin', label: 'Admins' },
 ]
 
-// One sort per table. Clicking a column header sorts by it; clicking again flips the direction.
 const sort = reactive({
   users: { key: 'createdAt', dir: 'desc' },
   recipes: { key: 'createdAt', dir: 'desc' },
@@ -196,7 +178,6 @@ const visibleRecipes = computed(() => {
   return sorted(rows, sort.recipes, { author: (r) => r.author?.name || '' })
 })
 
-// A deleted user or recipe shows as such
 const commentAuthor = (c) => (c.userId ? c.userName || c.userId.name : 'Deleted user')
 const commentRecipeId = (c) => c.recipeId?._id || null
 const commentRecipe = (c) => c.recipeId?.title || 'Deleted recipe'
@@ -208,7 +189,6 @@ const visibleComments = computed(() => {
   return sorted(rows, sort.comments, { author: commentAuthor, recipe: commentRecipe })
 })
 
-// Overview panels
 const latestComments = computed(() => lists.comments.slice(0, 5))
 const topRecipes = computed(() =>
   [...lists.recipes].filter((r) => r.likeCount > 0).sort((a, b) => b.likeCount - a.likeCount).slice(0, 5))
@@ -227,11 +207,9 @@ function logout() {
   router.push('/home')
 }
 
-// One action at a time: the id of the row being saved/deleted
 const busyId = ref(null)
 
 /* ---------- User actions ---------- */
-// Sign-up always creates normal users, so this is how someone becomes an admin
 async function changeRole(user) {
   const makeAdmin = user.role !== 'admin'
   const ok = await confirm({
@@ -770,8 +748,6 @@ async function deleteComment(comment) {
 </template>
 
 <style scoped>
-/* A cooler, denser "console" look on purpose, so admins can tell at a glance they're not on a normal page.
-   Brand green is kept only as the accent. */
 .adm {
   --adm-bg: #f3f5f4;
   --adm-surface: #ffffff;
@@ -811,8 +787,7 @@ async function deleteComment(comment) {
   user-select: none;
 }
 
-/* ===== Sidebar ===== */
-.adm-side {
+/* ===== Sidebar ===== */.adm-side {
   position: sticky;
   top: 0;
   display: flex;
@@ -954,8 +929,7 @@ async function deleteComment(comment) {
   font-size: 12px;
 }
 
-/* ===== Main ===== */
-.adm-main {
+/* ===== Main ===== */.adm-main {
   min-width: 0;
   padding: 28px 32px 48px;
 }
@@ -993,8 +967,7 @@ async function deleteComment(comment) {
   font-size: 12px;
 }
 
-/* ===== Buttons ===== */
-.adm-btn {
+/* ===== Buttons ===== */.adm-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1067,8 +1040,7 @@ async function deleteComment(comment) {
   text-underline-offset: 3px;
 }
 
-/* ===== KPI cards ===== */
-.adm-kpis {
+/* ===== KPI cards ===== */.adm-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
@@ -1131,8 +1103,7 @@ async function deleteComment(comment) {
 .tone-amber { background: #fdf1dc; color: #9a5b00; }
 .tone-rose { background: #fde8ec; color: #b4234a; }
 
-/* ===== Panels ===== */
-.adm-grid {
+/* ===== Panels ===== */.adm-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
@@ -1166,7 +1137,6 @@ async function deleteComment(comment) {
   color: var(--adm-muted);
 }
 
-/* Accounts: one stacked bar + legend */
 .adm-stack-bar {
   display: flex;
   height: 12px;
@@ -1225,7 +1195,6 @@ async function deleteComment(comment) {
   font-variant-numeric: tabular-nums;
 }
 
-/* Most-liked ranking */
 .adm-rank {
   margin: 0;
   padding: 6px 0;
@@ -1273,7 +1242,6 @@ async function deleteComment(comment) {
   font-size: 16px;
 }
 
-/* Latest comments feed */
 .adm-feed {
   margin: 0;
   padding: 0;
@@ -1320,8 +1288,7 @@ async function deleteComment(comment) {
   font-size: 12px;
 }
 
-/* ===== Toolbar (search + segmented filter) ===== */
-.adm-toolbar {
+/* ===== Toolbar (search + segmented filter) ===== */.adm-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1386,8 +1353,7 @@ async function deleteComment(comment) {
   outline-offset: 1px;
 }
 
-/* ===== Tables ===== */
-.adm-table-wrap {
+/* ===== Tables ===== */.adm-table-wrap {
   overflow-x: auto;
 }
 .adm-table {
@@ -1450,7 +1416,6 @@ th[aria-sort='descending'] .adm-th .material-symbols-outlined {
 .adm-table tbody tr:last-child td {
   border-bottom: 0;
 }
-/* numbers line up by place value */
 .adm-num-col {
   text-align: right !important;
   font-variant-numeric: tabular-nums;
@@ -1535,8 +1500,7 @@ th[aria-sort='descending'] .adm-th .material-symbols-outlined {
   text-align: center;
 }
 
-/* ===== Chips + avatars ===== */
-.adm-chip {
+/* ===== Chips + avatars ===== */.adm-chip {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
@@ -1569,8 +1533,7 @@ th[aria-sort='descending'] .adm-th .material-symbols-outlined {
   color: var(--adm-side);
 }
 
-/* ===== Loading / empty ===== */
-.adm-empty {
+/* ===== Loading / empty ===== */.adm-empty {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1587,8 +1550,7 @@ th[aria-sort='descending'] .adm-th .material-symbols-outlined {
   }
 }
 
-/* ===== Toast ===== */
-.adm-toast {
+/* ===== Toast ===== */.adm-toast {
   position: fixed;
   right: 24px;
   bottom: 24px;
@@ -1616,8 +1578,7 @@ th[aria-sort='descending'] .adm-th .material-symbols-outlined {
   transform: translateY(8px);
 }
 
-/* ===== Tablet + phone: sidebar becomes a top bar ===== */
-@media (max-width: 991.98px) {
+/* ===== Tablet + phone: sidebar becomes a top bar ===== */@media (max-width: 991.98px) {
   .adm {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1673,7 +1634,6 @@ th[aria-sort='descending'] .adm-th .material-symbols-outlined {
   }
 }
 
-/* tablets + phones: fewer table columns so the row actions stay on screen */
 .adm-show-sm,
 .adm-show-sm-inline,
 .adm-show-md {

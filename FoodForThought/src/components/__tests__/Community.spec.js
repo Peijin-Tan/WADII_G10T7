@@ -5,6 +5,9 @@ import Community from '@/views/Community.vue'
 import { renderFeature, flushPromises, button, text, comment, like, recipe, serverError, deferred } from './featureTestSupport'
 
 vi.mock('axios', () => ({ default: { get: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
+// The Neighbour Pantry tab is its own component with its own API client (createApi -> axios.create),
+// so it's replaced with an empty stub here and these tests stay about comments and likes.
+vi.mock('@/components/community/NeighbourPantry.vue', () => ({ default: { name: 'NeighbourPantry', render: () => null } }))
 enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.resetAllMocks()

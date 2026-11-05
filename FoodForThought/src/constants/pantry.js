@@ -1,8 +1,7 @@
-// pantry.js
-// Pantry options used by the Pantry page, the shopping list and shopping mode.
-// MUST match the enums in server/models/Pantry.js (UNITS and CATEGORIES).
-
 export const PANTRY_UNITS = ['pcs', 'g', 'kg', 'ml', 'l', 'tsp', 'tbsp', 'cup']
+
+export const PANTRY_STORAGE_UNITS = ['pcs', 'g', 'kg', 'ml', 'l']
+export const SPOON_UNITS = ['tsp', 'tbsp', 'cup']
 
 export const PANTRY_CATEGORIES = [
   { value: 'produce', label: 'Produce', icon: 'nutrition' },
@@ -17,12 +16,8 @@ export const PANTRY_CATEGORIES = [
   { value: 'other', label: 'Other', icon: 'category' },
 ]
 
-// Shopping-list unit -> the pantry unit it is stored as.
-// MUST match PANTRY_UNIT in server/src/services/shoppinglistbuilder.js.
-// Items in other units ("1 bottle dish soap") stay on the list only.
 export const LIST_TO_PANTRY_UNIT = { g: 'g', ml: 'ml', piece: 'pcs', clove: 'pcs', tsp: 'tsp', tbsp: 'tbsp', cup: 'cup' }
 
-// "2 pieces", "1 clove", "300 g"
 export function formatQty(qty, unit) {
   if (unit === 'piece' || unit === 'pcs') return qty === 1 ? '1 piece' : `${qty} pieces`
   if (unit === 'clove') return qty === 1 ? '1 clove' : `${qty} cloves`

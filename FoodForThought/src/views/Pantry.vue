@@ -1,21 +1,21 @@
 <script setup>
+import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { ref, computed, onMounted } from 'vue'
 import { createApi, errorMessage } from '@/services/api'
 import { toISODate, daysUntil } from '@/utils/dates'
-import { PANTRY_UNITS as UNITS, PANTRY_CATEGORIES as CATEGORIES, formatQty } from '@/constants/pantry'
+import { PANTRY_UNITS as UNITS, PANTRY_STORAGE_UNITS as STORAGE_UNITS, SPOON_UNITS, PANTRY_CATEGORIES as CATEGORIES, formatQty } from '@/constants/pantry'
 import { categoryStyle } from '@/constants/categoryColors'
 import suggestionsModal from '../components/SuggestionModal.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import PageIntro from '@/components/ui/PageIntro.vue'
 import { useConfirm } from '@/composables/useConfirm'
-// Colours, fonts, h1/h2/h3, .btn and .form-control come from the team's shared theme.css (.fft-page).
-// The page-specific styles are in the <style scoped> block at the bottom.
 
 /* ---------- API ---------- */
-// Same setup as Planner.vue: send the JWT from the auth store, log out on 401.
-// The server works out the user from the token (requireAuth -> req.user -> req.userId).
 const auth = useAuthStore()
 const router = useRouter()
+const confirm = useConfirm()
 
 function withAuth(instance) {
   instance.interceptors.request.use((config) => {
@@ -35,16 +35,12 @@ function withAuth(instance) {
   return instance
 }
 
-// Pantry requests go to the Express router mounted at /pantry (routes/pantry/pantry.js)
 const api = withAuth(axios.create({ baseURL: 'http://localhost:8000/pantry' }))
 
-// Works whether the model sends `id` or Mongo's `_id`
 const idOf = (item) => item.id || item._id
 
 /* ---------- Expiry ---------- */
-// UNITS and CATEGORIES come from constants/pantry.js (shared with the shopping list)
 function expiryPill(item) {
-  // Nothing left (e.g. used up by cooking a planned meal): say so instead of "0 pcs" with a use-by date
   if (item.quantity <= 0) return { text: 'Used up', class: 'fft-pill-gray' }
   const n = daysUntil(item.expiryDate)
   if (n === null) return null
@@ -59,7 +55,7 @@ const items = ref([])
 const loading = ref(true)
 const saving = ref(false)
 const errorMsg = ref('')
-const notice = ref('') // short "Added eggs" style message after a save
+const notice = ref('')
 let noticeTimer = null
 
 function showNotice(text) {
@@ -80,131 +76,10 @@ async function loadPantry() {
     loading.value = false
   }
 }
-const neighbours = ref([])
-const availableUsers = ref([])
-const selectedNeighbourId = ref('')
-const selectedNeighbour = ref(null)
-const neighbourPantry = ref([])
-const selectedBorrowItems = ref([])
-const neighbourNotice = ref('')
-const neighbourLoading = ref(false)
-const neighbourDebug = ref('')
-const pendingRequests = ref([])
-
-async function loadRequests() {
-  try {
-    const { data } = await api.get('/requests')
-    pendingRequests.value = (data.requests || []).filter((request) => (request.status || 'pending') === 'pending')
-  } catch (err) {
-    pendingRequests.value = []
-  }
-}
-
-async function updateRequestStatus(requestId, status) {
-  try {
-    const { data } = await api.patch(`/requests/${requestId}`, { status })
-    neighbourNotice.value = data.message
-    await loadRequests()
-  } catch (err) {
-    neighbourNotice.value = err.response?.data?.message || 'Could not update this request.'
-  }
-}
-
-async function loadNeighbours() {
-  neighbourDebug.value = ''
-  try {
-    const { data } = await api.get('/neighbours')
-    neighbours.value = data.friends || []
-    availableUsers.value = data.availableUsers || []
-    neighbourDebug.value = `Loaded neighbours: ${neighbours.value.length} friends, ${availableUsers.value.length} available users.`
-  } catch (err) {
-    neighbours.value = []
-    availableUsers.value = []
-    const message = err.response?.data?.message || 'Could not load your neighbour list.'
-    neighbourDebug.value = `Neighbour request failed: ${message}`
-    errorMsg.value = message
-  }
-}
-
-async function addNeighbour() {
-  if (!selectedNeighbourId.value) return
-
-  try {
-    const { data } = await api.post(`/friends/${selectedNeighbourId.value}`)
-    neighbourNotice.value = data.message
-    selectedNeighbourId.value = ''
-    await loadNeighbours()
-  } catch (err) {
-    neighbourNotice.value = err.response?.data?.message || 'Could not add this neighbour.'
-  }
-}
-
-async function viewNeighbour(friendId) {
-  selectedNeighbourId.value = friendId
-  selectedBorrowItems.value = []
-  neighbourLoading.value = true
-  neighbourNotice.value = ''
-
-  try {
-    const { data } = await api.get(`/neighbours/${friendId}`)
-    selectedNeighbour.value = data.friend
-    neighbourPantry.value = data.items || []
-  } catch (err) {
-    selectedNeighbour.value = null
-    neighbourPantry.value = []
-    neighbourNotice.value = err.response?.data?.message || 'Could not load this pantry.'
-  } finally {
-    neighbourLoading.value = false
-  }
-}
-
-function toggleBorrowItem(item) {
-  const id = item._id || item.id
-  const exists = selectedBorrowItems.value.some((selected) => (selected.itemId || selected._id || selected.id) === id)
-
-  if (exists) {
-    selectedBorrowItems.value = selectedBorrowItems.value.filter((selected) => (selected.itemId || selected._id || selected.id) !== id)
-    return
-  }
-
-  selectedBorrowItems.value.push({
-    itemId: id,
-    name: item.name,
-    quantity: item.quantity,
-    unit: item.unit,
-  })
-}
-
-async function requestNeighbourAction(type) {
-  if (!selectedNeighbourId.value) return
-
-  if (['borrow', 'takeover'].includes(type) && selectedBorrowItems.value.length === 0) {
-    neighbourNotice.value = 'Please select at least one item before sending this request.'
-    return
-  }
-
-  try {
-    const { data } = await api.post('/requests', {
-      friendId: selectedNeighbourId.value,
-      requestType: type,
-      items: selectedBorrowItems.value,
-      message: `Please approve a ${type} request.`,
-    })
-    neighbourNotice.value = data.message
-    selectedBorrowItems.value = []
-  } catch (err) {
-    neighbourNotice.value = err.response?.data?.message || 'Could not send the request.'
-  }
-}
-
 onMounted(() => {
   loadPantry()
-  loadNeighbours()
-  loadRequests()
 })
 
-// Every write returns the whole updated pantry ({ items }), so we just replace our copy.
-// Returns true if it saved, so callers can reset their form.
 async function saveChange(request) {
   saving.value = true
   errorMsg.value = ''
@@ -222,7 +97,7 @@ async function saveChange(request) {
 
 /* ---------- Metrics ---------- */
 const expiringSoon = computed(() => items.value.filter((i) => {
-  if (i.quantity <= 0) return false // nothing left to use
+  if (i.quantity <= 0) return false
   const n = daysUntil(i.expiryDate)
   return n !== null && n <= 3
 }))
@@ -237,7 +112,6 @@ const metrics = computed(() => [
 const search = ref('')
 const activeCategory = ref('all')
 
-// activeCategory: 'all', 'soon' (use within 3 days) or a category value
 const expiringIds = computed(() => new Set(expiringSoon.value.map(idOf)))
 const matchesFilter = (i) =>
   activeCategory.value === 'all' ||
@@ -248,7 +122,6 @@ const visibleItems = computed(() => {
   return items.value.filter((i) => matchesFilter(i) && (!q || i.name.toLowerCase().includes(q)))
 })
 
-// Clicking the "Use within 3 days" tile (or chip) shows just those items; clicking again shows everything
 function toggleUseSoon() {
   activeCategory.value = activeCategory.value === 'soon' ? 'all' : 'soon'
 }
@@ -256,7 +129,6 @@ function toggleUseSoon() {
 /* ---------- Add form: always open on desktop, folded behind a button on phones ---------- */
 const showAddForm = ref(false)
 
-// [{ meta, items }] in CATEGORIES order, only categories that have items
 const groups = computed(() =>
   CATEGORIES
     .map((meta) => ({
@@ -274,7 +146,6 @@ const usedCategories = computed(() => CATEGORIES.filter((c) => items.value.some(
 const emptyForm = () => ({ name: '', quantity: 1, unit: 'pcs', category: 'other', expiryDate: '' })
 const form = ref(emptyForm())
 
-// POST /pantry -> if the ingredient is already there, the server adds to its quantity
 async function onAdd() {
   const name = form.value.name.trim()
   if (!name) return
@@ -284,10 +155,9 @@ async function onAdd() {
   const idsBefore = new Set(items.value.map(idOf))
   if (!(await saveChange(api.post('/', body)))) return
 
-  // Tell the user whether it was new or merged into an existing item
   const added = items.value.find((i) => !idsBefore.has(idOf(i)))
   if (added) {
-    showNotice(`Added ${added.name}`)
+    showNotice(`Added ${added.name} (${formatQty(added.quantity, added.unit)})`)
   } else {
     const merged = items.value.find((i) => i.name.toLowerCase() === name.toLowerCase()) ||
       items.value.find((i) => i.normalizedName && name.toLowerCase().startsWith(i.normalizedName))
@@ -320,7 +190,6 @@ async function saveEdit(item) {
     errorMsg.value = 'Ingredient name is required'
     return
   }
-  // empty date = clear the expiry date
   const body = { ...editForm.value, name, expiryDate: editForm.value.expiryDate || null }
   if (await saveChange(api.patch(`/${idOf(item)}`, body))) {
     editingId.value = null
@@ -329,8 +198,6 @@ async function saveEdit(item) {
 }
 
 /* ---------- Quick +/- buttons on each row ---------- */
-// Used one egg? Tap minus instead of opening the edit form. Steps by 1 for pcs, else by a
-// sensible amount for the unit. Never below 0 ("Used up").
 const STEP = { pcs: 1, g: 100, kg: 0.5, ml: 100, l: 0.5, tsp: 1, tbsp: 1, cup: 0.5 }
 function adjust(item, direction) {
   const step = STEP[item.unit] || 1
@@ -340,19 +207,17 @@ function adjust(item, direction) {
 }
 
 /* ---------- Recipe suggestions modal ---------- */
-// The modal only displays results; this page does the API call, like the planner and its addmeal modal.
 const showSuggestions = ref(false)
 const suggestions = ref({ recipes: [], pantryCount: 0, message: '' })
 const suggestLoading = ref(false)
 const suggestError = ref('')
-let latestSuggest = 0 // ignore a slow response if the user searched again (same idea as the planner)
+let latestSuggest = 0
 
 function openSuggestions() {
   suggestError.value = ''
-  showSuggestions.value = true // the modal emits 'search' as soon as it opens
+  showSuggestions.value = true
 }
 
-// filters from the modal: { diet, intolerances: [], maxReadyTime }
 async function fetchSuggestions(filters) {
   const requestId = ++latestSuggest
   suggestLoading.value = true
@@ -444,138 +309,6 @@ async function onRemove(item) {
         </div>
       </section>
 
-      <!-- ============ NEIGHBOUR PANTRY ============ -->
-      <section class="px-4 pt-4">
-        <div class="container-fluid fft-container">
-          <div class="fft-card fft-card-bordered p-3 p-md-4">
-            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-3">
-              <div>
-                <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Neighbour pantry</span>
-                <h2 class="fft-headline-sm m-0">Share your fridge with trusted neighbours</h2>
-              </div>
-              <div class="d-flex gap-2 w-100 w-md-auto">
-                <select v-model="selectedNeighbourId" class="fft-input flex-grow-1" aria-label="Choose a neighbour">
-                  <option value="">Add or view a neighbour</option>
-                  <option v-for="user in availableUsers" :key="user._id" :value="user._id">
-                    {{ user.name }}
-                  </option>
-                </select>
-                <button type="button" class="btn fft-btn-primary" :disabled="!selectedNeighbourId" @click="addNeighbour">
-                  Add
-                </button>
-              </div>
-            </div>
-
-            <div v-if="neighbourNotice" class="alert alert-info mb-3" role="status">
-              {{ neighbourNotice }}
-            </div>
-            <div v-if="neighbourDebug" class="alert alert-secondary mb-3" role="status">
-              {{ neighbourDebug }}
-            </div>
-
-            <div class="row g-3">
-              <div class="col-12 col-lg-5">
-                <div class="fft-card fft-card-light p-3 h-100">
-                  <p class="fft-label-sm fft-upper text-fft-muted mb-2">Your neighbours</p>
-                  <div v-if="neighbours.length === 0" class="text-fft-muted">No neighbours yet. Add one to start sharing.</div>
-                  <div v-else class="d-flex flex-column gap-2">
-                    <button v-for="friend in neighbours" :key="friend._id" type="button"
-                      class="btn d-flex justify-content-between align-items-center text-start"
-                      :class="selectedNeighbourId === friend._id ? 'fft-btn-primary' : 'btn-outline-secondary'"
-                      @click="viewNeighbour(friend._id)">
-                      <span>{{ friend.name || 'Neighbour' }}</span>
-                      <span class="material-symbols-outlined" style="font-size: 18px">arrow_forward</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="col-12 col-lg-7">
-                <div class="fft-card fft-card-light p-3 h-100">
-                  <p class="fft-label-sm fft-upper text-fft-muted mb-2">Neighbour pantry</p>
-
-                  <div v-if="neighbourLoading" class="text-fft-muted">Loading pantry…</div>
-                  <div v-else-if="!selectedNeighbourId || !selectedNeighbour" class="text-fft-muted">
-                    Select a neighbour to view what they have in stock.
-                  </div>
-                  <div v-else>
-                    <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
-                      <h3 class="fft-headline-sm m-0">{{ selectedNeighbour.name }}'s pantry</h3>
-                      <div class="d-flex gap-2 flex-wrap">
-                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('buy')">Buy</button>
-                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('borrow')">Borrow</button>
-                        <button type="button" class="btn btn-sm fft-btn-ghost" @click="requestNeighbourAction('takeover')">Takeover</button>
-                      </div>
-                    </div>
-
-                    <div v-if="neighbourPantry.length === 0" class="text-fft-muted">
-                      This pantry is empty right now.
-                    </div>
-                    <div v-else class="d-flex flex-column gap-2">
-                      <div v-for="item in neighbourPantry" :key="item._id || item.id" class="d-flex justify-content-between align-items-center border rounded p-2 gap-2">
-                        <div class="d-flex align-items-center gap-2">
-                          <input type="checkbox" :checked="selectedBorrowItems.some((selected) => (selected.itemId || selected._id || selected.id) === (item._id || item.id))" @change="toggleBorrowItem(item)" />
-                          <div>
-                            <div class="fw-semibold">{{ item.name }}</div>
-                            <small class="text-fft-muted">{{ item.quantity }} {{ item.unit }} · {{ item.category }}</small>
-                          </div>
-                        </div>
-                        <span v-if="item.expiryDate" class="fft-pill fft-pill-gray">{{ item.expiryDate.slice(0,10) }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ REQUESTS ============ -->
-      <section class="px-4 pt-4">
-        <div class="container-fluid fft-container">
-          <div class="fft-card fft-card-bordered p-3 p-md-4">
-            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
-              <div>
-                <span class="fft-label-sm fft-upper text-fft-outline fw-semibold">Requests</span>
-                <h2 class="fft-headline-sm m-0">Borrow and pantry requests</h2>
-              </div>
-            </div>
-
-            <div v-if="pendingRequests.length === 0" class="text-fft-muted">
-              No pending requests yet.
-            </div>
-
-            <div v-else class="d-flex flex-column gap-3">
-              <div v-for="request in pendingRequests" :key="request._id" class="border rounded p-3">
-                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                  <div>
-                    <div class="fw-semibold">{{ request.requester?.name || 'Neighbour' }} requested to {{ request.requestType }}</div>
-                    <small class="text-fft-muted">{{ new Date(request.createdAt).toLocaleString() }}</small>
-                  </div>
-                  <span class="fft-pill fft-pill-amber">{{ request.status }}</span>
-                </div>
-
-                <div v-if="request.items?.length" class="mt-3 d-flex flex-column gap-1">
-                  <div v-for="item in request.items" :key="item.itemId" class="small text-fft-muted">
-                    • {{ item.name }} · {{ item.quantity }} {{ item.unit }}
-                  </div>
-                </div>
-
-                <div v-if="request.message" class="mt-2 small text-fft-muted">
-                  {{ request.message }}
-                </div>
-
-                <div class="d-flex gap-2 mt-3">
-                  <button type="button" class="btn btn-sm fft-btn-primary" @click="updateRequestStatus(request._id, 'approved')">Approve</button>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" @click="updateRequestStatus(request._id, 'rejected')">Reject</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- ============ PANTRY ============ -->
       <section class="px-4 py-4">
         <div class="container-fluid fft-container">
@@ -616,9 +349,12 @@ async function onRemove(item) {
                   </div>
                   <div class="col-6 d-flex flex-column gap-1">
                     <label class="fft-label-sm text-fft-muted" for="ing-unit">Unit</label>
-                    <select id="ing-unit" v-model="form.unit" class="fft-input">
+                    <select id="ing-unit" v-model="form.unit" class="fft-input" aria-describedby="ing-unit-hint">
                       <option v-for="u in UNITS" :key="u" :value="u">{{ u }}</option>
                     </select>
+                    <small v-if="SPOON_UNITS.includes(form.unit)" id="ing-unit-hint" class="text-fft-muted" data-testid="pantry-unit-hint">
+                      Saved as g or ml
+                    </small>
                   </div>
                 </div>
 
@@ -706,7 +442,7 @@ async function onRemove(item) {
                       </div>
                       <div class="col-6 col-md-2">
                         <select v-model="editForm.unit" class="fft-input" aria-label="Unit">
-                          <option v-for="u in UNITS" :key="u" :value="u">{{ u }}</option>
+                          <option v-for="u in STORAGE_UNITS" :key="u" :value="u">{{ u }}</option>
                         </select>
                       </div>
                       <div class="col-6 col-md-2">
@@ -774,8 +510,7 @@ async function onRemove(item) {
 </template>
 
 <style scoped>
-/* ===== Quick +/- quantity buttons on each row ===== */
-.fft-stepper {
+/* ===== Quick +/- quantity buttons on each row ===== */.fft-stepper {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -799,11 +534,9 @@ async function onRemove(item) {
 .fft-stepper-btn:disabled { opacity: 0.35; }
 .fft-stepper-value { min-width: 56px; text-align: center; }
 
-/* ===== Extra colours this page needs that theme.css doesn't have ===== */
-.fft-pantry {
+/* ===== Extra colours this page needs that theme.css doesn't have ===== */.fft-pantry {
   --fft-surface-mid: #EEEEE8;
-  --fft-accent: #A23E18;      /* dark orange text, pairs with --fft-peach */
-  --fft-amber: #FFDDB5;
+  --fft-accent: #A23E18;       --fft-amber: #FFDDB5;
   --fft-amber-text: #2A1800;
   --fft-on-primary: #FFFFFF;
 
@@ -825,15 +558,13 @@ async function onRemove(item) {
   user-select: none;
 }
 
-/* ===== Layout ===== */
-.fft-main {
+/* ===== Layout ===== */.fft-main {
   min-height: 100vh;
   min-height: 100dvh;
 }
 
 .fft-container {
-  /* same content width as the planner and shopping list */
-  max-width: 1140px;
+   max-width: 1140px;
   padding-left: 0;
   padding-right: 0;
 }
@@ -845,7 +576,6 @@ async function onRemove(item) {
   }
 }
 
-/* "Use within 3 days" tile works as a filter button */
 .fft-tile--action {
   border: 1px solid transparent;
   cursor: pointer;
@@ -857,7 +587,6 @@ async function onRemove(item) {
   border-color: var(--fft-secondary, #a23e18);
 }
 
-/* category chips: wrap on desktop, one sideways-scrolling row on phones */
 .fft-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -902,8 +631,7 @@ async function onRemove(item) {
   min-width: 0;
 }
 
-/* ===== Typography ===== */
-.fft-headline-md {
+/* ===== Typography ===== */.fft-headline-md {
   font: 500 24px/32px 'Outfit', sans-serif;
 }
 
@@ -954,8 +682,7 @@ h3.fft-headline-sm {
   color: var(--fft-text) !important;
 }
 
-/* ===== Buttons (base .btn font/padding/radius come from theme.css) ===== */
-.btn {
+/* ===== Buttons (base .btn font/padding/radius come from theme.css) ===== */.btn {
   border: 0;
   transition: background-color 0.15s, color 0.15s;
 }
@@ -1001,8 +728,7 @@ h3.fft-headline-sm {
   padding: 10px 20px;
 }
 
-/* ===== Tag, tiles, round icons ===== */
-.fft-tag {
+/* ===== Tag, tiles, round icons ===== */.fft-tag {
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1041,8 +767,7 @@ h3.fft-headline-sm {
   background: var(--fft-peach);
 }
 
-/* ===== Cards ===== */
-.fft-card {
+/* ===== Cards ===== */.fft-card {
   background: var(--fft-card);
   padding: 16px;
   border-radius: var(--fft-radius-2xl);
@@ -1057,8 +782,7 @@ h3.fft-headline-sm {
   border: 1px solid rgba(194, 200, 192, 0.4);
 }
 
-/* ===== Pills ===== */
-.fft-pill {
+/* ===== Pills ===== */.fft-pill {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 9999px;
@@ -1081,7 +805,6 @@ h3.fft-headline-sm {
   color: var(--fft-amber-text);
 }
 
-/* small count badge on each category header */
 .fft-day-count {
   font: 600 11px/14px 'Inter', sans-serif;
   padding: 1px 6px;
@@ -1090,8 +813,7 @@ h3.fft-headline-sm {
   color: var(--fft-muted);
 }
 
-/* ===== Search + category chips ===== */
-.fft-search-icon {
+/* ===== Search + category chips ===== */.fft-search-icon {
   position: absolute;
   left: 16px;
   top: 50%;
@@ -1134,8 +856,7 @@ h3.fft-headline-sm {
   color: var(--fft-primary-light);
 }
 
-/* ===== Form inputs ===== */
-.fft-input {
+/* ===== Form inputs ===== */.fft-input {
   width: 100%;
   padding: 8px 12px;
   background: var(--fft-surface-low);
@@ -1152,8 +873,7 @@ h3.fft-headline-sm {
   border-color: var(--fft-primary);
 }
 
-/* ===== Pantry list ===== */
-.fft-chip--cat { display: inline-flex; align-items: center; gap: 6px; }
+/* ===== Pantry list ===== */.fft-chip--cat { display: inline-flex; align-items: center; gap: 6px; }
 .fft-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cat-ink); }
 .fft-chip--cat.active { background: var(--cat-ink) !important; color: #fff !important; }
 .fft-chip--cat.active .fft-chip-dot { background: #fff; }
@@ -1202,8 +922,6 @@ h3.fft-headline-sm {
   border-top: 0;
 }
 
-/* phones: name (and its expiry pill) on top, the +/- and buttons on a second line,
-   so names aren't cut down to "To…" next to the quantity controls */
 @media (max-width: 575.98px) {
   .fft-pantry-row {
     flex-wrap: wrap;
@@ -1219,8 +937,7 @@ h3.fft-headline-sm {
   }
 }
 
-/* ===== Loading spinner ===== */
-.fft-spin {
+/* ===== Loading spinner ===== */.fft-spin {
   animation: fft-spin 0.7s linear infinite;
 }
 

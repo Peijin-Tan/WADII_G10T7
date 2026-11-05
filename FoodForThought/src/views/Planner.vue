@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createApi, errorMessage } from '@/services/api'
 import { addDays, toISODate, mondayOf, startOfToday } from '@/utils/dates'
@@ -11,8 +11,6 @@ import PageIntro from '@/components/ui/PageIntro.vue'
 import { useConfirm } from '@/composables/useConfirm'
 
 /* ---------- API ---------- */
-// createApi (services/api.js) sends the login token and logs out on 401.
-// Planner requests go to /planner; the grocery button talks to /shoppinglist.
 const api = createApi('/planner')
 const shoppingApi = createApi('/shoppinglist')
 const router = useRouter()
@@ -25,11 +23,11 @@ const sameDay = (a, b) => a.getTime() === b.getTime()
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const today = startOfToday()
-const todayIndex = (today.getDay() + 6) % 7 // Monday = 0
+const todayIndex = (today.getDay() + 6) % 7
 const thisMonday = mondayOf(today)
 
 /* ---------- Week navigation ---------- */
-const weekOffset = ref(0) // 0 = this week, 1 = next week, -1 = last week
+const weekOffset = ref(0)
 
 const weekStart = computed(() => addDays(thisMonday, weekOffset.value * 7))
 const weekEnd = computed(() => addDays(weekStart.value, 6))
@@ -49,12 +47,12 @@ const weekLabel = computed(() => {
 })
 
 /* ---------- Loading the week from the backend ---------- */
-const plan = ref({ id: null, entries: [] }) // what GET /api/planner returns
+const plan = ref({ id: null, entries: [] })
 const loading = ref(false)
 const saving = ref(false)
 const errorMsg = ref('')
 
-let latestRequest = 0 // ignore slow responses if the user already moved to another week
+let latestRequest = 0
 
 async function loadWeek() {
   const requestId = ++latestRequest
@@ -73,10 +71,8 @@ async function loadWeek() {
   }
 }
 
-// reload whenever the user changes week (and once on page load)
 watch(weekStartISO, loadWeek, { immediate: true })
 
-// Recipes shown in the Add Meal and Swap modals
 const recipeOptions = ref([])
 async function loadRecipeOptions() {
   try {
@@ -88,15 +84,12 @@ async function loadRecipeOptions() {
 }
 onMounted(loadRecipeOptions)
 
-// Every write endpoint returns the updated week, so we just replace our copy.
-// Returns the response data (or null if it failed), e.g. so status changes can read pantryUpdate.
 async function saveChange(request) {
   saving.value = true
   errorMsg.value = ''
-  pantryNote.value = null
   try {
     const res = await request
-    latestRequest++ // a load that was still in flight is now out of date
+    latestRequest++
     loading.value = false
     plan.value = res.data
     return res.data
@@ -108,56 +101,24 @@ async function saveChange(request) {
   }
 }
 
-/* ---------- What cooking did to the pantry ---------- */
-// PATCH returns pantryUpdate: { deducted: [{ name, quantity, unit }], skipped: [{ name, reason }] }
-// when a meal is marked Cooked, or { restored: [...] } when that is undone. Shown as a message,
-// so the user can see the pantry change instead of it happening silently.
-const pantryNote = ref(null) // { tone, title, lines: [] }
-
-const amountText = (d) => `${d.quantity} ${d.unit} ${d.name}`
-const listText = (names) => names.join(', ')
-
-function describePantryUpdate(update, title) {
-  if (!update) return null
-  if (update.restored) {
-    if (!update.restored.length) return null
-    return {
-      tone: 'info',
-      title: `${title} is back to Planned`,
-      lines: [`Put back in your pantry: ${listText(update.restored.map(amountText))}.`],
-    }
-  }
-  const lines = []
-  if (update.deducted?.length) lines.push(`Taken from your pantry: ${listText(update.deducted.map(amountText))}.`)
-  const missing = (update.skipped || []).filter((s) => s.reason === 'not in pantry').map((s) => s.name)
-  const unconverted = (update.skipped || []).filter((s) => s.reason !== 'not in pantry')
-  if (missing.length) lines.push(`Not in your pantry, so nothing was taken: ${listText(missing)}.`)
-  unconverted.forEach((s) => lines.push(`${capitalize(s.name)}: ${s.reason}, so update it on the Pantry page if you used some.`))
-  if (!lines.length) return null
-  return { tone: update.deducted?.length ? 'success' : 'warning', title: `Enjoy your ${title}!`, lines }
-}
-
 /* ---------- Turning API entries into what the cards + modals need ---------- */
 const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack']
-// Shown when a recipe has no photo (custom meals, user recipes without an image)
 const SLOT_PILL = { breakfast: 'fft-pill-gray', lunch: 'fft-pill-green', dinner: 'fft-pill-amber', snack: 'fft-pill-peach' }
 
 const entries = computed(() =>
   plan.value.entries.map((e) => ({
     ...e,
-    slotKey: e.mealSlot, // 'dinner' (what the API uses)
-    mealSlot: capitalize(e.mealSlot), // 'Dinner' (what the modals display)
+    slotKey: e.mealSlot,
+    mealSlot: capitalize(e.mealSlot),
     day: fmt(addDays(weekStart.value, e.dayOfWeek), { weekday: 'long' }),
   }))
 )
 
 const hasPlan = computed(() => entries.value.length > 0)
 
-// Skipped meals aren't eaten, so they add no calories (same rule as the macro split below)
 const kcalOf = (entry) => (entry.status === 'Skipped' ? 0 : entry.recipe.nutrition.calories || 0)
 const sum = (list, fn) => list.reduce((total, item) => total + fn(item), 0)
 
-// entriesByDay[0] = Monday's meals, sorted breakfast -> snack
 const entriesByDay = computed(() => {
   const byDay = Array.from({ length: 7 }, () => [])
   for (const e of entries.value) byDay[e.dayOfWeek].push(e)
@@ -205,8 +166,6 @@ const activeDayLong = computed(() =>
   fmt(days.value[activeIndex.value].date, { weekday: 'long', month: 'short', day: 'numeric' })
 )
 
-// A past day is only "Completed" once every meal was logged (Cooked or Skipped);
-// otherwise remind the user to log it, so the pantry stays accurate.
 const dayStatus = computed(() => {
   const d = days.value[activeIndex.value].date
   const stillPlanned = activeEntries.value.some((e) => e.status === 'Planned')
@@ -228,7 +187,6 @@ const daySummary = computed(() => {
   }
 })
 
-// Ingredients not in the pantry across this week's non-skipped meals (unique by name)
 const missingIngredients = computed(() => {
   const names = new Set()
   for (const e of entries.value) {
@@ -247,7 +205,7 @@ const ctaText = computed(() =>
 )
 
 /* ---------- Modals ---------- */
-const addTarget = ref(null) // { date: 'YYYY-MM-DD', mealSlot: 'Dinner' }
+const addTarget = ref(null)
 const selectedEntry = ref(null)
 const swapEntry = ref(null)
 
@@ -255,8 +213,6 @@ function openAddMeal(slot = 'Dinner') {
   addTarget.value = { date: toISODate(days.value[activeIndex.value].date), mealSlot: slot }
 }
 
-// The Dashboard's "+ Plan" buttons link here as /planner?day=3&add=dinner:
-// jump to that day (this week) and open the Add Meal modal for that meal time.
 onMounted(() => {
   const day = Number(route.query.day)
   const slot = String(route.query.add || '')
@@ -264,14 +220,12 @@ onMounted(() => {
   weekOffset.value = 0
   activeIndex.value = day
   openAddMeal(capitalize(slot))
-  router.replace({ query: {} }) // so refreshing the page doesn't reopen the modal
+  router.replace({ query: {} })
 })
 
 /* ---------- Add Meal modal: searching saved + Spoonacular recipes ---------- */
-// The modal emits 'search' as the user types (debounced); this page calls the API and passes
-// the results back in as props (same pattern as the pantry's suggestions modal).
 const recipeSearch = ref({ query: '', saved: [], online: [], warning: '', loading: false, error: '' })
-let latestSearch = 0 // ignore a slow response if the user has typed something newer
+let latestSearch = 0
 
 async function searchRecipes(query) {
   const requestId = ++latestSearch
@@ -290,14 +244,13 @@ async function searchRecipes(query) {
 
 function closeAddMeal() {
   addTarget.value = null
-  latestSearch++ // drop any search still in flight
+  latestSearch++
   recipeSearch.value = { query: '', saved: [], online: [], warning: '', loading: false, error: '' }
 }
 
-// payload from addmeal.vue: { date, day, mealSlot: 'Dinner', servings, recipe }
 async function addMealToPlan(payload) {
   const chosenDay = new Date(`${payload.date}T00:00:00`)
-  const dayOfWeek = Math.round((chosenDay - weekStart.value) / 86400000) // ms in a day
+  const dayOfWeek = Math.round((chosenDay - weekStart.value) / 86400000)
   const body = {
     start: weekStartISO.value,
     dayOfWeek,
@@ -305,26 +258,48 @@ async function addMealToPlan(payload) {
     servings: payload.servings,
   }
   if (payload.recipe.source === 'spoonacular') {
-    // Not in our database yet: the server fetches the full recipe from Spoonacular and saves it first
     body.spoonacularId = payload.recipe.externalId
   } else {
     body.recipeId = payload.recipe.id
   }
   await saveChange(api.post('/entries', body))
-  if (errorMsg.value) return // saveChange shows the error (e.g. Spoonacular quota reached)
-  activeIndex.value = dayOfWeek // jump to the day the meal was added to
-  if (body.spoonacularId) loadRecipeOptions() // the new recipe is saved now, so it shows in Quick Suggestions and Swap
+  if (errorMsg.value) return
+  activeIndex.value = dayOfWeek
+  if (body.spoonacularId) loadRecipeOptions()
 }
 
-// from viewRecipe.vue and the status dropdown on each card: { entryId, status }
 async function onStatusChange({ entryId, status }) {
-  const title = plan.value.entries.find((e) => e.id === entryId)?.recipe.title || 'this meal'
   const data = await saveChange(api.patch(`/entries/${entryId}`, { status }))
-  if (data) pantryNote.value = describePantryUpdate(data.pantryUpdate, title)
+  if (data) showPantryToast(data.pantryUpdate)
 }
+
+/* ---------- Small pantry message after a status change ---------- */
+const pantryToast = ref('')
+let toastTimer
+
+function shortList(names) {
+  if (names.length <= 3) return names.join(', ')
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+}
+
+function showPantryToast(update) {
+  if (!update) return
+  let text = ''
+  if (update.restored?.length) {
+    text = `Put back in your pantry: ${shortList(update.restored.map((d) => d.name))}`
+  } else if (update.deducted?.length) {
+    text = `Deducted from your pantry: ${shortList(update.deducted.map((d) => d.name))}`
+  } else if (update.skipped?.length) {
+    text = "Marked as cooked. None of its ingredients were in your pantry."
+  }
+  if (!text) return
+  pantryToast.value = text
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (pantryToast.value = ''), 4000)
+}
+onBeforeUnmount(() => clearTimeout(toastTimer))
 
 /* ---------- Card controls: status + meal time ---------- */
-// value = what the database stores, label/icon/tone = how the picker on the card looks
 const STATUS_OPTIONS = [
   { value: 'Planned', label: 'Planned', icon: 'schedule', tone: 'planned' },
   { value: 'Cooked', label: 'Cooked', icon: 'check_circle', tone: 'cooked' },
@@ -339,8 +314,6 @@ const SLOT_OPTIONS = [
 const statusMeta = (status) => STATUS_OPTIONS.find((s) => s.value === status) || STATUS_OPTIONS[0]
 const slotMeta = (slot) => SLOT_OPTIONS.find((s) => s.value === slot) || SLOT_OPTIONS[0]
 
-// The pickers always show the saved value (not v-model), so the server stays the source of truth.
-// If a save fails, bumping this key re-draws the pickers back to the saved value.
 const controlsKey = ref(0)
 
 async function changeStatus(entry, status) {
@@ -349,14 +322,12 @@ async function changeStatus(entry, status) {
   if (errorMsg.value) controlsKey.value++
 }
 
-// Moving to a meal time that's already taken that day swaps the two meals (handled by the server)
 async function changeMealTime(entry, slot) {
   if (slot === entry.slotKey) return
   await saveChange(api.patch(`/entries/${entry.id}`, { mealSlot: slot }))
   if (errorMsg.value) controlsKey.value++
 }
 
-// from swapRecipe.vue: { entryId, recipe }
 function swapMeal({ entryId, recipe }) {
   return saveChange(api.patch(`/entries/${entryId}`, { recipeId: recipe.id }))
 }
@@ -364,7 +335,6 @@ function swapMeal({ entryId, recipe }) {
 async function removeEntry(entry) {
   const ok = await confirm({
     title: `Remove ${entry.recipe.title}?`,
-    // a Cooked meal keeps what it took from the pantry: it was eaten, removing it doesn't un-cook it
     message: entry.status === 'Cooked'
       ? `It comes off ${entry.day}'s ${entry.mealSlot.toLowerCase()}. What it used from your pantry stays used.`
       : `It comes off ${entry.day}'s ${entry.mealSlot.toLowerCase()} and its ingredients leave your shopping list next time you update it.`,
@@ -375,8 +345,6 @@ async function removeEntry(entry) {
 }
 
 /* ---------- Weekly macro split (stats row) ---------- */
-// Share of the week's calories that come from each macro (protein & carbs = 4 kcal/g, fat = 9 kcal/g).
-// Skipped meals aren't eaten, so they don't count. Shown as one split bar next to the stat tiles.
 const macros = computed(() => {
   const eaten = entries.value.filter((e) => e.status !== 'Skipped')
   const grams = (key) => Math.round(sum(eaten, (e) => e.recipe.nutrition[key] || 0))
@@ -394,10 +362,8 @@ const macros = computed(() => {
 const hasMacros = computed(() => macros.value.some((m) => m.grams > 0))
 
 /* ---------- Grocery sync button ---------- */
-// Rebuilds this week's shopping list from the meal plan on the server.
-// The server keeps items the user added by hand and items already ticked off.
-const syncState = ref('idle') // idle | syncing | done
-const itemsToBuy = ref(0) // how many items on the rebuilt list still need buying
+const syncState = ref('idle')
+const itemsToBuy = ref(0)
 
 const syncLabel = computed(() => {
   if (syncState.value === 'syncing') return 'Updating Grocery List...'
@@ -412,7 +378,6 @@ const syncIcon = computed(() => {
   return 'post_add'
 })
 
-// Same week as the planner, so "Go to shopping list" opens the matching list
 const shoppingListLink = computed(() => ({ path: '/shoppinglist', query: { start: weekStartISO.value } }))
 
 async function sendToGrocery() {
@@ -421,10 +386,8 @@ async function sendToGrocery() {
   errorMsg.value = ''
   try {
     const { data } = await shoppingApi.post('/generate', { start: weekStartISO.value })
-    // quantity 0 = the pantry already covers it; purchased = already ticked off
     itemsToBuy.value = data.items.filter((item) => item.quantity > 0 && !item.purchased).length
     syncState.value = 'done'
-    // Show "N items to buy" for a moment, then open the list (that's what the user wants next)
     setTimeout(() => {
       syncState.value = 'idle'
       router.push(shoppingListLink.value)
@@ -524,10 +487,6 @@ async function sendToGrocery() {
 
           <AppAlert v-if="errorMsg" tone="error" title="That didn't work" @dismiss="errorMsg = ''">
             {{ errorMsg }}
-          </AppAlert>
-          <AppAlert v-if="pantryNote" :tone="pantryNote.tone" :title="pantryNote.title" icon="kitchen"
-            @dismiss="pantryNote = null">
-            <p v-for="line in pantryNote.lines" :key="line" class="m-0">{{ line }}</p>
           </AppAlert>
 
           <div class="row g-4 align-items-start">
@@ -669,14 +628,12 @@ async function sendToGrocery() {
                           <span v-if="entry.recipe.prepMinutes">{{ entry.recipe.prepMinutes }}m prep</span>
                         </div>
 
-                        <div v-if="entry.recipe.ingredients.length" class="d-flex align-items-center flex-wrap gap-2">
+                        <!-- Up to 4 ingredients you already have (only shown when there's at least one) -->
+                        <div v-if="entry.recipe.ingredients.some((i) => i.inPantry)" class="d-flex align-items-center flex-wrap gap-2">
                           <span class="fft-label-sm text-fft-outline">Pantry:</span>
                           <span v-for="ing in entry.recipe.ingredients.filter((i) => i.inPantry).slice(0, 4)"
                             :key="ing.name" class="fft-label-sm text-fft-primary d-flex align-items-center">
                             <span class="material-symbols-outlined" style="font-size: 14px">check</span>{{ ing.name }}
-                          </span>
-                          <span v-if="entry.recipe.ingredients.some((i) => !i.inPantry)" class="fft-pill fft-pill-peach fw-semibold">
-                            {{ entry.recipe.ingredients.filter((i) => !i.inPantry).length }} to buy
                           </span>
                         </div>
                       </div>
@@ -744,11 +701,65 @@ async function sendToGrocery() {
         </div>
       </section>
     </main>
+
+    <!-- Small message after marking a meal Cooked (see showPantryToast). Tap to close. -->
+    <Transition name="pantry-toast">
+      <button v-if="pantryToast" type="button" class="pantry-toast" role="status" aria-live="polite"
+        title="Close" @click="pantryToast = ''">
+        <span class="material-symbols-outlined" aria-hidden="true">kitchen</span>
+        <span>{{ pantryToast }}</span>
+      </button>
+    </Transition>
   </div>
 </template>
 <style scoped>
-/* ===== Design tokens (from the original Tailwind config) ===== */
-.foodforthought {
+/* ---------- Small pantry message (bottom of the screen) ---------- */.pantry-toast {
+  position: fixed;
+  right: 0;
+  bottom: 24px;
+  left: 0;
+  z-index: 1060;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;  max-width: min(520px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: #1f3a27;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: #fff;
+  font: 500 14px/20px 'Inter', sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.pantry-toast .material-symbols-outlined {
+  flex: none;
+  color: #c7ecce;
+  font-size: 20px;
+}
+.pantry-toast-enter-active,
+.pantry-toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.pantry-toast-enter-from,
+.pantry-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pantry-toast-enter-active,
+  .pantry-toast-leave-active {
+    transition: opacity 0.2s ease;
+  }
+  .pantry-toast-enter-from,
+  .pantry-toast-leave-to {
+    transform: none;
+  }
+}
+
+/* ===== Design tokens (from the original Tailwind config) ===== */.foodforthought {
   --fft-background: #fafaf3;
   --fft-surface: #fafaf3;
   --fft-surface-lowest: #ffffff;
@@ -809,8 +820,7 @@ async function sendToGrocery() {
   user-select: none;
 }
 
-/* ===== Typography helpers ===== */
-.foodforthought .fft-headline-lg {
+/* ===== Typography helpers ===== */.foodforthought .fft-headline-lg {
   font: 600 32px/40px 'Outfit', sans-serif;
   letter-spacing: -0.01em;
 }
@@ -878,7 +888,6 @@ async function sendToGrocery() {
 }
 
 /* ===== Week switcher + icon buttons ===== */
-
 .foodforthought .fft-week-switcher {
   background: var(--fft-surface-low);
   padding: 4px;
@@ -917,8 +926,7 @@ async function sendToGrocery() {
   font-size: 18px;
 }
 
-/* ===== Buttons ===== */
-.foodforthought .btn {
+/* ===== Buttons ===== */.foodforthought .btn {
   border: 0;
   border-radius: var(--fft-radius);
   font: 600 12px/16px 'Inter', sans-serif;
@@ -959,8 +967,7 @@ async function sendToGrocery() {
   background: transparent;
 }
 
-/* ===== Main layout ===== */
-.foodforthought .fft-main {
+/* ===== Main layout ===== */.foodforthought .fft-main {
   padding-top: 0;
   background: var(--fft-background);
   min-height: 100vh;
@@ -968,14 +975,12 @@ async function sendToGrocery() {
 }
 
 .foodforthought .fft-container {
-  /* same content width on the planner, shopping list and pantry */
-  max-width: 1140px;
+   max-width: 1140px;
   padding-left: 0;
   padding-right: 0;
 }
 
-/* ===== Control bar ===== */
-.foodforthought .fft-controls {
+/* ===== Control bar ===== */.foodforthought .fft-controls {
   background: var(--fft-surface-low);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
@@ -1014,8 +1019,7 @@ async function sendToGrocery() {
   color: var(--fft-on-primary-container);
 }
 
-/* ===== Cards, tiles, pills ===== */
-.foodforthought .fft-tile {
+/* ===== Cards, tiles, pills ===== */.foodforthought .fft-tile {
   background: var(--fft-surface-lowest);
   padding: 16px;
   border-radius: var(--fft-radius-xl);
@@ -1089,8 +1093,7 @@ async function sendToGrocery() {
   color: var(--fft-on-tertiary-fixed);
 }
 
-/* ===== Day strip ===== */
-.foodforthought .fft-day-strip {
+/* ===== Day strip ===== */.foodforthought .fft-day-strip {
   background: var(--fft-surface-low);
   padding: 4px;
   border-radius: var(--fft-radius-2xl);
@@ -1160,15 +1163,13 @@ async function sendToGrocery() {
   color: var(--fft-on-primary);
 }
 
-/* ===== Meal photo (same on every card) ===== */
-.foodforthought .fft-meal-img {
+/* ===== Meal photo (same on every card) ===== */.foodforthought .fft-meal-img {
   width: 100%;
   height: 170px;
   background: #e1ede1;
   overflow: hidden;
 }
 
-/* the photo fills its box instead of setting the card's height */
 .foodforthought .fft-meal-img img {
   position: absolute;
   inset: 0;
@@ -1184,8 +1185,7 @@ async function sendToGrocery() {
   }
 }
 
-/* ===== Meal card action bar ===== */
-.foodforthought .fft-meal-actions {
+/* ===== Meal card action bar ===== */.foodforthought .fft-meal-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1207,7 +1207,6 @@ async function sendToGrocery() {
   color: var(--fft-secondary);
 }
 
-/* a skipped meal fades back so the meals still to cook stand out */
 .foodforthought .fft-meal--skipped > :first-child {
   opacity: 0.6;
 }
@@ -1219,8 +1218,6 @@ async function sendToGrocery() {
   overflow: hidden;
 }
 
-/* "380 kcal · 14g protein · 1 serving": dots go BETWEEN items. The list is shifted left and
-   clipped, so the dot in front of the first item on each line is hidden, even after wrapping. */
 .foodforthought .fft-meta-list {
   display: flex;
   flex-wrap: wrap;
@@ -1243,8 +1240,7 @@ async function sendToGrocery() {
   color: var(--fft-outline);
 }
 
-/* ===== Weekly macro split ===== */
-.foodforthought .fft-macro-bar {
+/* ===== Weekly macro split ===== */.foodforthought .fft-macro-bar {
   display: flex;
   height: 10px;
   border-radius: 9999px;
@@ -1286,8 +1282,7 @@ async function sendToGrocery() {
 
 .foodforthought .fft-macro-fat { background: var(--fft-secondary); }
 
-/* ===== "Ready to shop?" bar under the day summary ===== */
-.foodforthought .fft-sync-bar {
+/* ===== "Ready to shop?" bar under the day summary ===== */.foodforthought .fft-sync-bar {
   padding: 12px 16px;
   border-top: 1px solid var(--fft-outline-variant, rgba(194, 200, 192, 0.6));
   background: var(--fft-surface-low);
@@ -1299,18 +1294,13 @@ async function sendToGrocery() {
 
 
 
-/* ===== Meal time picker =====
-   Each picker is a styled pill with a real <select> stretched invisibly over it:
-   clicking anywhere on the pill opens the native list (keyboard, screen readers and
-   phone pickers still work), while the pill shows the saved value. */
-.foodforthought .fft-controls-row {
+/* ===== Meal time picker ===== */.foodforthought .fft-controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-/* ---------- Meal slot label (Breakfast / Lunch / Dinner / Snack) ---------- */
-.foodforthought .fft-slot-pill {
+/* ---------- Meal slot label (Breakfast / Lunch / Dinner / Snack) ---------- */.foodforthought .fft-slot-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1320,9 +1310,7 @@ async function sendToGrocery() {
 }
 .foodforthought .fft-slot-pill .material-symbols-outlined { font-size: 18px; }
 
-/* ---------- Meal status: badge, coloured card edge, and the 3-way toggle ----------
-   amber = Planned, green = Cooked, rust = Skipped (the same three colours everywhere) */
-.foodforthought .fft-meal {
+/* ---------- Meal status: badge, coloured card edge, and the 3-way toggle ---------- */.foodforthought .fft-meal {
   border-left-width: 6px;
   border-left-style: solid;
 }
@@ -1359,8 +1347,7 @@ async function sendToGrocery() {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 44px; /* easy to tap on a phone */
-  padding: 0 16px;
+  min-height: 44px;  padding: 0 16px;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -1378,8 +1365,7 @@ async function sendToGrocery() {
 .foodforthought .fft-status-option--cooked[aria-checked='true'] { background: #2f6b45; }
 .foodforthought .fft-status-option--skipped[aria-checked='true'] { background: #a23e18; }
 
-/* ---------- Pill ---------- */
-.foodforthought .fft-picker {
+/* ---------- Pill ---------- */.foodforthought .fft-picker {
   --tone-bg: var(--fft-surface-low, #f4f4ed);
   --tone-bg-hover: var(--fft-surface-high, #e8e9e2);
   --tone-fg: var(--fft-on-surface, #1a1c18);
@@ -1387,8 +1373,7 @@ async function sendToGrocery() {
   --tone-border: rgba(194, 200, 192, 0.6);
 
   position: relative;
-  /* the invisible <select> is stretched over this */
-  display: flex;
+   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 168px;
@@ -1404,14 +1389,12 @@ async function sendToGrocery() {
   background: var(--tone-bg-hover);
 }
 
-/* keyboard focus lands on the hidden <select>, so show the ring on the pill */
 .foodforthought .fft-picker:focus-within {
   border-color: var(--fft-primary, #32533c);
   box-shadow: 0 0 0 3px rgba(50, 83, 60, 0.18);
 }
 
-/* ---------- Contents ---------- */
-.foodforthought .fft-picker-icon {
+/* ---------- Contents ---------- */.foodforthought .fft-picker-icon {
   font-size: 18px;
   color: var(--tone-icon);
   flex-shrink: 0;
@@ -1452,8 +1435,7 @@ async function sendToGrocery() {
 }
 }
 
-/* ---------- The real <select>, invisible but clickable ---------- */
-.foodforthought .fft-picker-select {
+/* ---------- The real <select>, invisible but clickable ---------- */.foodforthought .fft-picker-select {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1461,11 +1443,9 @@ async function sendToGrocery() {
   opacity: 0;
   cursor: pointer;
   font-size: 16px;
-  /* stops iOS zooming in when the picker opens */
-}
+ }
 
-/* ---------- Disabled while saving ---------- */
-.foodforthought .fft-picker.is-disabled {
+/* ---------- Disabled while saving ---------- */.foodforthought .fft-picker.is-disabled {
   opacity: 0.6;
 }
 
@@ -1474,14 +1454,12 @@ async function sendToGrocery() {
 }
 
 @media (max-width: 575.98px) {
-  /* phone: the two pickers side by side, buttons on their own row below */
-  .foodforthought .fft-meal-actions .fft-controls-row {
+   .foodforthought .fft-meal-actions .fft-controls-row {
     width: 100%;
     flex-direction: column;
   }
 
-  /* status toggle fills the width, meal time picker underneath */
-  .foodforthought .fft-status-toggle {
+   .foodforthought .fft-status-toggle {
     display: flex;
     width: 100%;
   }
@@ -1515,8 +1493,7 @@ async function sendToGrocery() {
 
 }
 
-/* ===== "Go to shopping list" link ===== */
-.foodforthought .fft-inline-link {
+/* ===== "Go to shopping list" link ===== */.foodforthought .fft-inline-link {
   align-self: flex-start;
   margin-top: 2px;
   font: 600 12px/16px 'Inter', sans-serif;

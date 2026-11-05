@@ -1,10 +1,3 @@
-/**
- * ShoppingList model
- * ---------------------------------------------------------------
- * One list per user per week (same pattern as MealPlan).
- * Compatible with the existing shoppinglists.json seed data: every
- * field added here has a default, so old documents still load.
- */
 const mongoose = require('mongoose');
 const { CATEGORIES, normalizeName } = require('../src/services/shoppinglistbuilder');
 
@@ -18,26 +11,21 @@ const basketSchema = new Schema(
     unit: { type: String, enum: Pantry.UNITS, required: true },
     category: { type: String, enum: Pantry.CATEGORIES, default: 'other' },
     expiryDate: { type: Date, default: null },
-    addToPantry: { type: Boolean, default: true }, // off for things like dish soap
+    addToPantry: { type: Boolean, default: true },
   },
   { _id: false },
 );
 
 const itemSchema = new Schema({
   name: { type: String, required: true, trim: true },
-  normalizedName: { type: String, required: true }, // lowercase, used for matching/merging
+  normalizedName: { type: String, required: true },
 
-  // Amount still to BUY. 0 means the pantry already covers all of it.
   quantity: { type: Number, required: true, min: 0 },
   unit: { type: String, default: 'piece', trim: true },
   category: { type: String, enum: CATEGORIES, default: 'other' },
 
-  // NEW: how much of this the pantry already covers (for the "In Pantry" view).
   pantryQuantity: { type: Number, default: 0, min: 0 },
 
-  // Other amounts of the same ingredient in units that can't be converted to `unit`,
-  // e.g. ginger: quantity 1 / unit 'piece', alsoNeed [{ quantity: 1, unit: 'inch' }] -> "1 piece + 1 inch".
-  // Amounts in units that DO convert are already merged into quantity (1 tsp + 1 tbsp -> 4 tsp).
   alsoNeed: [
     {
       _id: false,
@@ -47,7 +35,6 @@ const itemSchema = new Schema({
     },
   ],
 
-  // NEW: which recipes in this week's plan need it (shown as tags in the UI).
   usedIn: [
     {
       _id: false,
@@ -56,25 +43,16 @@ const itemSchema = new Schema({
     },
   ],
 
-  // NEW: "auto" = generated from the meal plan, "manual" = typed in by the user.
-  // Regenerating rebuilds auto items but never touches manual ones.
   source: { type: String, enum: ['auto', 'manual'], default: 'auto' },
 
   purchased: { type: Boolean, default: false },
   purchasedAt: { type: Date, default: null },
 
-  // NEW: set once a bought item has been moved into the pantry, so the
-  // "Add bought items to pantry" button never adds the same item twice.
   addedToPantry: { type: Boolean, default: false },
 
-  // Shopping mode: what the user actually put in their basket, which is what
-  // goes into the pantry (e.g. list says 600 g rice, they bought a 2 kg bag).
-  // Filled in with defaults when the item is ticked; cleared when it's unticked.
-  // Units and categories are the PANTRY's (models/Pantry.js), not the list's.
   basket: { type: basketSchema, default: undefined },
 });
 
-// Fill normalizedName automatically if it wasn't set.
 itemSchema.pre('validate', function () {
   if (!this.normalizedName) this.normalizedName = normalizeName(this.name);
 });
@@ -83,16 +61,13 @@ const shoppingListSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     mealPlanId: { type: Schema.Types.ObjectId, ref: 'MealPlan', default: null },
-    weekStart: { type: Date, required: true }, // Monday 00:00 Singapore time
+    weekStart: { type: Date, required: true },
     items: [itemSchema],
-    generatedAt: { type: Date, default: null }, // last time it was built from the meal plan
+    generatedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
 
-// One list per user per week.
 shoppingListSchema.index({ userId: 1, weekStart: 1 }, { unique: true });
 
-// The "||" avoids an OverwriteModelError if this file is required twice
-// (MealPlan.js already requires it).
 module.exports = mongoose.models.ShoppingList || mongoose.model('ShoppingList', shoppingListSchema);

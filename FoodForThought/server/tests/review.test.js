@@ -1,6 +1,3 @@
-// Tests for the fixes from the planner / shopping list / pantry review.
-// Run from the server folder with:   npm test
-
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
@@ -11,7 +8,6 @@ test('things bought whole round up: half a jar of paste is one jar', () => {
   assert.equal(roundQuantity(0.5, 'jar'), 1)
   assert.equal(roundQuantity(1.2, 'stalk'), 2)
   assert.equal(roundQuantity(2, 'can'), 2)
-  // measured amounts are not rounded up
   assert.equal(roundQuantity(1.25, 'tsp'), 1.25)
   assert.equal(roundQuantity(199.6, 'g'), 200)
 })
@@ -30,7 +26,7 @@ test('pantry edit: an emptied quantity box is rejected instead of saving null', 
   assert.throws(() => checkEdits({ quantity: null }), /Quantity must be 0 or more/)
   assert.throws(() => checkEdits({ quantity: -2 }), /Quantity must be 0 or more/)
   assert.deepEqual(checkEdits({ quantity: '3' }), { quantity: 3 })
-  assert.deepEqual(checkEdits({ quantity: 0 }), { quantity: 0 }) // 0 = used up, still allowed
+  assert.deepEqual(checkEdits({ quantity: 0 }), { quantity: 0 })
 })
 
 test('pantry edit: blank name and bad dates get clear messages, empty date clears it', () => {

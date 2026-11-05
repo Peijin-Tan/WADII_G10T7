@@ -23,7 +23,6 @@ const router = createRouter({
       redirect: '/admindashboard'
     },
     {
-      // Admin-only page: the beforeEach guard below checks meta.requiresAdmin
       path: '/admindashboard',
       name: 'admindashboard',
       component: () => import('../views/admindashboard.vue'),
@@ -42,16 +41,28 @@ const router = createRouter({
     {
       path: '/recipes',
       name: 'recipes',
-      component: Recipes
+      component: Recipes,
+      meta: { public: true }
     },
     {
-      path: '/recipes/:id',
-      name: 'recipe-detail',
-      component: RecipeDetail
+      path: '/recipes/:id/edit',
+      name: 'edit-recipe',
+      component: () => import('../views/EditRecipe.vue')
     },
     {
       path: '/recipes/create',
       component: () => import('../views/CreateRecipe.vue')
+    },
+    {
+      path: '/recipes/:id',
+      name: 'recipe-detail',
+      component: RecipeDetail,
+      meta: { public: true }
+    },
+    {
+      path: '/change-password',
+      name: 'change-password',
+      component: () => import('../views/ChangePassword.vue')
     },
     {
       path: '/preferences',
@@ -71,17 +82,20 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: () => import('../components/Auth/login.vue')
+      component: () => import('../components/Auth/login.vue'),
+      meta: { public: true, guestOnly: true }
     },
     {
       path: '/register',
       name: 'register',
-      component: () => import('../components/Auth/register.vue')
+      component: () => import('../components/Auth/register.vue'),
+      meta: { public: true, guestOnly: true }
     },
     {
       path: '/home',
       name: 'home',
-      component: () => import('../components/Auth/home.vue')
+      component: () => import('../components/Auth/home.vue'),
+      meta: { public: true }
     },
     {
       path: '/community',
@@ -91,13 +105,14 @@ const router = createRouter({
     {
       path: '/community/post/:id',
       name: 'community-recipe',
-      component: () => import('@/views/CommunityRecipe.vue')
+      component: () => import('@/views/CommunityRecipe.vue'),
+      meta: { public: true }
     },
     {
-      // Catch-all: any unknown URL shows the NotFound page
       path: '/:pathMatch(.*)*',
       name: 'not-found',
-      component: NotFound
+      component: NotFound,
+      meta: { public: true }
     }
   ],
 })
@@ -105,15 +120,29 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
-  if (to.meta.requiresAdmin) {
-    if (!auth.user) {
-      return '/login'
-    }
+  if (auth.token && tokenExpired(auth.token)) auth.logout()
+  const loggedIn = Boolean(auth.token)
 
-    if (auth.user.role !== 'admin') {
-      return '/home'
-    }
+  if (!to.meta.public && !loggedIn) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta.guestOnly && loggedIn) {
+    return auth.user?.role === 'admin' ? '/admindashboard' : '/dashboard'
+  }
+
+  if (to.meta.requiresAdmin && auth.user?.role !== 'admin') {
+    return '/home'
   }
 })
+
+function tokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()
+  } catch {
+    return true
+  }
+}
 
 export default router

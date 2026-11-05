@@ -1,12 +1,4 @@
 <script setup>
-/* Recipe suggestions modal, opened from the "What can I cook?" button on Pantry.vue.
-   Works like the planner's addmeal modal: the parent page owns the API call
-   (GET /pantry/suggestions) and passes the results in as props; this component only
-   shows them and tells the parent what to do through events.
-
-   Props:  recipes, loading, error, message, pantryCount
-   Events: search(filters)  -> parent fetches suggestions with { diet, intolerances, maxReadyTime }
-           close            -> parent hides the modal */
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 defineProps({
@@ -42,7 +34,6 @@ function toggleAllergen(a) {
   filters.value.intolerances = list.includes(a) ? list.filter((x) => x !== a) : [...list, a]
 }
 
-// Filters only apply when "Find Recipes" is pressed, so each chip click doesn't use up the Spoonacular quota
 function search() {
   emit('search', { ...filters.value, intolerances: [...filters.value.intolerances] })
 }
@@ -56,9 +47,9 @@ function onKey(e) {
   if (e.key === 'Escape') emit('close')
 }
 onMounted(() => {
-  document.body.style.overflow = 'hidden' // stop the page behind from scrolling
+  document.body.style.overflow = 'hidden'
   window.addEventListener('keydown', onKey)
-  search() // load suggestions as soon as the modal opens
+  search()
 })
 onBeforeUnmount(() => {
   document.body.style.overflow = ''
@@ -195,10 +186,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Colours, fonts, .btn and h2/h3 fonts come from the team's theme.css (.fft-page on the dialog).
-   Teleported content is outside Pantry.vue, so it can't use Pantry.vue's scoped styles. */
-
-/* Extra colours theme.css doesn't have (same values as Pantry.vue) */
 .fft-modal {
   --fft-accent: #A23E18;
   --fft-amber: #FFDDB5;
@@ -222,12 +209,10 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
-/* ===== Modal frame ===== */
-.fft-backdrop {
+/* ===== Modal frame ===== */.fft-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1055; /* same layer as Bootstrap modals */
-  background: rgba(26, 28, 24, 0.45);
+  z-index: 1055;  background: rgba(26, 28, 24, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -235,8 +220,7 @@ onBeforeUnmount(() => {
 }
 
 .fft-modal {
-  /* override theme.css's flex: 1 / width: 100% on .fft-page */
-  flex: 0 1 auto;
+   flex: 0 1 auto;
   width: 100%;
   max-width: 1080px;
   max-height: calc(100vh - 32px);
@@ -274,7 +258,6 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 
-/* Phones: fill the screen */
 @media (max-width: 575.98px) {
   .fft-backdrop {
     padding: 0;
@@ -309,8 +292,7 @@ onBeforeUnmount(() => {
   font-size: 20px;
 }
 
-/* ===== Typography ===== */
-.fft-headline-sm {
+/* ===== Typography ===== */.fft-headline-sm {
   font: 600 18px/26px 'Outfit', sans-serif;
 }
 
@@ -348,8 +330,7 @@ onBeforeUnmount(() => {
   color: var(--fft-muted) !important;
 }
 
-/* ===== Buttons (base font/padding/radius from theme.css) ===== */
-.btn {
+/* ===== Buttons (base font/padding/radius from theme.css) ===== */.btn {
   border: 0;
   transition: background-color 0.15s, color 0.15s;
 }
@@ -389,8 +370,7 @@ onBeforeUnmount(() => {
   text-decoration: underline;
 }
 
-/* ===== Tag, chips, pills ===== */
-.fft-tag {
+/* ===== Tag, chips, pills ===== */.fft-tag {
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -442,8 +422,7 @@ onBeforeUnmount(() => {
   color: var(--fft-amber-text);
 }
 
-/* ===== Suggestion cards ===== */
-.fft-card {
+/* ===== Suggestion cards ===== */.fft-card {
   background: var(--fft-card);
   border: 1px solid rgba(194, 200, 192, 0.4);
   border-radius: var(--fft-radius-2xl);
@@ -496,14 +475,12 @@ onBeforeUnmount(() => {
   color: var(--fft-primary);
 }
 
-/* old results fade slightly while new ones load */
 .fft-dim {
   opacity: 0.5;
   pointer-events: none;
 }
 
-/* ===== Spinner ===== */
-.fft-spin {
+/* ===== Spinner ===== */.fft-spin {
   animation: fft-spin 0.7s linear infinite;
 }
 
