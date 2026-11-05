@@ -354,4 +354,90 @@ router.delete('/likes/:id', async (req, res) => {
   }
 })
 
+
+ // POST /activity/recipes/:recipeId/like
+ // Like or create a like for a recipe.
+router.post('/recipes/:recipeId/like', async (req, res) => {
+  const recipeId = req.params.recipeId
+
+  if (!mongoose.isObjectIdOrHexString(recipeId)) {
+    return res.status(400).json({
+      message: 'Invalid recipe ID'
+    })
+  }
+
+  try {
+    const recipe = await Recipe.findById(recipeId).select('_id')
+
+    if (!recipe) {
+      return res.status(404).json({
+        message: 'Recipe not found'
+      })
+    }
+
+    const recipeKey = 'recipe-' + recipe._id.toString()
+
+    await Like.findOneAndUpdate(
+      {
+        userId: req.user._id,
+        recipeKey
+      },
+      {
+        $setOnInsert: {
+          userId: req.user._id,
+          recipeKey
+        }
+      },
+      {
+        upsert: true,
+        new: true
+      }
+    )
+
+    return res.json({
+      liked: true,
+      recipeKey
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Unable to like this recipe'
+    })
+  }
+})
+
+// DELETE /activity/recipes/:recipeId/like
+// Unlike a recipe using its recipe ID.
+router.delete('/recipes/:recipeId/like', async (req, res) => {
+  const recipeId = req.params.recipeId
+
+  if (!mongoose.isObjectIdOrHexString(recipeId)) {
+    return res.status(400).json({
+      message: 'Invalid recipe ID'
+    })
+  }
+
+  try {
+    const recipeKey = 'recipe-' + recipeId
+
+    await Like.findOneAndDelete({
+      userId: req.user._id,
+      recipeKey
+    })
+
+    return res.json({
+      liked: false,
+      recipeKey
+    })
+  } catch (err) {
+    console.error(err)
+
+    return res.status(500).json({
+      message: 'Unable to unlike this recipe'
+    })
+  }
+})
+
+
 module.exports = router
