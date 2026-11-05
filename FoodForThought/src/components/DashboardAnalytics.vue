@@ -11,6 +11,7 @@ const props = defineProps({
 })
 
 const auth = useAuthStore()
+const API_URL = import.meta.env.VITE_API_URL
 
 const cuisines = ref([])
 const activity = ref([])
@@ -230,7 +231,7 @@ async function loadCuisines() {
   cuisineError.value = ''
 
   try {
-    const response = await axios.get('/analytics/cuisines', {
+    const response = await axios.get(`${API_URL}/analytics/cuisines`, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
@@ -265,7 +266,7 @@ async function loadActivity() {
   loadingActivity.value = true
 
   try {
-    const response = await axios.get('/analytics/activity', {
+    const response = await axios.get(`${API_URL}/analytics/activity`, {
       headers: {
         Authorization: `Bearer ${token}`
       }
