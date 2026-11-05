@@ -184,17 +184,12 @@ async function toggleLike(recipe) {
   try {
     let response
 
+    const likeUrl = `${API_URL}/activity/recipes/${recipe._id}/like`
+
     if (isLiked(recipe)) {
-      response = await axios.delete(
-        `/api/recipes/${recipeKey}/like`,
-        config
-      )
+      response = await axios.delete(likeUrl, config)
     } else {
-      response = await axios.post(
-        `/api/recipes/${recipeKey}/like`,
-        {},
-        config
-      )
+      response = await axios.post(likeUrl, {}, config)
     }
 
     const index = likedRecipeIds.value.indexOf(recipeKey)
@@ -207,6 +202,8 @@ async function toggleLike(recipe) {
       likedRecipeIds.value.splice(index, 1)
     }
   } catch (err) {
+    console.error('Like error:', err.response?.data || err)
+
     likeMessage.value =
       err.response?.data?.message ||
       'Unable to update your like.'
