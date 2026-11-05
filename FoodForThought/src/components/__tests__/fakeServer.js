@@ -5,7 +5,7 @@ function createServer() {
   let routes = new Map()
   const calls = []
 
-  const normalise = (base, url) => `${base.replace(API_ORIGIN, '')}${url === '/' ? '' : url}`.replace(/\/$/, '') || '/'
+  const normalise = (base, url) => `${base.replace(API_ORIGIN, '')}${url === '/' ? '' : url.replace(API_ORIGIN, '')}`.replace(/\/$/, '') || '/'
 
   async function handle(method, path, { params, body, headers }) {
     calls.push({ method, path, params, body, headers })

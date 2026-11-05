@@ -3,7 +3,7 @@ import axios from 'axios'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ref, computed, onMounted } from 'vue'
-import { createApi, errorMessage } from '@/services/api'
+import { createApi, errorMessage, API_URL } from '@/services/api'
 import { toISODate, daysUntil } from '@/utils/dates'
 import { PANTRY_UNITS as UNITS, PANTRY_STORAGE_UNITS as STORAGE_UNITS, SPOON_UNITS, PANTRY_CATEGORIES as CATEGORIES, formatQty } from '@/constants/pantry'
 import { categoryStyle } from '@/constants/categoryColors'
@@ -16,7 +16,6 @@ import { useConfirm } from '@/composables/useConfirm'
 const auth = useAuthStore()
 const router = useRouter()
 const confirm = useConfirm()
-const API_URL = import.meta.env.VITE_API_URL
 
 function withAuth(instance) {
   instance.interceptors.request.use((config) => {

@@ -19,7 +19,11 @@ const mainNav = (wrapper) => wrapper.get('nav[aria-label="Main"]')
 const linkLabels = (el) => el.findAll('a').map(label)
 const accountButton = (wrapper) => wrapper.get('button[aria-haspopup="menu"]')
 
-beforeEach(() => server.reset())
+beforeEach(() => {
+  server.reset()
+  vi.stubEnv('VITE_API_URL', 'http://localhost:8000')
+})
+afterEach(() => vi.unstubAllEnvs())
 
 describe('App: navbar for guests', () => {
   it('A01 guests see the main links in the order a week goes, and Log in / Create account', async () => {
