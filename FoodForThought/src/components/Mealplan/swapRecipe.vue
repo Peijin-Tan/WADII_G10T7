@@ -130,16 +130,7 @@ export default {
   name: 'SwapMealModal',
 
   props: {
-    // The meal-plan entry being replaced (same shape RecipeModal uses)
     entry: { type: Object, required: true },
-    /*
-      recipes = [{
-        id, title, image, prepMinutes, tags: [], pantryMatch: 0-100,
-        nutrition: { calories, protein, ... },
-        ingredients: [{ name, quantity, inPantry }],
-        steps: [{ title, text }]
-      }]
-    */
     recipes: { type: Array, default: () => [] },
   },
 
@@ -163,16 +154,13 @@ export default {
       const q = this.query.toLowerCase();
 
       return this.recipes
-        // don't suggest the meal that's already in this slot
         .filter((r) => r.id !== this.entry.recipe.id)
-        // filter chips
         .filter((r) => {
           if (this.activeFilter === 'protein') return r.nutrition.protein >= 20;
           if (this.activeFilter === 'quick') return r.prepMinutes <= 15;
           if (this.activeFilter === 'pantry') return r.pantryMatch === 100;
           return true;
         })
-        // search across title, tags and ingredient names
         .filter((r) => {
           if (!q) return true;
           const haystack = [
@@ -182,7 +170,6 @@ export default {
           ].join(' ').toLowerCase();
           return haystack.includes(q);
         })
-        // best pantry match first
         .sort((a, b) => b.pantryMatch - a.pantryMatch);
     },
   },
@@ -213,8 +200,7 @@ export default {
 </script>
 
 <style scoped>
-/* ---------- Design tokens (delete if you moved these to assets/styles/tokens.css) ---------- */
-.fft-backdrop {
+/* ---------- Design tokens (delete if you moved these to assets/styles/tokens.css) ---------- */.fft-backdrop {
   --fft-primary: #3a6a3a;
   --fft-primary-hover: #2f572f;
   --fft-on-primary: #ffffff;
@@ -245,8 +231,7 @@ export default {
   to { opacity: 1; }
 }
 
-/* ---------- Shell ---------- */
-.fft-modal {
+/* ---------- Shell ---------- */.fft-modal {
   max-width: 36rem;
   max-height: 90vh;
   border-radius: 1rem;
@@ -265,8 +250,7 @@ export default {
 
 .min-w-0 { min-width: 0; }
 
-/* ---------- Typography ---------- */
-.fft-title { font-size: 1.5rem; font-weight: 600; color: var(--fft-primary); }
+/* ---------- Typography ---------- */.fft-title { font-size: 1.5rem; font-weight: 600; color: var(--fft-primary); }
 .fft-overline {
   font-size: 11px;
   font-weight: 600;
@@ -281,8 +265,7 @@ export default {
 .fs-16 { font-size: 16px; }
 .fs-20 { font-size: 20px; }
 
-/* ---------- Close button ---------- */
-.fft-icon-btn {
+/* ---------- Close button ---------- */.fft-icon-btn {
   width: 2rem;
   height: 2rem;
   border: 0;
@@ -296,8 +279,7 @@ export default {
 }
 .fft-icon-btn:hover { background: var(--fft-surface-high); }
 
-/* ---------- Search ---------- */
-.fft-search {
+/* ---------- Search ---------- */.fft-search {
   padding: 0.5rem 1rem 0.5rem 2.5rem;
   border-radius: 0.75rem;
   font-size: 0.875rem;
@@ -321,8 +303,7 @@ export default {
   pointer-events: none;
 }
 
-/* ---------- Filter chips ---------- */
-.fft-filter-row { overflow-x: auto; scrollbar-width: none; }
+/* ---------- Filter chips ---------- */.fft-filter-row { overflow-x: auto; scrollbar-width: none; }
 .fft-filter-row::-webkit-scrollbar { display: none; }
 .fft-filter {
   padding: 0.25rem 0.75rem;
@@ -341,8 +322,7 @@ export default {
   font-weight: 600;
 }
 
-/* ---------- Recipe options ---------- */
-.fft-option {
+/* ---------- Recipe options ---------- */.fft-option {
   border-radius: 0.75rem;
   background: var(--fft-surface-lowest);
   border: 1px solid var(--fft-outline-variant);
@@ -376,8 +356,7 @@ export default {
 
 .fft-empty { font-size: 0.875rem; color: var(--fft-outline); }
 
-/* ---------- Buttons & links ---------- */
-.fft-link { color: var(--fft-primary); text-decoration: none; }
+/* ---------- Buttons & links ---------- */.fft-link { color: var(--fft-primary); text-decoration: none; }
 .fft-link:hover { text-decoration: underline; }
 
 .fft-btn-primary,
@@ -393,8 +372,7 @@ export default {
 .fft-btn-ghost { background: transparent; color: var(--fft-on-surface-variant); font-weight: 500; }
 .fft-btn-ghost:hover { background: var(--fft-surface-high); }
 
-/* ---------- Small screens ---------- */
-@media (max-width: 575.98px) {
+/* ---------- Small screens ---------- */@media (max-width: 575.98px) {
   .fft-modal { max-height: 95vh; }
   .fft-option .fft-btn-primary { width: 100%; }
 }

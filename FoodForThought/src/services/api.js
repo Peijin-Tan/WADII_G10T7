@@ -17,21 +17,17 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export function createApi(path = '') {
   const instance = axios.create({ baseURL: `${API_URL}${path}` })
 
-  // The login page saves the JWT in the auth store. We only send the token:
-  // the server works out who the user is from it (requireAuth -> req.user).
   instance.interceptors.request.use((config) => {
     const auth = useAuthStore()
     if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
     return config
   })
 
-  // Expired or missing login (tokens last 1h) -> log out and go to the login page
   instance.interceptors.response.use(
     (res) => res,
     (err) => {
       if (err.response?.status === 401) {
         useAuthStore().logout()
-        // come back to this page after logging in again
         const here = router.currentRoute.value
         router.push(here.meta.public ? '/login' : { path: '/login', query: { redirect: here.fullPath } })
       }
@@ -41,7 +37,6 @@ export function createApi(path = '') {
   return instance
 }
 
-// The message to show for a failed request: the server's own message if it sent one
 export function errorMessage(err, fallback = 'Something went wrong. Please try again.') {
   if (err.response?.data?.message) return err.response.data.message
   if (!err.response) return 'Could not reach the server. Is it running?'

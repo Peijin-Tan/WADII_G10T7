@@ -1,11 +1,3 @@
-// App.spec.js - component tests for the app shell (src/App.vue): navbar, account menu, footer,
-// plus the route guard (src/router/index.js) and the "expired login" rule (src/services/api.js)
-// that every page relies on.
-//
-// The pages themselves are not drawn: <RouterView> is stubbed, so these tests only check
-// what App.vue is responsible for. The real router is used, so links and redirects are real.
-//
-// Run:  npx vitest run src/components/__tests__/App.spec.js
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount } from '@vue/test-utils'
 import App from '@/App.vue'
@@ -86,7 +78,7 @@ describe('App: navbar for logged-in users', () => {
     expect(menu().exists()).toBe(false)
 
     await accountButton(wrapper).trigger('click')
-    document.body.click() // somewhere outside the menu
+    document.body.click()
     await flushPromises()
     expect(menu().exists()).toBe(false)
 
@@ -169,13 +161,12 @@ describe('App: expired login', () => {
 })
 
 describe('Router: who can open which page', () => {
-  // Every page needs a login unless its route has meta: { public: true } (src/router/index.js)
   it.each(['/dashboard', '/planner', '/shoppinglist', '/pantry', '/community', '/profile', '/preferences',
     '/change-password', '/recipes/create', '/admindashboard'])('A14 a guest opening %s is sent to log in first', async (path) => {
     const { router } = await renderApp({ loggedIn: false, path })
     expect(router.currentRoute.value.path).toBe('/login')
-    expect(router.currentRoute.value.query.redirect).toBe(path) // so login can bring them back
-    expect(server.calls).toHaveLength(0) // redirected BEFORE the page asked the server for anything
+    expect(router.currentRoute.value.query.redirect).toBe(path)
+    expect(server.calls).toHaveLength(0)
   })
 
   it.each(['/home', '/recipes', '/login', '/register'])('A15 a guest can open %s', async (path) => {

@@ -23,7 +23,6 @@ const router = createRouter({
       redirect: '/admindashboard'
     },
     {
-      // Admin-only page: the beforeEach guard below checks meta.requiresAdmin
       path: '/admindashboard',
       name: 'admindashboard',
       component: () => import('../views/admindashboard.vue'),
@@ -110,7 +109,6 @@ const router = createRouter({
       meta: { public: true }
     },
     {
-      // Catch-all: any unknown URL shows the NotFound page
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFound,
@@ -119,15 +117,9 @@ const router = createRouter({
   ],
 })
 
-// Pages are for logged-in users unless their route says meta: { public: true }.
-// A guest who opens one is sent to Login, and comes back to that page after logging in
-// (login.vue reads ?redirect=). Before this, Planner / Shopping List / Dashboard sent guests
-// to Login only after their first request failed, and Pantry, Profile, Create / Edit Recipe,
-// Preferences and Change Password opened anyway with a "Please log in first" error.
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
-  // Tokens last 1 hour. An expired one counts as logged out, instead of waiting for a 401.
   if (auth.token && tokenExpired(auth.token)) auth.logout()
   const loggedIn = Boolean(auth.token)
 
@@ -135,7 +127,6 @@ router.beforeEach((to) => {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-  // Already logged in: Login and Register have nothing to do, go to the dashboard
   if (to.meta.guestOnly && loggedIn) {
     return auth.user?.role === 'admin' ? '/admindashboard' : '/dashboard'
   }
@@ -145,8 +136,6 @@ router.beforeEach((to) => {
   }
 })
 
-// Reads the "exp" (expiry time, in seconds) from a JWT. A token we can't read counts as expired.
-// (This only decides what to show; the server still checks every token properly.)
 function tokenExpired(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))

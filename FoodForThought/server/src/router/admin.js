@@ -1,7 +1,7 @@
 // Admin-only data for the admin dashboard, mounted at /admin.
 //
-//   GET /admin/stats      -> counts for the Overview tab
-//   GET /admin/recipes    -> recipes for the Recipes tab (?source=user|spoonacular|all, default user)
+//   GET /admin/stats
+//   GET /admin/recipes
 //
 // Deleting a recipe is DELETE /recipes/:id (recipe.js), because its author can do it too.
 // Users are managed through /users (users.js), comments through /comments (comments.js).
@@ -20,8 +20,6 @@ router.use(requireAuth, requireAdmin)
 
 const DAY = 24 * 60 * 60 * 1000
 
-// Same key the like buttons use (see findRecipeKey in recipe.js):
-// saved Spoonacular recipes share their API id, community recipes use their own _id
 function recipeKeyOf(recipe) {
   return recipe.externalId != null ? `spoonacular-${recipe.externalId}` : `recipe-${recipe._id}`
 }
@@ -45,7 +43,6 @@ router.get('/stats', async (req, res) => {
     const countFor = (list, id) => list.find((item) => item._id === id)?.count ?? 0
     const totalAdmins = countFor(roleBreakdown, 'admin')
     const totalRegularUsers = countFor(roleBreakdown, 'user')
-    // recipes saved before `source` existed count as community recipes (the schema default)
     const spoonacularRecipes = countFor(recipeSources, 'spoonacular')
     const totalRecipes = recipeSources.reduce((sum, item) => sum + item.count, 0)
 
@@ -67,8 +64,7 @@ router.get('/stats', async (req, res) => {
   }
 })
 
-// GET /admin/recipes?source=user
-// Newest first, with each recipe's author and how many comments and likes it has.
+// GET /admin/recipes
 router.get('/recipes', async (req, res) => {
   try {
     const source = req.query.source || 'user'
@@ -76,7 +72,6 @@ router.get('/recipes', async (req, res) => {
       return res.status(400).json({ message: "source must be 'user', 'spoonacular' or 'all'." })
     }
 
-    // Older community recipes may have no `source` field, so 'user' also matches a missing one
     const filter =
       source === 'all' ? {} : source === 'user' ? { source: { $ne: 'spoonacular' } } : { source: 'spoonacular' }
 
@@ -86,8 +81,6 @@ router.get('/recipes', async (req, res) => {
       .limit(500)
       .lean()
 
-    // Authors, looked up by hand instead of populate(): an old recipe whose createdBy isn't a
-    // valid id would make populate() throw and the whole list fail to load.
     const authorIds = [...new Set(recipes.map((r) => String(r.createdBy || '')))].filter((id) => mongoose.isValidObjectId(id))
     const authors = await User.find({ _id: { $in: authorIds } }).select('_id name email').lean()
     const authorById = new Map(authors.map((u) => [String(u._id), u]))
@@ -107,12 +100,10 @@ router.get('/recipes', async (req, res) => {
         _id: r._id,
         title: r.title,
         image: r.image || '',
-        // older recipes may store one cuisine as a plain string
         cuisine: Array.isArray(r.cuisine) ? r.cuisine : r.cuisine ? [String(r.cuisine)] : [],
         totalTime: r.totalTime ?? null,
         source: r.source || 'user',
         createdAt: r.createdAt || null,
-        // null when the author's account was deleted
         author: authorById.get(String(r.createdBy || '')) || null,
         commentCount: comments.get(String(r._id)) || 0,
         likeCount: likes.get(recipeKeyOf(r)) || 0,

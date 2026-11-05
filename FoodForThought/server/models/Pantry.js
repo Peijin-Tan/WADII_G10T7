@@ -1,13 +1,5 @@
-// models/Pantry.js
-// One document per pantry ingredient per user.
-// Kept as its own collection (instead of an array inside User) so that
-// add/edit/delete of a single item is a simple CRUD call, and so the
-// shopping-list feature (Angeline) can query a user's pantry directly.
-
 const mongoose = require('mongoose');
 
-// Units we accept. Keep this list short and shared with the shopping list,
-// otherwise "subtract pantry quantities" becomes impossible to compute.
 const UNITS = ['g', 'kg', 'ml', 'l', 'pcs', 'tsp', 'tbsp', 'cup'];
 
 const CATEGORIES = [
@@ -19,19 +11,16 @@ const pantrySchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',          // must match the model name Kester uses for users
+      ref: 'User',
       required: true,
       index: true,
     },
-    // Display name, as the user typed it ("Chicken Breast")
     name: {
       type: String,
       required: [true, 'Ingredient name is required'],
       trim: true,
       maxlength: 60,
     },
-    // Lower-cased, trimmed, singular form ("chicken breast") used for
-    // matching against Spoonacular ingredient names. Set automatically below.
     normalizedName: {
       type: String,
       required: true,
@@ -52,12 +41,11 @@ const pantrySchema = new mongoose.Schema(
       default: 'other',
     },
     expiryDate: {
-      type: Date, // optional, nice-to-have for "use soon" sorting later
+      type: Date,
     },
   },
   {
     timestamps: true,
-    // Send `id` instead of `_id` (and drop __v / user), matching the planner's API
     toJSON: {
       virtuals: true,
       transform(doc, ret) {
@@ -70,11 +58,8 @@ const pantrySchema = new mongoose.Schema(
   }
 );
 
-// A user should not have two rows for the same ingredient.
-// If they add "eggs" twice, the controller increases the quantity instead.
 pantrySchema.index({ user: 1, normalizedName: 1 }, { unique: true });
 
-// Same naming rule as the planner and shopping list ("Eggs" -> "egg"), kept in one shared file
 const { normalizeIngredient } = require('../src/services/ingredientnames');
 
 pantrySchema.pre('validate', function () {

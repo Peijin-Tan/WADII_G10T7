@@ -11,16 +11,10 @@ import suggestionsModal from '../components/SuggestionModal.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import PageIntro from '@/components/ui/PageIntro.vue'
 import { useConfirm } from '@/composables/useConfirm'
-// Colours, fonts, h1/h2/h3, .btn and .form-control come from the team's shared theme.css (.fft-page).
-// The page-specific styles are in the <style scoped> block at the bottom.
 
 /* ---------- API ---------- */
-// Same setup as Planner.vue: send the JWT from the auth store, log out on 401.
-// The server works out the user from the token (requireAuth -> req.user -> req.userId).
 const auth = useAuthStore()
 const router = useRouter()
-// Themed confirm box (components/ui/ConfirmDialog.vue). Without this line, confirm() below would be the
-// browser's own window.confirm, which shows a grey box saying "[object Object]".
 const confirm = useConfirm()
 
 function withAuth(instance) {
@@ -41,16 +35,12 @@ function withAuth(instance) {
   return instance
 }
 
-// Pantry requests go to the Express router mounted at /pantry (routes/pantry/pantry.js)
 const api = withAuth(axios.create({ baseURL: 'http://localhost:8000/pantry' }))
 
-// Works whether the model sends `id` or Mongo's `_id`
 const idOf = (item) => item.id || item._id
 
 /* ---------- Expiry ---------- */
-// UNITS and CATEGORIES come from constants/pantry.js (shared with the shopping list)
 function expiryPill(item) {
-  // Nothing left (e.g. used up by cooking a planned meal): say so instead of "0 pcs" with a use-by date
   if (item.quantity <= 0) return { text: 'Used up', class: 'fft-pill-gray' }
   const n = daysUntil(item.expiryDate)
   if (n === null) return null
@@ -65,7 +55,7 @@ const items = ref([])
 const loading = ref(true)
 const saving = ref(false)
 const errorMsg = ref('')
-const notice = ref('') // short "Added eggs" style message after a save
+const notice = ref('')
 let noticeTimer = null
 
 function showNotice(text) {
@@ -90,8 +80,6 @@ onMounted(() => {
   loadPantry()
 })
 
-// Every write returns the whole updated pantry ({ items }), so we just replace our copy.
-// Returns true if it saved, so callers can reset their form.
 async function saveChange(request) {
   saving.value = true
   errorMsg.value = ''
@@ -109,7 +97,7 @@ async function saveChange(request) {
 
 /* ---------- Metrics ---------- */
 const expiringSoon = computed(() => items.value.filter((i) => {
-  if (i.quantity <= 0) return false // nothing left to use
+  if (i.quantity <= 0) return false
   const n = daysUntil(i.expiryDate)
   return n !== null && n <= 3
 }))
@@ -124,7 +112,6 @@ const metrics = computed(() => [
 const search = ref('')
 const activeCategory = ref('all')
 
-// activeCategory: 'all', 'soon' (use within 3 days) or a category value
 const expiringIds = computed(() => new Set(expiringSoon.value.map(idOf)))
 const matchesFilter = (i) =>
   activeCategory.value === 'all' ||
@@ -135,7 +122,6 @@ const visibleItems = computed(() => {
   return items.value.filter((i) => matchesFilter(i) && (!q || i.name.toLowerCase().includes(q)))
 })
 
-// Clicking the "Use within 3 days" tile (or chip) shows just those items; clicking again shows everything
 function toggleUseSoon() {
   activeCategory.value = activeCategory.value === 'soon' ? 'all' : 'soon'
 }
@@ -143,7 +129,6 @@ function toggleUseSoon() {
 /* ---------- Add form: always open on desktop, folded behind a button on phones ---------- */
 const showAddForm = ref(false)
 
-// [{ meta, items }] in CATEGORIES order, only categories that have items
 const groups = computed(() =>
   CATEGORIES
     .map((meta) => ({
@@ -161,7 +146,6 @@ const usedCategories = computed(() => CATEGORIES.filter((c) => items.value.some(
 const emptyForm = () => ({ name: '', quantity: 1, unit: 'pcs', category: 'other', expiryDate: '' })
 const form = ref(emptyForm())
 
-// POST /pantry -> if the ingredient is already there, the server adds to its quantity
 async function onAdd() {
   const name = form.value.name.trim()
   if (!name) return
@@ -171,10 +155,8 @@ async function onAdd() {
   const idsBefore = new Set(items.value.map(idOf))
   if (!(await saveChange(api.post('/', body)))) return
 
-  // Tell the user whether it was new or merged into an existing item
   const added = items.value.find((i) => !idsBefore.has(idOf(i)))
   if (added) {
-    // shows what was saved, e.g. "Added Jasmine rice (370 g)" after typing 2 cups
     showNotice(`Added ${added.name} (${formatQty(added.quantity, added.unit)})`)
   } else {
     const merged = items.value.find((i) => i.name.toLowerCase() === name.toLowerCase()) ||
@@ -208,7 +190,6 @@ async function saveEdit(item) {
     errorMsg.value = 'Ingredient name is required'
     return
   }
-  // empty date = clear the expiry date
   const body = { ...editForm.value, name, expiryDate: editForm.value.expiryDate || null }
   if (await saveChange(api.patch(`/${idOf(item)}`, body))) {
     editingId.value = null
@@ -217,8 +198,6 @@ async function saveEdit(item) {
 }
 
 /* ---------- Quick +/- buttons on each row ---------- */
-// Used one egg? Tap minus instead of opening the edit form. Steps by 1 for pcs, else by a
-// sensible amount for the unit. Never below 0 ("Used up").
 const STEP = { pcs: 1, g: 100, kg: 0.5, ml: 100, l: 0.5, tsp: 1, tbsp: 1, cup: 0.5 }
 function adjust(item, direction) {
   const step = STEP[item.unit] || 1
@@ -228,19 +207,17 @@ function adjust(item, direction) {
 }
 
 /* ---------- Recipe suggestions modal ---------- */
-// The modal only displays results; this page does the API call, like the planner and its addmeal modal.
 const showSuggestions = ref(false)
 const suggestions = ref({ recipes: [], pantryCount: 0, message: '' })
 const suggestLoading = ref(false)
 const suggestError = ref('')
-let latestSuggest = 0 // ignore a slow response if the user searched again (same idea as the planner)
+let latestSuggest = 0
 
 function openSuggestions() {
   suggestError.value = ''
-  showSuggestions.value = true // the modal emits 'search' as soon as it opens
+  showSuggestions.value = true
 }
 
-// filters from the modal: { diet, intolerances: [], maxReadyTime }
 async function fetchSuggestions(filters) {
   const requestId = ++latestSuggest
   suggestLoading.value = true
@@ -533,8 +510,7 @@ async function onRemove(item) {
 </template>
 
 <style scoped>
-/* ===== Quick +/- quantity buttons on each row ===== */
-.fft-stepper {
+/* ===== Quick +/- quantity buttons on each row ===== */.fft-stepper {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -558,11 +534,9 @@ async function onRemove(item) {
 .fft-stepper-btn:disabled { opacity: 0.35; }
 .fft-stepper-value { min-width: 56px; text-align: center; }
 
-/* ===== Extra colours this page needs that theme.css doesn't have ===== */
-.fft-pantry {
+/* ===== Extra colours this page needs that theme.css doesn't have ===== */.fft-pantry {
   --fft-surface-mid: #EEEEE8;
-  --fft-accent: #A23E18;      /* dark orange text, pairs with --fft-peach */
-  --fft-amber: #FFDDB5;
+  --fft-accent: #A23E18;       --fft-amber: #FFDDB5;
   --fft-amber-text: #2A1800;
   --fft-on-primary: #FFFFFF;
 
@@ -584,15 +558,13 @@ async function onRemove(item) {
   user-select: none;
 }
 
-/* ===== Layout ===== */
-.fft-main {
+/* ===== Layout ===== */.fft-main {
   min-height: 100vh;
   min-height: 100dvh;
 }
 
 .fft-container {
-  /* same content width as the planner and shopping list */
-  max-width: 1140px;
+   max-width: 1140px;
   padding-left: 0;
   padding-right: 0;
 }
@@ -604,7 +576,6 @@ async function onRemove(item) {
   }
 }
 
-/* "Use within 3 days" tile works as a filter button */
 .fft-tile--action {
   border: 1px solid transparent;
   cursor: pointer;
@@ -616,7 +587,6 @@ async function onRemove(item) {
   border-color: var(--fft-secondary, #a23e18);
 }
 
-/* category chips: wrap on desktop, one sideways-scrolling row on phones */
 .fft-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -661,8 +631,7 @@ async function onRemove(item) {
   min-width: 0;
 }
 
-/* ===== Typography ===== */
-.fft-headline-md {
+/* ===== Typography ===== */.fft-headline-md {
   font: 500 24px/32px 'Outfit', sans-serif;
 }
 
@@ -713,8 +682,7 @@ h3.fft-headline-sm {
   color: var(--fft-text) !important;
 }
 
-/* ===== Buttons (base .btn font/padding/radius come from theme.css) ===== */
-.btn {
+/* ===== Buttons (base .btn font/padding/radius come from theme.css) ===== */.btn {
   border: 0;
   transition: background-color 0.15s, color 0.15s;
 }
@@ -760,8 +728,7 @@ h3.fft-headline-sm {
   padding: 10px 20px;
 }
 
-/* ===== Tag, tiles, round icons ===== */
-.fft-tag {
+/* ===== Tag, tiles, round icons ===== */.fft-tag {
   font: 600 11px/14px 'Inter', sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -800,8 +767,7 @@ h3.fft-headline-sm {
   background: var(--fft-peach);
 }
 
-/* ===== Cards ===== */
-.fft-card {
+/* ===== Cards ===== */.fft-card {
   background: var(--fft-card);
   padding: 16px;
   border-radius: var(--fft-radius-2xl);
@@ -816,8 +782,7 @@ h3.fft-headline-sm {
   border: 1px solid rgba(194, 200, 192, 0.4);
 }
 
-/* ===== Pills ===== */
-.fft-pill {
+/* ===== Pills ===== */.fft-pill {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 9999px;
@@ -840,7 +805,6 @@ h3.fft-headline-sm {
   color: var(--fft-amber-text);
 }
 
-/* small count badge on each category header */
 .fft-day-count {
   font: 600 11px/14px 'Inter', sans-serif;
   padding: 1px 6px;
@@ -849,8 +813,7 @@ h3.fft-headline-sm {
   color: var(--fft-muted);
 }
 
-/* ===== Search + category chips ===== */
-.fft-search-icon {
+/* ===== Search + category chips ===== */.fft-search-icon {
   position: absolute;
   left: 16px;
   top: 50%;
@@ -893,8 +856,7 @@ h3.fft-headline-sm {
   color: var(--fft-primary-light);
 }
 
-/* ===== Form inputs ===== */
-.fft-input {
+/* ===== Form inputs ===== */.fft-input {
   width: 100%;
   padding: 8px 12px;
   background: var(--fft-surface-low);
@@ -911,8 +873,7 @@ h3.fft-headline-sm {
   border-color: var(--fft-primary);
 }
 
-/* ===== Pantry list ===== */
-.fft-chip--cat { display: inline-flex; align-items: center; gap: 6px; }
+/* ===== Pantry list ===== */.fft-chip--cat { display: inline-flex; align-items: center; gap: 6px; }
 .fft-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cat-ink); }
 .fft-chip--cat.active { background: var(--cat-ink) !important; color: #fff !important; }
 .fft-chip--cat.active .fft-chip-dot { background: #fff; }
@@ -961,8 +922,6 @@ h3.fft-headline-sm {
   border-top: 0;
 }
 
-/* phones: name (and its expiry pill) on top, the +/- and buttons on a second line,
-   so names aren't cut down to "To…" next to the quantity controls */
 @media (max-width: 575.98px) {
   .fft-pantry-row {
     flex-wrap: wrap;
@@ -978,8 +937,7 @@ h3.fft-headline-sm {
   }
 }
 
-/* ===== Loading spinner ===== */
-.fft-spin {
+/* ===== Loading spinner ===== */.fft-spin {
   animation: fft-spin 0.7s linear infinite;
 }
 

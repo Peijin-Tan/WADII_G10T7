@@ -313,18 +313,6 @@ export default {
   name: 'RecipeModal',
 
   props: {
-    /*
-      entry = {
-        id, mealSlot: 'Breakfast', time: '08:00 AM',
-        status: 'Planned' | 'Cooked' | 'Skipped',
-        recipe: {
-          id, title, description, servings, prepMinutes, tags: [],
-          nutrition: { calories, protein, carbs, fat, fiber },
-          ingredients: [{ name, quantity, inPantry }],
-          steps: [{ title, text }]
-        }
-      }
-    */
     entry: { type: Object, required: true },
   },
 
@@ -389,8 +377,7 @@ export default {
 </script>
 
 <style scoped>
-/* ---------- Design tokens (replace Tailwind theme colours) ---------- */
-.fft-backdrop {
+/* ---------- Design tokens (replace Tailwind theme colours) ---------- */.fft-backdrop {
   --fft-primary: #3a6a3a;
   --fft-primary-hover: #2f572f;
   --fft-on-primary: #ffffff;
@@ -425,8 +412,7 @@ export default {
   to { opacity: 1; }
 }
 
-/* ---------- Shell ---------- */
-.fft-modal {
+/* ---------- Shell ---------- */.fft-modal {
   max-width: 42rem;
   max-height: 90vh;
   border-radius: 1rem;
@@ -447,8 +433,7 @@ export default {
   border-top: 1px solid var(--fft-outline-variant);
 }
 
-/* ---------- Typography ---------- */
-.fft-title { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
+/* ---------- Typography ---------- */.fft-title { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
 .fft-section-title { font-size: 1.125rem; font-weight: 600; }
 .fft-muted { color: var(--fft-on-surface-variant); }
 .fft-outline { color: var(--fft-outline); }
@@ -461,8 +446,7 @@ export default {
 .fs-16 { font-size: 16px; }
 .fs-20 { font-size: 20px; }
 
-/* ---------- Chips ---------- */
-.fft-chip {
+/* ---------- Chips ---------- */.fft-chip {
   padding: 0.125rem 0.625rem;
   border-radius: 999px;
   font-size: 0.75rem;
@@ -474,8 +458,7 @@ export default {
 .fft-chip--secondary { background: var(--fft-secondary-fixed); color: var(--fft-on-secondary-fixed); }
 .fft-chip--danger { background: var(--fft-danger-fixed); color: var(--fft-on-danger-fixed); }
 
-/* ---------- Close button ---------- */
-.fft-icon-btn {
+/* ---------- Close button ---------- */.fft-icon-btn {
   width: 2.25rem;
   height: 2.25rem;
   border: 0;
@@ -489,8 +472,7 @@ export default {
 }
 .fft-icon-btn:hover { background: var(--fft-surface-high); color: var(--fft-on-surface); }
 
-/* ---------- Nutrition stats ---------- */
-.fft-stat { border-radius: 0.75rem; background: var(--fft-surface-low); }
+/* ---------- Nutrition stats ---------- */.fft-stat { border-radius: 0.75rem; background: var(--fft-surface-low); }
 .fft-stat-label {
   font-size: 11px;
   font-weight: 600;
@@ -499,8 +481,7 @@ export default {
 }
 .fft-stat-value { font-size: 16px; font-weight: 700; }
 
-/* ---------- Ingredients ---------- */
-.fft-ingredient {
+/* ---------- Ingredients ---------- */.fft-ingredient {
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   background: rgba(244, 243, 238, 0.7);
@@ -520,8 +501,7 @@ export default {
 .fft-check .material-symbols-outlined { font-size: 13px; }
 .fft-check--missing { background: var(--fft-secondary-fixed); color: var(--fft-on-secondary-fixed); }
 
-/* ---------- Steps ---------- */
-.fft-step { border-radius: 0.75rem; background: rgba(244, 243, 238, 0.6); }
+/* ---------- Steps ---------- */.fft-step { border-radius: 0.75rem; background: rgba(244, 243, 238, 0.6); }
 .fft-step-num {
   width: 1.5rem;
   height: 1.5rem;
@@ -536,8 +516,7 @@ export default {
   color: var(--fft-on-primary);
 }
 
-/* ---------- Footer actions ---------- */
-.fft-link { color: var(--fft-primary); text-decoration: none; }
+/* ---------- Footer actions ---------- */.fft-link { color: var(--fft-primary); text-decoration: none; }
 .fft-link:hover { text-decoration: underline; }
 
 .fft-btn-primary,
@@ -557,8 +536,7 @@ export default {
 .fft-btn-ghost { background: transparent; color: var(--fft-outline); }
 .fft-btn-ghost:hover { color: var(--fft-on-surface); background: var(--fft-surface-high); }
 
-/* ---------- Small screens (iPhone 6 ≈ 375px) ---------- */
-@media (max-width: 575.98px) {
+/* ---------- Small screens (iPhone 6 ≈ 375px) ---------- */@media (max-width: 575.98px) {
   .fft-modal { max-height: 95vh; }
   .fft-modal-header,
   .fft-modal-body { padding: 1rem !important; }

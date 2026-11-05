@@ -1,7 +1,3 @@
-// Password rules, shown as a live checklist on Register and Change Password
-// (components/Auth/PasswordChecklist.vue).
-// Keep in sync with server/src/utils/passwordRules.js, which checks them again on the server.
-
 export const PASSWORD_RULES = [
   { id: 'length', label: 'At least 8 characters', test: (pw) => pw.length >= 8 },
   { id: 'upper', label: 'An uppercase letter (A-Z)', test: (pw) => /[A-Z]/.test(pw) },
@@ -10,9 +6,8 @@ export const PASSWORD_RULES = [
   { id: 'special', label: 'A special character (e.g. ! @ # $ %)', test: (pw) => /[^A-Za-z0-9\s]/.test(pw) },
 ]
 
-export const MAX_PASSWORD_LENGTH = 72 // bcrypt only uses the first 72 bytes
+export const MAX_PASSWORD_LENGTH = 72
 
-// Each rule with whether the password meets it: [{ id, label, met }]
 export function checkPassword(password = '') {
   return PASSWORD_RULES.map((rule) => ({ id: rule.id, label: rule.label, met: rule.test(password) }))
 }

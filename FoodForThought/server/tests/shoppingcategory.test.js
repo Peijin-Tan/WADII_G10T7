@@ -2,7 +2,6 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { categorize, buildShoppingItems } = require('../src/services/shoppinglistbuilder')
 
-// Recipes people create have no "aisle", so the section must come from the ingredient name
 test('user recipe ingredients (no aisle) go to their own section, not "Other"', () => {
   const cases = {
     Eggs: 'dairy-eggs',

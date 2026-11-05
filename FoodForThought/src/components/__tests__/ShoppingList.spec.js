@@ -1,9 +1,3 @@
-// ShoppingList.spec.js - component tests for the Smart Shopping List (src/views/ShoppingList.vue)
-//
-// The page is tested on its own: ShoppingModeModal is replaced by a stub that emits the
-// same events as the real one. The real modal is used in MealFlow.integration.spec.js.
-//
-// Run:  npx vitest run src/components/__tests__/ShoppingList.spec.js
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount } from '@vue/test-utils'
 import ShoppingList from '@/views/ShoppingList.vue'
@@ -14,7 +8,7 @@ import {
 vi.mock('axios', async () => (await import('./fakeServer')).axiosModule)
 enableAutoUnmount(afterEach)
 
-const TODAY = new Date(2026, 10, 4, 10, 0, 0) // Wednesday -> week of Monday 2 Nov 2026
+const TODAY = new Date(2026, 10, 4, 10, 0, 0)
 const THIS_WEEK = '2026-11-02'
 
 const ShoppingModeModal = {
@@ -24,7 +18,6 @@ const ShoppingModeModal = {
   template: '<div data-testid="shopping-mode-stub">{{ items.length }} items</div>',
 }
 
-// A list with something in most states the page has to handle
 const ginger = shoppingItem({ _id: 'i1', name: 'Ginger', quantity: 50, unit: 'g', category: 'produce' })
 const rice = shoppingItem({ _id: 'i2', name: 'Jasmine rice', quantity: 0, pantryQuantity: 300, unit: 'g', category: 'grains-noodles' })
 const milk = shoppingItem({ _id: 'i3', name: 'Milk', quantity: 500, unit: 'ml', pantryQuantity: 200, category: 'dairy-eggs', purchased: true })
@@ -36,10 +29,8 @@ const fullList = () => ({ weekStart: THIS_WEEK, generatedAt: '2026-11-02T01:00:0
 
 const renderList = (path = `/shoppinglist?start=${THIS_WEEK}`) => renderPage(ShoppingList, { path, stubs: { ShoppingModeModal } })
 const rows = (wrapper) => wrapper.findAll('[data-testid="shopping-item"]')
-// each row's checkbox is labelled "Bought <name>", which gives the item's name
 const rowName = (row) => row.get('input[type="checkbox"]').attributes('aria-label').replace('Bought ', '')
 const rowFor = (wrapper, name) => rows(wrapper).find((r) => rowName(r) === name)
-// the shop sections are the <section>s that hold item rows
 const sectionTitles = (wrapper) =>
   wrapper.findAll('section').filter((s) => s.find('[data-testid="shopping-item"]').exists()).map((s) => s.get('h2').text())
 
@@ -53,15 +44,14 @@ afterEach(() => vi.useRealTimers())
 
 describe('Shopping list: showing the list', () => {
   it('S01 any date in the link opens the list for that whole week (Monday start)', async () => {
-    const { wrapper } = await renderList('/shoppinglist?start=2026-11-05') // a Thursday
+    const { wrapper } = await renderList('/shoppinglist?start=2026-11-05')
     expect(server.last('GET /shoppinglist').params).toEqual({ start: THIS_WEEK })
     expect(text(wrapper)).toContain('Week of 2 Nov – 8 Nov 2026')
-    expect(text(wrapper)).toContain('From 3 recipes in your meal plan') // Chicken Rice, Fried Rice, Laksa
+    expect(text(wrapper)).toContain('From 3 recipes in your meal plan')
   })
 
   it('S02 items are grouped in shopping order, with chilled sections last', async () => {
     const { wrapper } = await renderList()
-    // rice is hidden (the pantry covers it), the rest follow a walk through the shop
     expect(sectionTitles(wrapper)).toEqual(['Canned Goods & Sauces', 'Fruit & Vegetables', 'Dairy & Eggs'])
     expect(text(wrapper)).toContain('Keep chilled')
   })
@@ -75,13 +65,13 @@ describe('Shopping list: showing the list', () => {
     const riceRow = rowFor(wrapper, 'Jasmine rice')
     expect(label(riceRow)).toContain('In pantry')
     expect(label(riceRow)).toContain('300 g needed, all in your pantry')
-    expect(riceRow.get('input[type="checkbox"]').attributes('disabled')).toBeDefined() // nothing to tick
+    expect(riceRow.get('input[type="checkbox"]').attributes('disabled')).toBeDefined()
   })
 
   it('S04 progress counts only things to buy, and the filters narrow the list', async () => {
     const { wrapper } = await renderList()
-    expect(text(wrapper)).toContain('1 of 3 bought') // ginger, milk, soy sauce (rice needs nothing)
-    expect(text(wrapper)).toContain('2 covered by your pantry') // rice + part of the milk
+    expect(text(wrapper)).toContain('1 of 3 bought')
+    expect(text(wrapper)).toContain('2 covered by your pantry')
 
     await button(wrapper, 'To Buy (2)').trigger('click')
     expect(rows(wrapper).map(rowName)).toEqual(['Soy sauce', 'Ginger'])
@@ -129,7 +119,7 @@ describe('Shopping list: weeks', () => {
     await button(wrapper, 'Next week').trigger('click')
     await flushPromises()
     expect(server.last('GET /shoppinglist').params.start).toBe('2026-11-09')
-    expect(router.currentRoute.value.query.start).toBe('2026-11-09') // shareable / matches the planner
+    expect(router.currentRoute.value.query.start).toBe('2026-11-09')
 
     await button(wrapper, 'This week').trigger('click')
     await flushPromises()
@@ -165,7 +155,7 @@ describe('Shopping list: ticking and editing items', () => {
     server.on('POST /shoppinglist/items', ({ body }) => shoppingItem({ _id: 'm1', ...body, source: 'manual', usedIn: [] }))
     const { wrapper } = await renderList()
     const addButton = button(wrapper, 'Add')
-    expect(addButton.attributes('disabled')).toBeDefined() // no name yet
+    expect(addButton.attributes('disabled')).toBeDefined()
 
     await wrapper.get('input[aria-label="Item name"]').setValue('  Dish soap ')
     await wrapper.get('input[aria-label="Quantity"]').setValue(2)
@@ -179,7 +169,7 @@ describe('Shopping list: ticking and editing items', () => {
     })
     expect(label(rowFor(wrapper, 'Dish soap'))).toContain('Added by you')
     expect(sectionTitles(wrapper)).toContain('Other')
-    expect(wrapper.get('input[aria-label="Item name"]').element.value).toBe('') // ready for the next one
+    expect(wrapper.get('input[aria-label="Item name"]').element.value).toBe('')
   })
 
   it('S12 removing your own item takes it off; if that fails it comes back', async () => {
@@ -190,9 +180,9 @@ describe('Shopping list: ticking and editing items', () => {
     const { wrapper } = await renderList()
 
     await button(wrapper, 'Remove Dish soap').trigger('click')
-    expect(rowFor(wrapper, 'Dish soap')).toBeUndefined() // gone straight away
+    expect(rowFor(wrapper, 'Dish soap')).toBeUndefined()
     await flushPromises()
-    expect(rowFor(wrapper, 'Dish soap')).toBeDefined() // server said no -> put back
+    expect(rowFor(wrapper, 'Dish soap')).toBeDefined()
     expect(wrapper.get('[role="alert"]').text()).toContain('Could not remove it')
   })
 })
@@ -206,7 +196,7 @@ describe('Shopping list: into the pantry', () => {
     }))
     const { wrapper } = await renderList()
 
-    await button(wrapper, 'Add 1 bought to pantry').trigger('click') // only the milk is bought
+    await button(wrapper, 'Add 1 bought to pantry').trigger('click')
     await flushPromises()
 
     expect(server.last('POST /shoppinglist/add-to-pantry').body).toEqual({ start: THIS_WEEK })

@@ -1,8 +1,4 @@
 <script setup>
-/* Shared layout for the login and register pages.
-   Left (desktop only): green brand panel with a headline and a small "today" card, like the landing page.
-   Right: the page's form, passed in through the default slot.
-   App.vue already hides the main navbar on /login and /register. */
 import logo from '@/assets/foodforthought-logo-horizontal.svg'
 import appIcon from '@/assets/foodforthought-app-icon.svg'
 
@@ -11,7 +7,6 @@ defineProps({
   lede: { type: String, default: '' },
 })
 
-// Decorative example of a day in the planner (same meals as the landing page)
 const TODAY = [
   { slot: 'Breakfast', meal: 'Kaya toast', status: 'Cooked' },
   { slot: 'Lunch', meal: 'Chicken rice', status: 'Cooked' },
@@ -76,8 +71,7 @@ const TODAY = [
      (scoped styles don't reach slot content). Every class starts with "auth-" so nothing leaks. -->
 <style>
 .auth {
-  /* Brand colours (same values as theme.css / the landing page) */
-  --auth-paper: #fafaf3;
+   --auth-paper: #fafaf3;
   --auth-surface: #f4f4ed;
   --auth-card: #ffffff;
   --auth-ink: #1a1c18;
@@ -106,8 +100,7 @@ const TODAY = [
   }
 }
 
-/* ---------- Brand panel ---------- */
-.auth-aside {
+/* ---------- Brand panel ---------- */.auth-aside {
   display: none;
 }
 
@@ -172,7 +165,6 @@ const TODAY = [
   line-height: 26px;
 }
 
-/* Small "today" card */
 .auth-today {
   margin-top: 36px;
   padding: 18px 18px 8px;
@@ -261,8 +253,7 @@ const TODAY = [
   line-height: 20px;
 }
 
-/* ---------- Form side ---------- */
-.auth-main {
+/* ---------- Form side ---------- */.auth-main {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -356,8 +347,7 @@ const TODAY = [
   color: var(--auth-ink-2);
 }
 
-/* ---------- Fields ---------- */
-.auth-field {
+/* ---------- Fields ---------- */.auth-field {
   margin-bottom: 18px;
 }
 
@@ -413,7 +403,6 @@ const TODAY = [
   padding-right: 72px;
 }
 
-/* Show / hide password */
 .auth-toggle {
   position: absolute;
   top: 50%;
@@ -459,8 +448,7 @@ const TODAY = [
   color: var(--auth-leaf);
 }
 
-/* ---------- Messages ---------- */
-.auth-alert {
+/* ---------- Messages ---------- */.auth-alert {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -486,8 +474,7 @@ const TODAY = [
   color: var(--auth-forest);
 }
 
-/* ---------- Submit + switch link ---------- */
-.auth-submit {
+/* ---------- Submit + switch link ---------- */.auth-submit {
   display: inline-flex;
   align-items: center;
   justify-content: center;

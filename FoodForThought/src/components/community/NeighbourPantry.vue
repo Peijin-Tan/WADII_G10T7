@@ -1,14 +1,4 @@
 <script setup>
-/* Neighbour Pantry (Community page > "Neighbour Pantry" tab)
-   Share pantries with people you trust and borrow ingredients from them.
-
-   1. Find someone by name or email and invite them. Nothing is shared until they accept.
-   2. Pick a neighbour to see their pantry, add what you need to the borrow list, and send the request.
-   3. They approve (the items move from their pantry to yours) or reject it.
-      You see the answer under "Your borrow requests", and can cancel a request while it's waiting.
-
-   Server routes: server/src/router/pantrysharing.js (all under /pantry).
-   Emits 'counts' ({ waiting }) so the tab can show how many invites/requests need an answer. */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createApi } from '@/services/api'
 import { useConfirm } from '@/composables/useConfirm'
@@ -19,14 +9,13 @@ const api = createApi('/pantry')
 const confirm = useConfirm()
 
 /* ---------- Page state ---------- */
-const friends = ref([]) // [{ _id, name, email, since }]
+const friends = ref([])
 const invites = ref({ incoming: [], outgoing: [] })
 const requests = ref({ incoming: [], outgoing: [] })
 const loading = ref(true)
 const loadError = ref('')
 
-// Short message after an action. Successes fade after 5s so they don't pile up; errors stay until closed.
-const notice = ref(null) // { tone: 'success' | 'error', text }
+const notice = ref(null)
 let noticeTimer
 function say(text, tone = 'success') {
   notice.value = { text, tone }
@@ -34,7 +23,6 @@ function say(text, tone = 'success') {
   if (tone === 'success') noticeTimer = setTimeout(() => (notice.value = null), 5000)
 }
 
-// Buttons waiting for the server (so they can't be pressed twice)
 const busy = ref(new Set())
 const isBusy = (key) => busy.value.has(key)
 function setBusy(key, on) {
@@ -47,7 +35,6 @@ function setBusy(key, on) {
 const errorText = (err, fallback) =>
   err.response?.data?.message || (err.response ? fallback : 'Cannot reach the server. Is it running?')
 
-// Runs one button's request: reloads what changed, then shows the server's message
 async function act(key, request, fallback, after) {
   setBusy(key, true)
   try {
@@ -71,7 +58,6 @@ async function loadAll() {
     invites.value = neighbourRes.data.invites || { incoming: [], outgoing: [] }
     requests.value = { incoming: requestRes.data.incoming || [], outgoing: requestRes.data.outgoing || [] }
 
-    // Keep the open pantry if they're still a neighbour, otherwise open the first one
     if (!friends.value.some((f) => f._id === selectedId.value)) selectedId.value = friends.value[0]?._id || ''
   } catch (err) {
     loadError.value = errorText(err, 'Could not load your neighbours.')
@@ -80,7 +66,6 @@ async function loadAll() {
   }
 }
 
-// Invites + borrow requests waiting for your answer (shown as a number on the tab)
 const waitingCount = computed(() => invites.value.incoming.length + requests.value.incoming.length)
 watch(waitingCount, (waiting) => emit('counts', { waiting }), { immediate: true })
 
@@ -89,7 +74,7 @@ const query = ref('')
 const results = ref([])
 const searching = ref(false)
 let searchTimer
-let searchSeq = 0 // ignore answers to older searches
+let searchSeq = 0
 
 watch(query, (value) => {
   clearTimeout(searchTimer)
@@ -99,7 +84,7 @@ watch(query, (value) => {
     return
   }
   searching.value = true
-  searchTimer = setTimeout(runSearch, 300) // wait until they stop typing
+  searchTimer = setTimeout(runSearch, 300)
 })
 
 async function runSearch() {
@@ -119,7 +104,6 @@ async function runSearch() {
   }
 }
 
-// After an invite changes, refresh the lists and the search results' buttons
 const refreshPeople = async () => {
   await loadAll()
   if (query.value.trim().length >= 2) await runSearch()
@@ -175,7 +159,6 @@ async function loadPantry() {
   }
 }
 
-// Switching neighbour: the borrow list belongs to one neighbour, so it starts again
 watch(selectedId, () => {
   cart.value = []
   message.value = ''
@@ -206,10 +189,9 @@ function clearFilters() {
 }
 
 /* ---------- Borrow list ---------- */
-const cart = ref([]) // [{ itemId, name, unit, available, quantity }]
+const cart = ref([])
 const message = ref('')
 
-// How much one tap of − / + changes, and what we start with, for each unit
 const STEP = { g: 10, ml: 10, kg: 0.1, l: 0.1 }
 const START = { g: 100, ml: 100, kg: 0.5, l: 0.5 }
 const stepFor = (unit) => STEP[unit] || 1
@@ -232,7 +214,6 @@ function toggleCart(item) {
   }]
 }
 
-// Keeps an amount above 0 and no more than they have
 function clampAmount(entry, value) {
   const n = Number(value)
   if (!Number.isFinite(n) || n <= 0) return Math.min(stepFor(entry.unit), entry.available)
@@ -293,7 +274,6 @@ function timeAgo(d) {
   return dayMonth(d)
 }
 
-// Expiry label + whether it's soon (3 days or less) or already past
 function expiryOf(item) {
   if (!item.expiryDate) return null
   const days = Math.ceil((new Date(item.expiryDate).getTime() - Date.now()) / 86400000)
@@ -661,8 +641,7 @@ onBeforeUnmount(() => {
   font-family: 'Inter', sans-serif;
 }
 
-/* ---------- Layout ---------- */
-.np-layout {
+/* ---------- Layout ---------- */.np-layout {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
   gap: 24px;
@@ -679,8 +658,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ---------- Cards ---------- */
-.np-card {
+/* ---------- Cards ---------- */.np-card {
   padding: 20px;
   border: 1px solid var(--np-border);
   border-radius: 16px;
@@ -748,8 +726,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-/* ---------- Message under the tabs ---------- */
-.np-notice {
+/* ---------- Message under the tabs ---------- */.np-notice {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -770,8 +747,7 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
-/* ---------- Loading / error / empty ---------- */
-.np-state {
+/* ---------- Loading / error / empty ---------- */.np-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -836,8 +812,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ---------- Inputs ---------- */
-.np-label {
+/* ---------- Inputs ---------- */.np-label {
   display: block;
   margin-bottom: 6px;
   font-size: 14px;
@@ -904,8 +879,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 3px rgba(50, 83, 60, 0.15);
 }
 
-/* ---------- Buttons ---------- */
-.np-btn {
+/* ---------- Buttons ---------- */.np-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -985,8 +959,7 @@ onBeforeUnmount(() => {
   font-size: 20px;
 }
 
-/* ---------- People ---------- */
-.np-people {
+/* ---------- People ---------- */.np-people {
   display: grid;
   gap: 4px;
   margin: 0;
@@ -1060,7 +1033,6 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
 }
-/* An invite: name + "wants to share pantries" on top, Accept / Decline on their own row under it */
 .np-person--invite .np-person-actions {
   flex-basis: 100%;
   padding-left: 46px;
@@ -1101,8 +1073,7 @@ onBeforeUnmount(() => {
   color: var(--np-primary);
 }
 
-/* ---------- Pantry ---------- */
-.np-pantry-head {
+/* ---------- Pantry ---------- */.np-pantry-head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1177,8 +1148,7 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-/* ---------- Borrow list ---------- */
-.np-cart {
+/* ---------- Borrow list ---------- */.np-cart {
   border-color: var(--np-primary-light);
 }
 .np-cart-list {
@@ -1259,8 +1229,7 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
-/* ---------- Requests ---------- */
-.np-requests {
+/* ---------- Requests ---------- */.np-requests {
   display: grid;
   gap: 12px;
   margin: 0;
@@ -1361,8 +1330,7 @@ onBeforeUnmount(() => {
     flex-direction: column-reverse;
     align-items: stretch;
   }
-  /* name on its own line, then the amount and the remove button side by side */
-  .np-cart-name {
+   .np-cart-name {
     flex-basis: 100%;
   }
   .np-stepper {

@@ -15,7 +15,6 @@ const props = defineProps({
   page: { type: String, required: true, validator: (p) => ['planner', 'shopping', 'pantry'].includes(p) },
 })
 
-// Words for each page. Kept here so all three read as one voice.
 const PAGES = {
   planner: {
     icon: 'calendar_month',
@@ -42,7 +41,6 @@ const STEPS = [
 
 const info = computed(() => PAGES[props.page])
 
-// Remember "Hide" per page. Storage can be blocked (private mode), so never let it break the page.
 const storageKey = `fft-intro-hidden-${props.page}`
 function readHidden() {
   try {
@@ -58,7 +56,6 @@ function setHidden(value) {
     if (value) localStorage.setItem(storageKey, '1')
     else localStorage.removeItem(storageKey)
   } catch {
-    /* storage unavailable: just don't remember it */
   }
 }
 </script>
@@ -99,8 +96,6 @@ function setHidden(value) {
 </template>
 
 <style scoped>
-/* Each page has its own colour ("Fresh market" palette), used for its banner and step:
-   weekly plan = basil, shopping list = tomato, pantry = aubergine */
 .pi--planner  { --pi-ink: #2f6b45; --pi-wash: #e1ede1; --pi-chip: #c6e2cc; --pi-text: #1d4230; }
 .pi--shopping { --pi-ink: #b23a2a; --pi-wash: #f2e0d9; --pi-chip: #f6cbc2; --pi-text: #6e241a; }
 .pi--pantry   { --pi-ink: #5b3a6e; --pi-wash: #e5e0e4; --pi-chip: #ddcfe6; --pi-text: #382444; }
@@ -144,8 +139,7 @@ function setHidden(value) {
   font: 400 14px/22px 'Inter', sans-serif;
 }
 
-/* ----- the plan -> shop -> stock loop ----- */
-.pi-steps {
+/* ----- the plan -> shop -> stock loop ----- */.pi-steps {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -155,7 +149,6 @@ function setHidden(value) {
   list-style: none;
 }
 
-/* a small arrow between steps */
 .pi-step + .pi-step::before {
   content: 'arrow_forward';
   font-family: 'Material Symbols Outlined';
@@ -199,12 +192,10 @@ a.pi-step-inner:focus-visible { outline: 2px solid var(--step-ink); outline-offs
   font-size: 11px;
 }
 
-/* where you are now */
 .pi-step.is-current .pi-step-inner { background: var(--step-ink); color: #fff; }
 .pi-step.is-current .pi-step-num { background: rgba(255, 255, 255, 0.25); }
 
-/* ----- hide / show again ----- */
-.pi-hide {
+/* ----- hide / show again ----- */.pi-hide {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -241,8 +232,6 @@ a.pi-step-inner:focus-visible { outline: 2px solid var(--step-ink); outline-offs
 .pi-reopen:focus-visible { outline: 2px solid var(--pi-ink); outline-offset: 2px; }
 .pi-reopen .material-symbols-outlined { font-size: 16px; }
 
-/* phones: smaller icon beside the text, and the steps stay on as few lines as possible
-   (no arrows, the numbers already show the order) */
 @media (max-width: 575.98px) {
   .pi { gap: 12px; padding: 14px 44px 14px 14px; }
   .pi-icon { width: 36px; height: 36px; border-radius: 10px; }

@@ -26,7 +26,7 @@ watch(
       cancelBtn.value?.focus()
     } else {
       window.removeEventListener('keydown', onKey)
-      lastFocused?.focus?.() // back to the button that opened it
+      lastFocused?.focus?.()
     }
   },
 )
@@ -138,7 +138,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .cd-btn--confirm { background: var(--tone); color: #fff; }
 .cd-btn--confirm:hover { background: var(--tone-hover); }
 
-/* opens with a small lift so it's clear what appeared */
 .cd-enter-active { transition: opacity var(--dur-modal) var(--ease-out); }
 .cd-leave-active { transition: opacity var(--dur-exit) var(--ease-out); }
 .cd-enter-active .cd-card { transition: transform var(--dur-modal) var(--ease-out); }

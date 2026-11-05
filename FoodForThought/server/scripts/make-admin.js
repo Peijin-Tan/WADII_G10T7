@@ -1,10 +1,3 @@
-// Makes an existing account an admin. Needed for the FIRST admin, because sign-up
-// always creates normal users (after that, admins can promote people on the admin dashboard).
-//
-//   cd FoodForThought/server
-//   npm run make-admin -- someone@example.com
-//
-// Uses the same database as the server (MONGODB_URI in config.env).
 const path = require('path')
 require('dotenv').config({ path: path.join(__dirname, '..', 'config.env') })
 const mongoose = require('mongoose')

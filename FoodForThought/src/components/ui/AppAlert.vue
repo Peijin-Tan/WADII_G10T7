@@ -17,14 +17,13 @@ import { computed } from 'vue'
 const props = defineProps({
   tone: { type: String, default: 'info', validator: (t) => ['success', 'error', 'warning', 'info'].includes(t) },
   title: { type: String, default: '' },
-  icon: { type: String, default: '' }, // Material Symbols name, to override the tone's default icon
+  icon: { type: String, default: '' },
   dismissible: { type: Boolean, default: true },
 })
 defineEmits(['dismiss'])
 
 const ICONS = { success: 'check_circle', error: 'error', warning: 'warning', info: 'lightbulb' }
 const iconName = computed(() => props.icon || ICONS[props.tone])
-// errors interrupt screen readers straight away; the rest are announced politely
 const role = computed(() => (props.tone === 'error' ? 'alert' : 'status'))
 </script>
 
@@ -45,8 +44,7 @@ const role = computed(() => (props.tone === 'error' ? 'alert' : 'status'))
 
 <style scoped>
 .app-alert {
-  /* each tone sets these four */
-  --tone-bg: #eaf1f5;
+   --tone-bg: #eaf1f5;
   --tone-bar: #2f5d73;
   --tone-chip: #cfe3ec;
   --tone-text: #0e2a36;

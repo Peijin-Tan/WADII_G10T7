@@ -1,5 +1,4 @@
 <script setup>
-// 404 page. The router's catch-all route ('/:pathMatch(.*)*') shows this for any unknown URL.
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -7,11 +6,9 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const auth = useAuthStore()
 
-// Logged-in users go back to their dashboard, everyone else to the landing page
 const homeLink = computed(() => (auth.token ? '/dashboard' : '/home'))
 const homeLabel = computed(() => (auth.token ? 'Go to your dashboard' : 'Go to the home page'))
 
-// Pages people most likely meant to reach
 const SUGGESTIONS = [
   { to: '/planner', label: 'Weekly plan', icon: 'calendar_month' },
   { to: '/recipes', label: 'Recipes', icon: 'menu_book' },
@@ -77,8 +74,7 @@ const SUGGESTIONS = [
   text-align: center;
 }
 
-/* ---------- Plate illustration ---------- */
-.nf-plate {
+/* ---------- Plate illustration ---------- */.nf-plate {
   width: 200px;
   height: auto;
   margin-bottom: 20px;
@@ -108,8 +104,7 @@ const SUGGESTIONS = [
   stroke-linejoin: round;
 }
 
-/* ---------- Text ---------- */
-.nf-code {
+/* ---------- Text ---------- */.nf-code {
   margin: 0 0 6px;
   color: var(--fft-primary);
   font: 600 14px/20px 'Inter', sans-serif;
@@ -138,8 +133,7 @@ const SUGGESTIONS = [
   word-break: break-all;
 }
 
-/* ---------- Actions ---------- */
-.nf-btn {
+/* ---------- Actions ---------- */.nf-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;

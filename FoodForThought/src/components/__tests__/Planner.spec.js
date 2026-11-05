@@ -1,10 +1,3 @@
-// Planner.spec.js - component tests for the Weekly Meal Planner (src/views/Planner.vue)
-//
-// The page is tested on its own: its three modals (AddMealModal, SwapMealModal, RecipeModal)
-// are replaced by small stubs that just emit the events the real ones would. The real
-// modals are tested together with the page in MealFlow.integration.spec.js.
-//
-// Run:  npx vitest run src/components/__tests__/Planner.spec.js
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount } from '@vue/test-utils'
 import Planner from '@/views/Planner.vue'
@@ -16,13 +9,10 @@ import {
 vi.mock('axios', async () => (await import('./fakeServer')).axiosModule)
 enableAutoUnmount(afterEach)
 
-// Fixed "today" so the week and the selected day never depend on when the tests run:
-// Wednesday 4 Nov 2026 -> the week starts Monday 2 Nov, and Wednesday is day index 2.
 const TODAY = new Date(2026, 10, 4, 10, 0, 0)
 const THIS_WEEK = '2026-11-02'
 const WED = 2
 
-// Stubs that stand in for the modals: they show their props and let the test emit their events
 const AddMealModal = {
   name: 'AddMealModal',
   props: ['defaultDate', 'defaultSlot', 'recipes', 'searchResults'],
@@ -52,7 +42,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
-  if (confirmState.open) answerDialog(false) // never leave the shared dialog open for the next test
+  if (confirmState.open) answerDialog(false)
 })
 
 describe('Planner: loading and showing the week', () => {
@@ -69,25 +59,23 @@ describe('Planner: loading and showing the week', () => {
     expect(card).toContain('Chicken Rice')
     expect(card).toContain('600 kcal')
     expect(card).toContain('2 servings')
-    expect(card).toContain('Pantry: chicken rice') // the ingredients already at home (not ginger)
+    expect(card).toContain('Pantry: chicken rice')
     expect(card).not.toMatch(/Pantry:.*ginger/)
   })
 
   it('P02 shows the weekly stats, and skipped meals add no calories', async () => {
     server.on('GET /planner', () => week([
-      plannerEntry({ id: 'e1', dayOfWeek: WED, status: 'Cooked' }), // 600 kcal, eaten
-      plannerEntry({ id: 'e2', dayOfWeek: WED, mealSlot: 'lunch', status: 'Skipped' }), // not eaten
+      plannerEntry({ id: 'e1', dayOfWeek: WED, status: 'Cooked' }),
+      plannerEntry({ id: 'e2', dayOfWeek: WED, mealSlot: 'lunch', status: 'Skipped' }),
     ]))
     const { wrapper } = await renderPlanner()
 
     expect(text(wrapper)).toContain('Meals Cooked 1 / 2 planned')
     expect(text(wrapper)).toContain('Daily Calorie Avg 600 kcal')
-    // Lunch is listed before dinner, whatever order the server sends them in
     expect(cards(wrapper).map((c) => c.text())[0]).toContain('Lunch')
   })
 
   it('P03 splits the week\'s calories into protein, carbs and fat', async () => {
-    // 35 g protein x4 = 140, 70 g carbs x4 = 280, 20 g fat x9 = 180  -> 600 kcal in total
     const { wrapper } = await renderPlanner()
     const bar = wrapper.get('[data-testid="macro-split"] [role="img"]')
     expect(bar.attributes('aria-label')).toBe('Protein 23%, Carbs 47%, Fat 30%')
@@ -133,9 +121,9 @@ describe('Planner: moving between weeks and days', () => {
       params.start === THIS_WEEK ? slow.promise : week([plannerEntry({ dayOfWeek: 0, recipe: { ...plannerEntry().recipe, title: 'Next-week Laksa' } })]))
     const { wrapper } = await renderPlanner()
 
-    await button(wrapper, 'Next week').trigger('click') // user moves on before this week arrives
+    await button(wrapper, 'Next week').trigger('click')
     await flushPromises()
-    slow.resolve({ ...week([plannerEntry({ dayOfWeek: 0 })]) }) // old week finally answers
+    slow.resolve({ ...week([plannerEntry({ dayOfWeek: 0 })]) })
     await flushPromises()
 
     expect(text(wrapper)).toContain('Next-week Laksa')
@@ -143,12 +131,12 @@ describe('Planner: moving between weeks and days', () => {
   })
 
   it('P08 clicking a day tab shows that day\'s meals', async () => {
-    server.on('GET /planner', () => week([plannerEntry({ dayOfWeek: 0 })])) // Monday only
+    server.on('GET /planner', () => week([plannerEntry({ dayOfWeek: 0 })]))
     const { wrapper } = await renderPlanner()
-    expect(cards(wrapper)).toHaveLength(0) // today (Wednesday) is empty
+    expect(cards(wrapper)).toHaveLength(0)
 
     const monday = wrapper.findAll('button').find((b) => b.text().startsWith('Mon 2'))
-    expect(text(monday)).toContain('0/1') // tab shows cooked / planned
+    expect(text(monday)).toContain('0/1')
     await monday.trigger('click')
 
     expect(text(wrapper)).toContain('Monday, Nov 2')
@@ -297,9 +285,9 @@ describe('Planner: adding meals', () => {
     expect(server.last('POST /planner/entries').body).toEqual({
       start: THIS_WEEK, dayOfWeek: 4, mealSlot: 'lunch', servings: 3, spoonacularId: 716429,
     })
-    expect(text(wrapper)).toContain('Friday, Nov 6') // jumps to the day the meal went on
+    expect(text(wrapper)).toContain('Friday, Nov 6')
     expect(text(wrapper)).toContain('Pad Thai')
-    expect(server.count('GET /planner/recipe-options')).toBe(2) // reloaded so the new recipe can be picked again
+    expect(server.count('GET /planner/recipe-options')).toBe(2)
   })
 
   it('P17 a saved recipe is added by its id', async () => {
@@ -320,7 +308,7 @@ describe('Planner: adding meals', () => {
     const { wrapper, router } = await renderPlanner('/planner?day=4&add=lunch')
 
     expect(wrapper.get('[data-testid="add-meal-stub"]').text()).toBe('2026-11-06 Lunch')
-    expect(router.currentRoute.value.query).toEqual({}) // refreshing won't reopen it
+    expect(router.currentRoute.value.query).toEqual({})
   })
 
   it('P19 a bad link (/planner?day=9&add=brunch) is ignored', async () => {
@@ -335,10 +323,10 @@ describe('Planner: building the shopping list', () => {
     vi.setSystemTime(TODAY)
     server.on('POST /shoppinglist/generate', () => ({
       items: [
-        { name: 'ginger', quantity: 50, purchased: false }, // to buy
-        { name: 'rice', quantity: 0, purchased: false }, // pantry covers it
-        { name: 'soy sauce', quantity: 1, purchased: true }, // already bought
-        { name: 'spring onion', quantity: 2, purchased: false }, // to buy
+        { name: 'ginger', quantity: 50, purchased: false },
+        { name: 'rice', quantity: 0, purchased: false },
+        { name: 'soy sauce', quantity: 1, purchased: true },
+        { name: 'spring onion', quantity: 2, purchased: false },
       ],
     }))
     const { wrapper, router } = await renderPlanner()
@@ -348,7 +336,7 @@ describe('Planner: building the shopping list', () => {
     expect(server.last('POST /shoppinglist/generate').body).toEqual({ start: THIS_WEEK })
     expect(text(wrapper)).toContain('2 Items to Buy')
 
-    await vi.advanceTimersByTimeAsync(900) // the label stays up for 0.9 s
+    await vi.advanceTimersByTimeAsync(900)
     vi.useRealTimers()
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe(`/shoppinglist?start=${THIS_WEEK}`))
   })
@@ -361,7 +349,7 @@ describe('Planner: building the shopping list', () => {
     await flushPromises()
 
     expect(wrapper.get('[role="alert"]').text()).toContain('Shopping list service is down')
-    expect(button(wrapper, 'Build Shopping List').attributes('disabled')).toBeUndefined() // can try again
+    expect(button(wrapper, 'Build Shopping List').attributes('disabled')).toBeUndefined()
     expect(router.currentRoute.value.path).toBe('/planner')
   })
 })

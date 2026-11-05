@@ -10,17 +10,11 @@ import AppAlert from '@/components/ui/AppAlert.vue'
 import PageIntro from '@/components/ui/PageIntro.vue'
 
 /* ---------- API ---------- */
-// All shopping-list requests go to the Express router mounted at /shoppinglist.
-// createApi (services/api.js) sends the login token and logs out on 401.
 const api = createApi('/shoppinglist')
 const route = useRoute()
 const router = useRouter()
 
-/* ---------------------------------------------------------------
-   Category display info, listed in SHOPPING ORDER (must match
-   SHOPPING_ORDER in backend/services/shoppingListBuilder.js):
-   shelf-stable first, chilled and frozen last so they stay cold.
----------------------------------------------------------------- */
+/* --------------------------------------------------------------- */
 const CATEGORY_META = [
   { id: 'canned-sauces', title: 'Canned Goods & Sauces', icon: 'soup_kitchen' },
   { id: 'grains-noodles', title: 'Rice, Grains & Noodles', icon: 'rice_bowl' },
@@ -33,10 +27,7 @@ const CATEGORY_META = [
 ]
 const UNIT_OPTIONS = ['piece', 'g', 'kg', 'ml', 'l', 'tbsp', 'tsp', 'cup', 'pack', 'bottle', 'can']
 
-/* ---------------------------------------------------------------
-   Week handling. The week lives in the URL (?start=2026-10-19) so the
-   planner can link straight to the same week's list.
----------------------------------------------------------------- */
+/* --------------------------------------------------------------- */
 const queryStart = /^\d{4}-\d{2}-\d{2}$/.test(route.query.start ?? '') ? route.query.start : null
 const weekStart = ref(toISODate(mondayOf(queryStart ? fromISODate(queryStart) : new Date())))
 
@@ -57,15 +48,13 @@ const weekLabel = computed(() => {
   return `${fmt(start)} – ${fmt(end)} ${end.getFullYear()}`
 })
 
-/* ---------------------------------------------------------------
-   Loading the list
----------------------------------------------------------------- */
-const list = ref(null) // { weekStart, items: [], generatedAt }
+/* --------------------------------------------------------------- */
+const list = ref(null)
 const loading = ref(false)
 const generating = ref(false)
 const error = ref('')
 
-let latestLoad = 0 // ignore a slow response if the user already switched to another week
+let latestLoad = 0
 
 async function loadList() {
   const requestId = ++latestLoad
@@ -103,13 +92,10 @@ watch(weekStart, (start) => {
   loadList()
 })
 
-/* ---------------------------------------------------------------
-   Derived data
----------------------------------------------------------------- */
+/* --------------------------------------------------------------- */
 const items = computed(() => list.value?.items ?? [])
 const hasList = computed(() => Boolean(list.value?.generatedAt) || items.value.length > 0)
 
-// quantity 0 = the pantry already covers it, nothing to buy.
 const isStocked = (it) => it.quantity <= 0
 const toBuyItems = computed(() => items.value.filter((it) => !isStocked(it)))
 
@@ -121,7 +107,6 @@ const bought = computed(() => toBuyItems.value.filter((it) => it.purchased).leng
 const percent = computed(() => (total.value === 0 ? 0 : Math.round((bought.value / total.value) * 100)))
 const pantryItems = computed(() => items.value.filter(fromPantry))
 
-// Unique recipes this week's list was built from.
 const recipeTitles = computed(() => {
   const titles = new Set()
   items.value.forEach((it) => (it.usedIn || []).forEach((u) => u.title && titles.add(u.title)))
@@ -129,14 +114,7 @@ const recipeTitles = computed(() => {
 })
 const hasAutoItems = computed(() => items.value.some((it) => it.source !== 'manual'))
 
-/* ---------------------------------------------------------------
-   "Add bought items to pantry"
-   Units the pantry can store (must match PANTRY_UNIT in
-   backend/services/shoppingListBuilder.js). Items in other units,
-   like "1 bottle dish soap", stay on the list only.
----------------------------------------------------------------- */
-// Same rule as the server (readyForPantry in router/shoppinglist.js):
-// bought, not added yet, and meant for the pantry (the basket's switch, or a unit the pantry can store)
+/* --------------------------------------------------------------- */
 function goesToPantry(it) {
   if (!it.purchased || it.addedToPantry) return false
   if (it.basket) return it.basket.addToPantry !== false
@@ -144,8 +122,8 @@ function goesToPantry(it) {
 }
 const readyForPantry = computed(() => items.value.filter(goesToPantry))
 const addingToPantry = ref(false)
-const notice = ref('') // green success message
-const warning = ref('') // amber: done, but some items were left out (e.g. "Rice: your pantry stores it in cup")
+const notice = ref('')
+const warning = ref('')
 
 async function addBoughtToPantry() {
   if (addingToPantry.value || readyForPantry.value.length === 0) return
@@ -156,10 +134,9 @@ async function addBoughtToPantry() {
   warning.value = ''
   try {
     const { data } = await api.post('/add-to-pantry', { start: weekStart.value })
-    list.value = data.list // server sends back the list with addedToPantry set
+    list.value = data.list
     notice.value = `Added ${data.added} ${data.added === 1 ? 'item' : 'items'} to your pantry.`
     if (data.skipped.length) {
-      // e.g. "Rice (your pantry stores it in cup)"
       const text = `Not added: ${data.skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}. Add these on the Pantry page instead.`
       if (showShopping.value) shoppingError.value = text
       else warning.value = text
@@ -171,12 +148,8 @@ async function addBoughtToPantry() {
   }
 }
 
-/* ---------------------------------------------------------------
-   Filters
----------------------------------------------------------------- */
-const filter = ref('all') // 'all' | 'tobuy' | 'pantry'
-// On by default: lines the pantry fully covers need no action, so they'd only make the list longer.
-// They're still listed under the "In Pantry" filter and in the "From Your Pantry" panel.
+/* --------------------------------------------------------------- */
+const filter = ref('all')
 const hidePantry = ref(true)
 
 const filters = computed(() => [
@@ -192,7 +165,6 @@ function isVisible(it) {
   return true
 }
 
-// Items grouped into sections, in shopping order, hiding empty sections.
 const sections = computed(() =>
   CATEGORY_META.map((cat) => {
     const inCategory = items.value.filter((it) => (it.category || 'other') === cat.id)
@@ -200,12 +172,7 @@ const sections = computed(() =>
   }).filter((s) => s.visible.length > 0),
 )
 
-/* ---------------------------------------------------------------
-   Formatting
----------------------------------------------------------------- */
-// Every amount on a line: the main one plus any in units that can't be converted to it.
-// Ginger planned as "1 piece" in one recipe and "1 inch" in another is one line: "1 piece + 1 inch".
-// (Amounts in units that DO convert are merged by the server: 1 tsp + 1 tbsp arrives as 4 tsp.)
+/* --------------------------------------------------------------- */
 function amountsOf(it) {
   return [{ quantity: it.quantity, unit: it.unit, pantryQuantity: it.pantryQuantity }, ...(it.alsoNeed || [])]
 }
@@ -221,7 +188,6 @@ function recipeTags(it) {
   return titles.length > 2 ? [...titles.slice(0, 2), `+${titles.length - 2} more`] : titles
 }
 
-// Small line under the item name, e.g. "200 g from pantry · for Prawn Laksa"
 function rowNote(it) {
   if (it.source === 'manual') return 'Added by you'
   const parts = []
@@ -232,10 +198,7 @@ function rowNote(it) {
   return parts.join(' · ')
 }
 
-/* ---------------------------------------------------------------
-   Tick / untick: update the screen first ("optimistic"), then tell
-   the server, and undo the change if the server says no.
----------------------------------------------------------------- */
+/* --------------------------------------------------------------- */
 async function togglePurchased(it) {
   const next = !it.purchased
   it.purchased = next
@@ -248,16 +211,11 @@ async function togglePurchased(it) {
   }
 }
 
-/* ---------------------------------------------------------------
-   Shopping mode (components/Shopping/shoppingMode.vue)
-   Tapping an item there ticks it (togglePurchased above); the server then
-   fills in its basket details, which the user can edit before adding to the pantry.
----------------------------------------------------------------- */
+/* --------------------------------------------------------------- */
 const showShopping = ref(false)
 const savingBasket = ref(false)
 const shoppingError = ref('')
 
-// Errors show inside the modal while it's open, otherwise on the page
 function reportError(message) {
   if (showShopping.value) shoppingError.value = message
   else error.value = message
@@ -273,7 +231,6 @@ function closeShopping() {
   shoppingError.value = ''
 }
 
-// basket: { name, quantity, unit, category, expiryDate: 'YYYY-MM-DD' or '', addToPantry }
 async function saveBasket({ item, basket }) {
   savingBasket.value = true
   shoppingError.value = ''
@@ -287,9 +244,7 @@ async function saveBasket({ item, basket }) {
   }
 }
 
-/* ---------------------------------------------------------------
-   Manual items
----------------------------------------------------------------- */
+/* --------------------------------------------------------------- */
 const newItem = ref({ name: '', quantity: 1, unit: 'piece', category: 'other' })
 const adding = ref(false)
 
@@ -316,7 +271,7 @@ async function removeItem(it) {
   try {
     await api.delete(`/items/${it._id}`)
   } catch (err) {
-    list.value.items.splice(index, 0, it) // put it back
+    list.value.items.splice(index, 0, it)
     error.value = errorMessage(err)
   }
 }
@@ -688,11 +643,7 @@ async function removeItem(it) {
 </template>
 
 <style scoped>
-/* ==========================================================================
-   Bootstrap handles layout; these are the design tokens + components.
-   Tokens live on .sw-page (not :root) so they don't leak into other views.
-   ========================================================================== */
-.sw-page {
+/* ========================================================================== */.sw-page {
   --sw-background: #fafaf3;
   --sw-on-surface: #1a1c18;
   --sw-on-surface-variant: #424842;
@@ -731,8 +682,7 @@ async function removeItem(it) {
   --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
 
   width: 100%;
-  max-width: 1140px; /* same content width as the planner and pantry */
-  margin: 0 auto;
+  max-width: 1140px;  margin: 0 auto;
   padding: 1rem;
   display: flex;
   flex-direction: column;
@@ -747,8 +697,7 @@ async function removeItem(it) {
 
 .sw-shell { min-height: 100vh; min-height: 100dvh; background: #fafaf3; }
 
-/* ---------- Icons (Material Symbols) ---------- */
-.material-symbols-outlined { line-height: 1; vertical-align: middle; user-select: none; }
+/* ---------- Icons (Material Symbols) ---------- */.material-symbols-outlined { line-height: 1; vertical-align: middle; user-select: none; }
 .sw-ico-16 { font-size: 16px; }
 .sw-ico-18 { font-size: 18px; }
 .sw-ico-20 { font-size: 20px; }
@@ -756,8 +705,7 @@ async function removeItem(it) {
 .sw-spin { animation: sw-spin 0.7s linear infinite; }
 @keyframes sw-spin { to { transform: rotate(360deg); } }
 
-/* ---------- Typography scale ---------- */
-.sw-headline-lg { font: 600 28px/36px 'Outfit', sans-serif; letter-spacing: -0.01em; margin: 0; }
+/* ---------- Typography scale ---------- */.sw-headline-lg { font: 600 28px/36px 'Outfit', sans-serif; letter-spacing: -0.01em; margin: 0; }
 @media (min-width: 768px) { .sw-headline-lg { font-size: 32px; line-height: 40px; } }
 .sw-headline-sm { font: 500 20px/28px 'Outfit', sans-serif; margin: 0; }
 .sw-body-md     { font: 400 15px/24px 'Inter', sans-serif; margin: 0; }
@@ -772,18 +720,15 @@ async function removeItem(it) {
 .sw-text-secondary { color: var(--sw-secondary); }
 .sw-text-tertiary  { color: var(--sw-tertiary); }
 
-/* ---------- Cards ---------- */
-.sw-card { background: var(--sw-surface-lowest); border-radius: var(--sw-radius-xl); box-shadow: var(--sw-shadow-sm); }
+/* ---------- Cards ---------- */.sw-card { background: var(--sw-surface-lowest); border-radius: var(--sw-radius-xl); box-shadow: var(--sw-shadow-sm); }
 .sw-card--low { background: var(--sw-surface-low); }
 
-/* ---------- Hero / summary deck ---------- */
-.sw-hero {
+/* ---------- Hero / summary deck ---------- */.sw-hero {
   position: relative;
   overflow: hidden;
   padding: 1.25rem;
   background: var(--sw-surface-low);
-  border: 1px solid rgba(194, 200, 192, 0.5); /* keeps the card distinct on the cream page */
-  border-radius: var(--sw-radius-xl);
+  border: 1px solid rgba(194, 200, 192, 0.5);  border-radius: var(--sw-radius-xl);
   box-shadow: var(--sw-shadow-sm);
 }
 @media (min-width: 768px) { .sw-hero { padding: 2.5rem; } }
@@ -795,8 +740,7 @@ async function removeItem(it) {
 .sw-hero-actions { flex-shrink: 0; }
 @media (min-width: 992px) { .sw-hero-actions { width: auto !important; } }
 
-/* ---------- Week navigation + small icon buttons ---------- */
-.sw-weeknav { display: inline-flex; align-items: center; gap: 0.125rem; }
+/* ---------- Week navigation + small icon buttons ---------- */.sw-weeknav { display: inline-flex; align-items: center; gap: 0.125rem; }
 .sw-iconbtn {
   display: inline-flex;
   align-items: center;
@@ -814,8 +758,7 @@ async function removeItem(it) {
 .sw-iconbtn:hover { background: var(--sw-surface-high); }
 .sw-iconbtn:focus-visible { outline: 2px solid var(--sw-primary); outline-offset: 1px; }
 
-/* ---------- Pills, dots, badges ---------- */
-.sw-pill {
+/* ---------- Pills, dots, badges ---------- */.sw-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -840,8 +783,7 @@ async function removeItem(it) {
   font: 600 10px/14px 'Inter', sans-serif;
 }
 
-/* ---------- Buttons (built on Bootstrap .btn via its CSS variables) ---------- */
-.sw-btn {
+/* ---------- Buttons (built on Bootstrap .btn via its CSS variables) ---------- */.sw-btn {
   --bs-btn-padding-x: 1rem;
   --bs-btn-padding-y: 0.5rem;
   --bs-btn-border-width: 0;
@@ -899,14 +841,12 @@ async function removeItem(it) {
   --bs-btn-active-bg: var(--sw-surface-high);
 }
 
-/* ---------- Progress ring ---------- */
-.sw-ring { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
+/* ---------- Progress ring ---------- */.sw-ring { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
 .sw-ring svg { width: 48px; height: 48px; transform: rotate(-90deg); }
 .sw-ring-track { fill: none; stroke: var(--sw-surface-high); stroke-width: 3.5; }
 .sw-ring-bar { fill: none; stroke: var(--sw-primary); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dasharray 0.5s ease-out; }
 .sw-ring-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 
-/* "Go to pantry" link in the summary card */
 .sw-inline-link {
   display: inline-flex;
   align-items: center;
@@ -920,8 +860,7 @@ async function removeItem(it) {
 .sw-inline-link:hover { text-decoration: underline; }
 .sw-inline-link:focus-visible { outline: 2px solid var(--sw-primary); outline-offset: 2px; border-radius: 2px; }
 
-/* ---------- Filter bar ---------- */
-.sw-filterbar {
+/* ---------- Filter bar ---------- */.sw-filterbar {
   margin-top: 1.5rem;
   padding: 1rem 0.5rem 0.5rem;
   background: rgba(255, 255, 255, 0.8);
@@ -944,10 +883,7 @@ async function removeItem(it) {
 .form-check-input.sw-check:disabled { opacity: 0.6; cursor: default; }
 .form-check-input.sw-check--sm { width: 1rem; height: 1rem; border-radius: 0.25rem; }
 
-/* ---------- Alerts & empty states ---------- */
-/* ===== "Start shopping" call-to-action ===== */
-/* tomato = the Shopping List's page colour (same as its page intro); set on both the card and the phone bar */
-.sw-shop-cta,
+/* ---------- Alerts & empty states ---------- *//* ===== "Start shopping" call-to-action ===== */.sw-shop-cta,
 .sw-shop-bar { --cta: #b23a2a; --cta-hover: #962d1f; --cta-soft: #f2c9bf; --cta-wash: #fbe4de; --cta-shadow: rgba(178, 58, 42, 0.25); }
 
 .sw-shop-cta {
@@ -1000,12 +936,10 @@ async function removeItem(it) {
 .sw-shop-cta-btn:disabled { opacity: 0.5; }
 .sw-shop-cta-count { font: 500 12px/16px 'Inter', sans-serif; opacity: 0.85; }
 
-/* C: side column, stacked */
 .sw-shop-cta--c { flex-direction: column; align-items: stretch; text-align: left; }
 .sw-shop-cta--c .sw-shop-cta-icon { display: none; }
 .sw-shop-cta--c .sw-shop-cta-btn { width: 100%; }
 
-/* C on phones: bar fixed to the bottom of the screen */
 .sw-shop-bar {
   position: fixed;
   left: 12px;
@@ -1036,12 +970,10 @@ async function removeItem(it) {
 }
 .sw-empty-icon { font-size: 40px; color: var(--sw-primary); }
 
-/* ---------- Quick-add form ---------- */
-.sw-addform { display: flex; flex-direction: column; gap: 0.5rem; }
+/* ---------- Quick-add form ---------- */.sw-addform { display: flex; flex-direction: column; gap: 0.5rem; }
 @media (min-width: 768px) { .sw-addform { flex-direction: row; align-items: center; } }
 .sw-addbox { flex: 1; display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 1rem; background: var(--sw-surface-low); border-radius: var(--sw-radius); }
 .sw-addbox:focus-within { box-shadow: 0 0 0 2px var(--sw-primary); }
-/* quantity, unit, section and Add: one row on wider screens, a neat 2-column grid on phones */
 .sw-add-controls { display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.5rem; }
 .sw-add-controls > :nth-child(3), .sw-add-controls .sw-add-btn { grid-column: 1 / -1; }
 @media (min-width: 576px) {
@@ -1068,28 +1000,22 @@ async function removeItem(it) {
 .form-select.sw-select:focus,
 .form-control.sw-select:focus { box-shadow: 0 0 0 2px var(--sw-primary); }
 
-/* ---------- Sections ---------- */
-.sw-aisle { overflow: hidden; border-left: 5px solid var(--cat-ink); }
+/* ---------- Sections ---------- */.sw-aisle { overflow: hidden; border-left: 5px solid var(--cat-ink); }
 .sw-aisle-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--cat-wash); }
 .sw-aisle-head .sw-headline-sm { color: var(--cat-ink); }
 .sw-aisle-head .sw-pill { white-space: nowrap; flex-shrink: 0; background: #fff; color: var(--cat-ink); }
 .sw-aisle-icon { width: 2.25rem; height: 2.25rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 10px; background: var(--cat-ink); color: #fff; }
 .sw-aisle-chilled { display: inline-flex; align-items: center; gap: 3px; font: 600 11px/14px 'Inter', sans-serif; color: #1f7690; }
 .sw-aisle-chilled .material-symbols-outlined { font-size: 13px; }
-/* ticked boxes take the section's colour */
 .sw-aisle .sw-check:checked { background-color: var(--cat-ink); border-color: var(--cat-ink); }
 .sw-aisle-body { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem; }
 
-/* ---------- Filter chips: one row, scrolls sideways on narrow phones ---------- */
-/* wrap instead of a hidden horizontal scroll, so "In Pantry" is never cut off on phones */
-.sw-filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; max-width: 100%; }
+/* ---------- Filter chips: one row, scrolls sideways on narrow phones ---------- */.sw-filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; max-width: 100%; }
 .sw-filter-chips .sw-btn { flex-shrink: 0; white-space: nowrap; }
 
-/* pantry sidebar follows you down the list on desktop */
 @media (min-width: 992px) { .sw-sticky { position: sticky; top: 1rem; } }
 
-/* ---------- Grocery rows: [checkbox] [name / note] [amount] [delete] ---------- */
-.sw-qty-col { flex-shrink: 0; font: 600 14px/20px 'Inter', sans-serif; color: var(--sw-on-surface); white-space: nowrap; text-align: right; }
+/* ---------- Grocery rows: [checkbox] [name / note] [amount] [delete] ---------- */.sw-qty-col { flex-shrink: 0; font: 600 14px/20px 'Inter', sans-serif; color: var(--sw-on-surface); white-space: nowrap; text-align: right; }
 .sw-qty-col--stocked { font-weight: 500; font-size: 12px; color: var(--sw-primary); }
 .sw-row.is-bought .sw-qty-col { opacity: 0.5; }
 .sw-row {
@@ -1114,8 +1040,7 @@ async function removeItem(it) {
 .sw-row.is-bought .sw-item-name { text-decoration: line-through; opacity: 0.5; }
 
 
-/* ---------- Pantry list ---------- */
-.sw-saving { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem; background: var(--sw-surface-lowest); border-radius: var(--sw-radius); }
+/* ---------- Pantry list ---------- */.sw-saving { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem; background: var(--sw-surface-lowest); border-radius: var(--sw-radius); }
 .sw-saving-text { min-width: 0; }
 .sw-saving-text .sw-label-md { display: block; }
 

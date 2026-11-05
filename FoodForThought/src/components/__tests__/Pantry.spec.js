@@ -1,10 +1,3 @@
-// Pantry.spec.js - component tests for the Pantry page (src/views/Pantry.vue)
-//
-// The page is tested on its own: SuggestionModal ("What can I cook?") is replaced by a stub
-// that emits the same 'search' event. The "Are you sure?" dialog is answered with
-// answerDialog() instead of being drawn; MealFlow.integration.spec.js uses the real dialog.
-//
-// Run:  npx vitest run src/components/__tests__/Pantry.spec.js
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount } from '@vue/test-utils'
 import Pantry from '@/views/Pantry.vue'
@@ -17,7 +10,6 @@ enableAutoUnmount(afterEach)
 
 const TODAY = new Date(2026, 10, 4, 10, 0, 0)
 
-// A use-by date n days from TODAY, as the server sends it (an ISO timestamp)
 const expiryIn = (n) => new Date(2026, 10, 4 + n, 12).toISOString()
 
 const SuggestionModal = {
@@ -34,7 +26,6 @@ const startingPantry = () => ({ items: [eggs, milk, rice].map((i) => ({ ...i }))
 
 const renderPantry = () => renderPage(Pantry, { path: '/pantry', stubs: { SuggestionModal, suggestionsModal: SuggestionModal } })
 const rows = (wrapper) => wrapper.findAll('[data-testid="pantry-item"]')
-// each row's +/- group is labelled "Quantity of <name>", which gives the item's name
 const rowNames = (wrapper) => rows(wrapper).map((r) => r.get('[role="group"]').attributes('aria-label').replace('Quantity of ', ''))
 const rowFor = (wrapper, name) => rows(wrapper).find((r) => label(r).startsWith(name))
 const tile = (wrapper, name) => wrapper.findAll('.fft-tile').find((t) => label(t).startsWith(name))
@@ -86,8 +77,7 @@ describe('Pantry: showing what is at home', () => {
     expect(label(rowFor(wrapper, 'Chicken'))).toContain('Expires today')
     expect(label(rowFor(wrapper, 'Spinach'))).toContain('3d left')
     expect(label(rowFor(wrapper, 'Butter'))).toContain('20d left')
-    expect(label(rowFor(wrapper, 'Tofu'))).toContain('Used up') // nothing left, so no use-by warning
-    // Bread, Chicken, Spinach. Tofu is used up so it doesn't count.
+    expect(label(rowFor(wrapper, 'Tofu'))).toContain('Used up')
     expect(label(tile(wrapper, 'Use Within 3 Days'))).toBe('Use Within 3 Days 3')
   })
 })
@@ -139,11 +129,10 @@ describe('Pantry: adding, changing and removing', () => {
     await wrapper.get('[data-testid="pantry-form"]').trigger('submit')
     await flushPromises()
 
-    // name trimmed; no use-by date sent when the box is empty
     expect(server.last('POST /pantry').body).toEqual({ name: 'Garlic', quantity: 3, unit: 'pcs', category: 'produce' })
     expect(wrapper.get('[data-testid="pantry-notice"]').text()).toContain('Added Garlic')
     expect(rowNames(wrapper)).toContain('Garlic')
-    expect(wrapper.get('[data-testid="pantry-name"]').element.value).toBe('') // form cleared
+    expect(wrapper.get('[data-testid="pantry-name"]').element.value).toBe('')
   })
 
   it('PA08 adding something already in the pantry tells the user the new total', async () => {
@@ -163,12 +152,12 @@ describe('Pantry: adding, changing and removing', () => {
     server.on('PATCH /pantry/p3', ({ body }) => ({ items: startingPantry().items.map((i) => (i._id === 'p3' ? { ...i, ...body } : i)) }))
     const { wrapper } = await renderPantry()
 
-    await button(wrapper, 'Less Eggs').trigger('click') // pcs: 1 at a time
+    await button(wrapper, 'Less Eggs').trigger('click')
     await flushPromises()
     expect(server.last('PATCH /pantry/p1').body).toEqual({ quantity: 5 })
     expect(rowFor(wrapper, 'Eggs').get('[data-testid="pantry-item-qty"]').text()).toBe('5 pcs')
 
-    await button(wrapper, 'More Basmati rice').trigger('click') // kg: half a kilo at a time
+    await button(wrapper, 'More Basmati rice').trigger('click')
     await flushPromises()
     expect(server.last('PATCH /pantry/p3').body).toEqual({ quantity: 2.5 })
   })
@@ -178,7 +167,7 @@ describe('Pantry: adding, changing and removing', () => {
     server.on('PATCH /pantry/p1', ({ body }) => ({ items: [pantryItem({ _id: 'p1', name: 'Flour', unit: 'g', category: 'grains', ...body })] }))
     const { wrapper } = await renderPantry()
 
-    await button(wrapper, 'Less Flour').trigger('click') // 50 g - 100 g step
+    await button(wrapper, 'Less Flour').trigger('click')
     await flushPromises()
     expect(server.last('PATCH /pantry/p1').body).toEqual({ quantity: 0 })
     expect(button(wrapper, 'Less Flour').attributes('disabled')).toBeDefined()
@@ -195,7 +184,7 @@ describe('Pantry: adding, changing and removing', () => {
     expect(form.get('input[aria-label="Use by date"]').element.value).toBe('2026-11-06')
 
     await form.get('[data-testid="pantry-edit-qty"]').setValue(0.5)
-    await form.get('input[aria-label="Use by date"]').setValue('') // clear the date
+    await form.get('input[aria-label="Use by date"]').setValue('')
     await form.trigger('submit')
     await flushPromises()
 
@@ -246,7 +235,7 @@ describe('Pantry: adding, changing and removing', () => {
 
     expect(wrapper.get('[role="alert"]').text()).toContain('Quantity must be more than 0')
     expect(rows(wrapper)).toHaveLength(3)
-    expect(wrapper.get('[data-testid="pantry-name"]').element.value).toBe('Salt') // the user doesn't retype it
+    expect(wrapper.get('[data-testid="pantry-name"]').element.value).toBe('Salt')
   })
 })
 
@@ -263,7 +252,6 @@ describe('Pantry: "What can I cook?"', () => {
     await flushPromises()
 
     expect(server.last('GET /pantry/suggestions').params).toEqual({ diet: 'vegetarian', intolerances: 'dairy,egg', maxReadyTime: 30 })
-    // 3 in stock: the used-up tofu is not searched with
     expect(wrapper.get('[data-testid="suggestions-stub"]').text()).toBe('3 in stock, 1 recipes')
   })
 
@@ -280,7 +268,6 @@ describe('Pantry: "What can I cook?"', () => {
 })
 
 describe('Pantry: spoon and cup measures', () => {
-  // The server stores tsp / tbsp / cup as g or ml (server/src/services/units.js, tested in server/tests)
   it('PA17 picking cups says it will be saved as g or ml, and the message shows what was saved', async () => {
     server.on('POST /pantry', () => ({ items: [...startingPantry().items, pantryItem({ _id: 'p9', name: 'Jasmine rice', quantity: 370, unit: 'g', category: 'grains' })] }))
     const { wrapper } = await renderPantry()

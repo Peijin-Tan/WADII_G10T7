@@ -1,9 +1,3 @@
-// Unit tests for how the meal planner, shopping list and pantry work together.
-// Run from the server folder with:   npm test
-// Uses Node's built-in test runner (node:test), so there's nothing extra to install,
-// and no database: the shopping-list builder is a pure function, and the one
-// database call (saved preferences) is replaced with a fake for the test.
-
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
@@ -14,7 +8,6 @@ const { pantryBeforeCooking } = require('../src/router/shoppinglist')
 const UserPreference = require('../models/UserPreference')
 const { getSavedPreferences } = require('../src/router/pantry')
 
-// A planned meal in the shape buildShoppingItems expects
 function meal(status, ingredients, { title = 'Omelette', recipeServings = 1, plannedServings = 1 } = {}) {
   return { status, recipeId: `${title}-${status}`, title, recipeServings, plannedServings, ingredients }
 }
@@ -24,11 +17,9 @@ const toBuy = (items, name) => items.find((i) => i.name.toLowerCase() === name).
 /* ---------- Bug 1: cooked meals counted twice ---------- */
 
 test('cooking a meal does not add its ingredients back onto the shopping list', () => {
-  // 4 eggs at home, two 2-egg omelettes planned -> nothing to buy
   const before = buildShoppingItems([omelette('Planned'), omelette('Planned')], [{ name: 'egg', quantity: 4, unit: 'pcs' }])
   assert.equal(toBuy(before, 'eggs'), 0)
 
-  // Cook one: the planner takes 2 eggs out of the pantry and remembers it on the entry
   const plan = {
     entries: [
       { status: 'Cooked', pantryDeductions: [{ name: 'egg', quantity: 2, unit: 'pcs' }] },
@@ -37,13 +28,13 @@ test('cooking a meal does not add its ingredients back onto the shopping list', 
   }
   const pantryNow = [{ name: 'egg', quantity: 2, unit: 'pcs' }]
   const after = buildShoppingItems([omelette('Cooked'), omelette('Planned')], pantryBeforeCooking(pantryNow, plan))
-  assert.equal(toBuy(after, 'eggs'), 0) // was 2 before the fix
+  assert.equal(toBuy(after, 'eggs'), 0)
 })
 
 test('skipped and planned meals do not give anything back to the pantry', () => {
   const plan = { entries: [{ status: 'Skipped', pantryDeductions: [] }, { status: 'Planned' }] }
   assert.deepEqual(pantryBeforeCooking([{ name: 'egg', quantity: 1, unit: 'pcs' }], plan), [{ name: 'egg', quantity: 1, unit: 'pcs' }])
-  assert.deepEqual(pantryBeforeCooking([], null), []) // no meal plan for that week
+  assert.deepEqual(pantryBeforeCooking([], null), [])
 })
 
 /* ---------- Bug 2: planner and shopping list matched names differently ---------- */
@@ -66,7 +57,6 @@ test('whole-word matching: pantry "egg" does not cover "eggplant"', () => {
 })
 
 test('one pantry row is not used up twice by two different recipes', () => {
-  // 1 kg chicken can cover 800 g breast OR 800 g thigh, not both
   const items = buildShoppingItems(
     [
       meal('Planned', [{ name: 'chicken breast', quantity: 800, unit: 'g' }], { title: 'A' }),
@@ -75,11 +65,10 @@ test('one pantry row is not used up twice by two different recipes', () => {
     [{ name: 'chicken', quantity: 1, unit: 'kg' }],
   )
   const total = toBuy(items, 'chicken breast') + toBuy(items, 'chicken thigh')
-  assert.equal(total, 600) // 1600 g needed - 1000 g in pantry
+  assert.equal(total, 600)
 })
 
 test('an exact pantry match is used before a partial one', () => {
-  // "chicken breast" in the pantry should go to the breast recipe, not be taken by the plain "chicken" one
   const items = buildShoppingItems(
     [
       meal('Planned', [{ name: 'chicken', quantity: 500, unit: 'g' }], { title: 'A' }),
@@ -98,11 +87,10 @@ test('pantry milk in ml covers a recipe that uses cups', () => {
     [meal('Planned', [{ name: 'milk', quantity: 1, unit: 'cup' }])],
     [{ name: 'milk', quantity: 500, unit: 'ml' }],
   )
-  assert.equal(toBuy(items, 'milk'), 0) // 1 cup = 240 ml
+  assert.equal(toBuy(items, 'milk'), 0)
 })
 
 test('cups and grams are compared for ingredients with a known weight per cup', () => {
-  // 1 cup uncooked rice is about 185 g, so 2 cups (370 g) is covered by 1 kg in the pantry
   assert.equal(Math.round(convertAmount(2, 'cups', 'g', 'jasmine rice')), 370)
   const items = buildShoppingItems(
     [meal('Planned', [{ name: 'rice', quantity: 2, unit: 'cups' }])],
@@ -112,22 +100,21 @@ test('cups and grams are compared for ingredients with a known weight per cup', 
 })
 
 test('weight and volume are still never mixed up when the weight per cup is unknown', () => {
-  assert.equal(convertAmount(2, 'cups', 'g'), null) // no ingredient name
-  assert.equal(convertAmount(2, 'cups', 'g', 'spinach'), null) // a cup of leaves weighs too little to guess
+  assert.equal(convertAmount(2, 'cups', 'g'), null)
+  assert.equal(convertAmount(2, 'cups', 'g', 'spinach'), null)
   const items = buildShoppingItems(
     [meal('Planned', [{ name: 'spinach', quantity: 2, unit: 'cups' }])],
     [{ name: 'spinach', quantity: 500, unit: 'g' }],
   )
-  assert.equal(toBuy(items, 'spinach'), 2) // can't tell how many cups 500 g is, so still buy it
+  assert.equal(toBuy(items, 'spinach'), 2)
 })
 
 test('the pantry stores spoon and cup measures as g or ml', () => {
   assert.deepEqual(toPantryUnit(3, 'cup', 'Jasmine rice'), { quantity: 554, unit: 'g' })
   assert.deepEqual(toPantryUnit(2, 'tbsp', 'soy sauce'), { quantity: 30, unit: 'ml' })
-  assert.deepEqual(toPantryUnit(1, 'cup', 'almond milk'), { quantity: 240, unit: 'ml' }) // milk, not almonds
-  assert.deepEqual(toPantryUnit(1, 'tsp', 'chilli flakes'), { quantity: 4.9, unit: 'ml' }) // weight unknown -> ml
-  assert.deepEqual(toPantryUnit(500, 'g', 'chicken'), { quantity: 500, unit: 'g' }) // other units unchanged
-  // a list item bought in cups goes into an empty pantry in g
+  assert.deepEqual(toPantryUnit(1, 'cup', 'almond milk'), { quantity: 240, unit: 'ml' })
+  assert.deepEqual(toPantryUnit(1, 'tsp', 'chilli flakes'), { quantity: 4.9, unit: 'ml' })
+  assert.deepEqual(toPantryUnit(500, 'g', 'chicken'), { quantity: 500, unit: 'g' })
   assert.deepEqual(pantryAmount({ name: 'rice', quantity: 3, unit: 'cup' }, null), { quantity: 554, unit: 'g' })
 })
 
@@ -147,7 +134,6 @@ test('adding 500 g to "1 kg rice" adds 0.5 kg, not 500 kg', () => {
 /* ---------- Bug 3: saved dietary preferences ---------- */
 
 test('saved preferences are translated into Spoonacular diets and intolerances', async (t) => {
-  // Fake the database call: this user saved these on the Dietary Preferences page
   t.mock.method(UserPreference, 'findOne', () => ({
     lean: async () => ({
       dietaryPreferences: ['Pescatarian', 'Dairy-Free', 'Keto'],
@@ -175,7 +161,7 @@ test('the same ingredient in units that can\'t convert is ONE line with both amo
     meal('Planned', [{ name: 'Ginger', quantity: 1, unit: '' }], { title: 'Pork Fried Rice' }),
   ])
   assert.equal(items.length, 1)
-  assert.equal(amountsText(items[0]), '1 piece + 1 inch') // the pantry can store pieces, so that's the main amount
+  assert.equal(amountsText(items[0]), '1 piece + 1 inch')
   assert.deepEqual(items[0].usedIn.map((u) => u.title), ['Beet Root Rice', 'Pork Fried Rice'])
 })
 
@@ -184,12 +170,11 @@ test('units that convert are merged into one amount, in the smaller unit', () =>
     meal('Planned', [{ name: 'salt', quantity: 1, unit: 'tbsp' }, { name: 'milk', quantity: 1, unit: 'cup' }], { title: 'A' }),
     meal('Planned', [{ name: 'salt', quantity: 1, unit: 'tsp' }, { name: 'milk', quantity: 200, unit: 'ml' }], { title: 'B' }),
   ])
-  assert.equal(amountsText(items.find((i) => i.name === 'Salt')), '4 tsp') // 1 tbsp = 3 tsp
-  assert.equal(amountsText(items.find((i) => i.name === 'Milk')), '440 ml') // 1 cup = 240 ml
+  assert.equal(amountsText(items.find((i) => i.name === 'Salt')), '4 tsp')
+  assert.equal(amountsText(items.find((i) => i.name === 'Milk')), '440 ml')
 })
 
 test('the main amount is one still to buy, so quantity > 0 means there is something to buy', () => {
-  // pantry covers the grams but not the "inch"
   const items = buildShoppingItems(
     [
       meal('Planned', [{ name: 'ginger', quantity: 30, unit: 'g' }], { title: 'A' }),
@@ -214,10 +199,8 @@ test('regenerating: an old list with two ginger lines becomes one, keeping the t
   const [line] = reconcileItems(old, fresh)
   assert.equal(line._id, 'b')
   assert.equal(line.unit, 'piece')
-  // the old ticked line only covered "1 piece", not the inch -> unticked so the rest gets bought
   assert.equal(line.purchased, false)
 
-  // ticked line that already covered both amounts stays ticked
   const both = [{ _id: 'c', name: 'Ginger', unit: 'inch', quantity: 1, alsoNeed: [{ quantity: 1, unit: 'piece' }], purchased: true, source: 'auto' }]
   assert.equal(reconcileItems(both, fresh)[0].purchased, true)
 })

@@ -21,10 +21,9 @@ import { PANTRY_UNITS, PANTRY_CATEGORIES, LIST_TO_PANTRY_UNIT, formatQty } from 
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
-  // [{ id, title, icon }] in shopping order (the page's CATEGORY_META)
   sections: { type: Array, default: () => [] },
-  saving: { type: Boolean, default: false }, // a basket save is running
-  adding: { type: Boolean, default: false }, // add-to-pantry is running
+  saving: { type: Boolean, default: false },
+  adding: { type: Boolean, default: false },
   error: { type: String, default: '' },
   notice: { type: String, default: '' },
 })
@@ -39,14 +38,12 @@ function formatDate(value) {
   if (!value) return ''
   return new Date(value).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
 }
-// 'YYYY-MM-DD' in local time, for <input type="date">
 function toInputDate(value) {
   if (!value) return ''
   const d = new Date(value)
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
-// Every amount on a line: the main one plus any in other units ("1 piece + 1 inch"); see ShoppingList.vue
 const buyText = (it) =>
   [{ quantity: it.quantity, unit: it.unit }, ...(it.alsoNeed || [])]
     .filter((a) => a.quantity > 0)
@@ -54,10 +51,7 @@ const buyText = (it) =>
     .join(' + ')
 const recipesOf = (it) => (it.usedIn || []).map((u) => u.title).filter(Boolean)
 
-/* ---------- Basket details ----------
-   The server fills these in when an item is ticked (defaultBasket in services/shoppinglistbuilder.js).
-   Items ticked before shopping mode existed have none, so the same defaults are worked out here,
-   which keeps this screen and the server in agreement about what goes into the pantry. */
+/* ---------- Basket details ---------- */
 const PANTRY_UNIT = LIST_TO_PANTRY_UNIT
 const PANTRY_CATEGORY = {
   produce: 'produce', 'dairy-eggs': 'dairy', 'grains-noodles': 'grains', 'canned-sauces': 'canned',
@@ -79,26 +73,21 @@ function basketOf(it) {
 }
 
 /* ---------- Lists ---------- */
-// Still to buy: not in the basket, and not already covered by the pantry (quantity 0)
 const toBuy = computed(() => props.items.filter((it) => !it.purchased && it.quantity > 0))
 const inBasket = computed(() => props.items.filter((it) => it.purchased))
 
-// "To buy" grouped by aisle, in the order you walk the shop
 const toBuySections = computed(() =>
   props.sections
     .map((s) => ({ ...s, items: toBuy.value.filter((it) => (it.category || 'other') === s.id) }))
     .filter((s) => s.items.length > 0),
 )
 
-// Same rule as the server (readyForPantry in router/shoppinglist.js)
 const goesToPantry = (it) => !it.addedToPantry && basketOf(it).addToPantry !== false
 const readyItems = computed(() => inBasket.value.filter(goesToPantry))
 
-// The basket list only shows what's still waiting; items already added to the pantry are finished
 const basketActive = computed(() => inBasket.value.filter((it) => !it.addedToPantry))
 const addedCount = computed(() => inBasket.value.length - basketActive.value.length)
 
-// "In basket" grouped by aisle, same order as "To buy"
 const basketSections = computed(() =>
   props.sections
     .map((s) => ({ ...s, items: basketActive.value.filter((it) => (it.category || 'other') === s.id) }))
@@ -112,11 +101,11 @@ const percent = computed(() =>
 )
 
 /* ---------- Tabs (phones show one list at a time; desktop shows both) ---------- */
-const tab = ref('buy') // 'buy' | 'basket'
-const view = ref('shop') // 'shop' | 'review'
+const tab = ref('buy')
+const view = ref('shop')
 
 /* ---------- Moving items ---------- */
-const justMoved = ref(null) // brief highlight in the basket after a tap
+const justMoved = ref(null)
 let movedTimer = null
 
 function putInBasket(it) {
@@ -154,13 +143,11 @@ function saveEdit(it) {
   emit('save-basket', { item: it, basket: { ...draft.value, name: draft.value.name.trim() } })
   cancelEdit()
 }
-// A quick on/off without opening the form (e.g. dish soap -> not for the pantry)
 function togglePantry(it) {
   const b = basketOf(it)
   emit('save-basket', { item: it, basket: { ...b, expiryDate: toInputDate(b.expiryDate), addToPantry: !goesToPantry(it) } })
 }
 
-// Inline amount / unit on each basket row. Saves the whole basket with the one field changed.
 function saveField(it, field, value) {
   const b = basketOf(it)
   if (b[field] === value) return
@@ -169,7 +156,7 @@ function saveField(it, field, value) {
 function onQtyChange(it, e) {
   const value = Number(e.target.value)
   if (!(value > 0)) {
-    e.target.value = basketOf(it).quantity // empty or 0: put the saved amount back
+    e.target.value = basketOf(it).quantity
     return
   }
   saveField(it, 'quantity', Math.round(value * 1000) / 1000)
@@ -443,7 +430,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Tokens: same palette as the shopping list and pantry pages */
 .sm-backdrop {
   --sm-bg: #fafaf3;
   --sm-surface: #ffffff;
@@ -472,7 +458,6 @@ onBeforeUnmount(() => {
 }
 @keyframes sm-fade { from { opacity: 0; } to { opacity: 1; } }
 
-/* Phones: full screen. Desktop: a large centred panel. */
 .sm-modal {
   display: flex;
   flex-direction: column;
@@ -493,8 +478,7 @@ onBeforeUnmount(() => {
 .min-w-0 { min-width: 0; }
 .material-symbols-outlined { font-size: 20px; line-height: 1; vertical-align: middle; }
 
-/* ---------- Header ---------- */
-.sm-head {
+/* ---------- Header ---------- */.sm-head {
   padding: 16px 16px 0;
   background: var(--sm-low);
   border-bottom: 1px solid var(--sm-border);
@@ -527,15 +511,13 @@ onBeforeUnmount(() => {
 .sm-alert--error { background: #ffdad6; color: #93000a; }
 .sm-alert--ok { background: var(--sm-primary-soft); color: #01210f; }
 
-/* ---------- Body: one column on phones (tabs), two on desktop ---------- */
-.sm-body { flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr; }
+/* ---------- Body: one column on phones (tabs), two on desktop ---------- */.sm-body { flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr; }
 @media (min-width: 992px) {
   .sm-body { grid-template-columns: 1fr 1fr; }
   .sm-body--review { grid-template-columns: 1fr; }
   .sm-col--basket { border-left: 1px solid var(--sm-border); background: var(--sm-surface); }
 }
 .sm-col { padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-/* rows keep their height; the column scrolls instead of squashing them */
 .sm-col > * { flex-shrink: 0; }
 @media (min-width: 992px) { .sm-col { padding: 20px 24px; overflow-y: auto; } }
 @media (max-width: 991.98px) { .sm-col--hidden { display: none; } }
@@ -549,8 +531,7 @@ onBeforeUnmount(() => {
 }
 .sm-aisle-title .material-symbols-outlined { font-size: 16px; }
 
-/* ---------- Rows: big tap targets for one-handed use in an aisle ---------- */
-.sm-buy-row, .sm-basket-row {
+/* ---------- Rows: big tap targets for one-handed use in an aisle ---------- */.sm-buy-row, .sm-basket-row {
   display: flex; align-items: center; gap: 12px; width: 100%;
   min-height: 60px; padding: 10px 12px;
   border: 1px solid var(--sm-border); border-radius: 12px;
@@ -567,7 +548,6 @@ onBeforeUnmount(() => {
 .sm-undo { margin: -6px -6px 0 0; }
 .sm-locked { margin-top: 2px; }
 
-/* second line, lined up under the name: [amount][unit]  ...  [pantry][Edit] */
 .sm-basket-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-left: 38px; }
 .sm-amount { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .sm-amount-qty, .sm-amount-unit {
@@ -580,9 +560,7 @@ onBeforeUnmount(() => {
 .sm-amount-qty:hover, .sm-amount-unit:hover { border-color: var(--sm-outline); }
 .sm-amount-qty:focus, .sm-amount-unit:focus { outline: none; border-color: var(--sm-primary); box-shadow: 0 0 0 3px var(--sm-primary-soft); }
 .sm-useby { color: var(--sm-primary); font-weight: 600; }
-.sm-basket-controls .sm-row-actions { margin-left: auto; } /* stay on the right even with no amount fields */
-/* no spinner arrows: they crowd the number on phones (the keypad does the job) */
-.sm-amount-qty { -moz-appearance: textfield; appearance: textfield; text-align: center; padding: 0 8px; }
+.sm-basket-controls .sm-row-actions { margin-left: auto; }.sm-amount-qty { -moz-appearance: textfield; appearance: textfield; text-align: center; padding: 0 8px; }
 .sm-amount-qty::-webkit-outer-spin-button, .sm-amount-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .sm-iconbtn.is-on { color: var(--sm-primary); }
 .sm-added-note {
@@ -613,8 +591,7 @@ onBeforeUnmount(() => {
 .sm-empty .material-symbols-outlined { font-size: 36px; color: var(--sm-outline); }
 .sm-empty p { margin: 0; }
 
-/* ---------- Details form ---------- */
-.sm-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+/* ---------- Details form ---------- */.sm-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
 .sm-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--sm-muted); }
 .sm-field em, .sm-switch em { font-style: normal; font-weight: 400; color: var(--sm-outline); }
 .sm-field--full { grid-column: 1 / -1; }
@@ -627,8 +604,7 @@ onBeforeUnmount(() => {
 .sm-switch input { width: 18px; height: 18px; accent-color: var(--sm-primary); }
 .sm-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* ---------- Review ---------- */
-.sm-review-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+/* ---------- Review ---------- */.sm-review-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .sm-review-list li {
   display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 12px;
   background: var(--sm-surface); border: 1px solid var(--sm-border);
@@ -636,8 +612,7 @@ onBeforeUnmount(() => {
 .sm-review-list li .sm-name { flex: 1; }
 .sm-review-list .material-symbols-outlined { color: var(--sm-primary); }
 
-/* ---------- Footer + buttons ---------- */
-.sm-foot {
+/* ---------- Footer + buttons ---------- */.sm-foot {
   display: flex; justify-content: space-between; gap: 8px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--sm-border); background: var(--sm-surface);

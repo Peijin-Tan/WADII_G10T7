@@ -1,8 +1,5 @@
 const mongoose = require('mongoose')
 
-// A request to become pantry neighbours (Community page > Neighbour Pantry).
-// "from" asks "to"; nothing is shared until "to" accepts. Accepting creates the two
-// PantryShare documents (one each way), see src/router/pantrysharing.js.
 const neighbourInviteSchema = new mongoose.Schema(
   {
     from: {

@@ -1,7 +1,4 @@
 <script setup>
-/* Landing page (/home): what FoodForThought is for, before someone logs in.
-   The content comes from our project proposal (problem, solution, main user journey).
-   App.vue hides the main navbar/footer on /home, so this page has its own top bar and footer. */
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import logo from '@/assets/foodforthought-logo-horizontal.svg'
@@ -9,25 +6,19 @@ import logo from '@/assets/foodforthought-logo-horizontal.svg'
 const auth = useAuthStore()
 
 /* ---------- Hero: a small version of the real weekly plan ---------- */
-// status: 'cooked' = already cooked, 'cooks' = turns cooked during the page-load animation,
-//         'planned', 'skipped', 'open'
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner']
 const WEEK = [
-  // Breakfast
   [['Kaya toast', 'cooks'], ['Oats & berries', 'cooks'], ['Banana toast', 'cooks'], ['Oats & berries', 'planned'], ['', 'open'], ['Roti prata', 'planned'], ['Kaya toast', 'planned']],
-  // Lunch
   [['Chicken rice', 'cooks'], ['Egg fried rice', 'cooks'], ['Mee goreng', 'planned'], ['Cold soba', 'planned'], ['', 'open'], ['Laksa', 'planned'], ['', 'open']],
-  // Dinner
   [['Tom yum', 'skipped'], ['Curry chicken', 'cooks'], ['Teriyaki salmon', 'planned'], ['Garlic tofu', 'planned'], ['Pepper beef', 'planned'], ['', 'open'], ['Fish soup', 'planned']],
 ]
 
-// Order in which the "cooks" cells turn green (day by day, top to bottom)
 function cookDelay(row, day) {
   let order = 0
   for (let d = 0; d < 7; d++) {
     for (let r = 0; r < 3; r++) {
-      if (d === day && r === row) return 700 + order * 180 // ms
+      if (d === day && r === row) return 700 + order * 180
       if (WEEK[r][d][1] === 'cooks') order++
     }
   }
@@ -182,7 +173,6 @@ const FEATURES = [
 </template>
 
 <style scoped>
-/* Brand colours (same values as theme.css; this page sits outside .fft-page) */
 .lp {
   --paper: #fafaf3;
   --card: #ffffff;
@@ -209,8 +199,7 @@ const FEATURES = [
   margin-inline: auto;
 }
 
-/* ---------- Buttons & links ---------- */
-.lp-btn {
+/* ---------- Buttons & links ---------- */.lp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -291,8 +280,7 @@ const FEATURES = [
   text-underline-offset: 4px;
 }
 
-/* ---------- Top bar ---------- */
-.lp-bar {
+/* ---------- Top bar ---------- */.lp-bar {
   position: sticky;
   top: 0;
   z-index: 10;
@@ -320,8 +308,7 @@ const FEATURES = [
   gap: 16px;
 }
 
-/* ---------- Hero ---------- */
-.lp-hero {
+/* ---------- Hero ---------- */.lp-hero {
   padding: 56px 0 88px;
 }
 
@@ -353,7 +340,6 @@ const FEATURES = [
   gap: 12px;
 }
 
-/* Mini weekly plan */
 .lp-week {
   margin: 0;
   padding: 22px 22px 18px;
@@ -433,7 +419,6 @@ const FEATURES = [
   color: #fff;
 }
 
-/* The one animated moment: these meals get "cooked" one after another when the page opens */
 .lp-cell.is-cooks {
   animation: lp-cook 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -511,8 +496,7 @@ const FEATURES = [
   border-top: 1.5px solid var(--muted);
 }
 
-/* ---------- Section headings ---------- */
-.lp-h2 {
+/* ---------- Section headings ---------- */.lp-h2 {
   margin: 0 0 20px;
   font: 600 clamp(28px, 3.4vw, 40px) / 1.12 'Outfit', sans-serif;
   letter-spacing: -0.025em;
@@ -523,8 +507,7 @@ const FEATURES = [
   max-width: 18ch;
 }
 
-/* ---------- How it works ---------- */
-.lp-how {
+/* ---------- How it works ---------- */.lp-how {
   padding: 88px 0 96px;
   background: var(--card);
   border-block: 1px solid var(--line);
@@ -546,7 +529,6 @@ const FEATURES = [
   border-top: 2px solid var(--line);
 }
 
-/* The first step's line is green: "start here" */
 .lp-step:first-child {
   border-top-color: var(--leaf);
 }
@@ -571,8 +553,7 @@ const FEATURES = [
   line-height: 24px;
 }
 
-/* ---------- Also inside ---------- */
-.lp-more {
+/* ---------- Also inside ---------- */.lp-more {
   padding: 88px 0 96px;
 }
 
@@ -619,8 +600,7 @@ const FEATURES = [
   color: var(--ink-2);
 }
 
-/* ---------- Closing band ---------- */
-.lp-close {
+/* ---------- Closing band ---------- */.lp-close {
   padding: 72px 0;
   background: var(--leaf);
   color: #fff;
@@ -640,8 +620,7 @@ const FEATURES = [
   color: #fff;
 }
 
-/* ---------- Footer ---------- */
-.lp-footer {
+/* ---------- Footer ---------- */.lp-footer {
   padding: 28px 0;
   background: var(--forest);
   color: rgb(255 255 255 / 70%);
@@ -659,12 +638,10 @@ const FEATURES = [
 .lp-footer-logo {
   height: 26px;
   width: auto;
-  filter: brightness(0) invert(1); /* white version of the logo on the dark footer */
-  opacity: 0.85;
+  filter: brightness(0) invert(1);  opacity: 0.85;
 }
 
-/* ---------- Tablets ---------- */
-@media (max-width: 991.98px) {
+/* ---------- Tablets ---------- */@media (max-width: 991.98px) {
   .lp-hero-inner,
   .lp-more-inner {
     grid-template-columns: 1fr;
@@ -690,8 +667,7 @@ const FEATURES = [
   }
 }
 
-/* ---------- Phones ---------- */
-@media (max-width: 575.98px) {
+/* ---------- Phones ---------- */@media (max-width: 575.98px) {
   .lp-bar-inner {
     height: 64px;
   }
@@ -701,8 +677,7 @@ const FEATURES = [
   }
 
   .lp-text-link {
-    display: none; /* "Log in" is right below in the hero */
-  }
+    display: none;  }
 
   .lp-hero {
     padding: 28px 0 56px;
@@ -717,8 +692,7 @@ const FEATURES = [
     flex: 1;
   }
 
-  /* The mini week becomes coloured blocks: names don't fit at this width */
-  .lp-week {
+   .lp-week {
     padding: 16px 14px 14px;
     border-radius: 18px;
   }

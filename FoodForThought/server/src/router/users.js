@@ -1,8 +1,8 @@
 // Admin-only user management (used by the admin dashboard), mounted at /users.
 //
-//   GET    /users            -> every user (name, email, role, joined date)
-//   PATCH  /users/:id/role   -> { role: 'user' | 'admin' } promote or demote someone
-//   DELETE /users/:id        -> delete a user AND their personal data
+//   GET    /users
+//   PATCH  /users/:id/role
+//   DELETE /users/:id
 //
 // Every route needs a logged-in admin (requireAuth + requireAdmin).
 
@@ -22,7 +22,6 @@ const requireAuth = require('../middleware/auth')
 const requireAdmin = require('../middleware/requireAdmin')
 const router = express.Router()
 
-// A malformed id would make Mongoose throw (a 500); answer with a clear 400 instead
 function checkId(req, res, next) {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ message: 'Invalid user id.' })
@@ -45,15 +44,13 @@ router.get('/', async (req, res) => {
   }
 })
 
-// PATCH /users/:id/role   body: { role: 'admin' | 'user' }
-// Sign-up always creates normal users, so this is how new admins are made.
+// PATCH /users/:id/role
 router.patch('/:id/role', checkId, async (req, res) => {
   try {
     const { role } = req.body || {}
     if (!['user', 'admin'].includes(role)) {
       return res.status(400).json({ message: "Role must be 'user' or 'admin'." })
     }
-    // Changing your own role could lock you out of this page
     if (req.user._id.toString() === req.params.id) {
       return res.status(400).json({ message: 'You cannot change your own role.' })
     }
@@ -61,7 +58,6 @@ router.patch('/:id/role', checkId, async (req, res) => {
     const user = await User.findById(req.params.id)
     if (!user) return res.status(404).json({ message: 'User not found.' })
 
-    // Never leave the app with no admins
     if (user.role === 'admin' && role === 'user' && (await User.countDocuments({ role: 'admin' })) <= 1) {
       return res.status(400).json({ message: 'There must always be at least one admin.' })
     }
@@ -76,12 +72,6 @@ router.patch('/:id/role', checkId, async (req, res) => {
 })
 
 // DELETE /users/:id
-// Also removes the user's personal data, so nothing is left behind that belongs to nobody:
-// pantry, meal plans, shopping lists, dietary preferences, comments and likes, and their
-// Neighbour Pantry links: neighbour shares and invites (both directions) and borrow requests
-// they sent or received. Without that, a neighbour still saw "Someone wants to borrow" and
-// approving it took items out of their pantry and gave them to an account that no longer exists.
-// Recipes and community posts they shared are kept, because other people may have planned them.
 router.delete('/:id', checkId, async (req, res) => {
   try {
     const { id } = req.params
@@ -96,7 +86,6 @@ router.delete('/:id', checkId, async (req, res) => {
       return res.status(404).json({ message: 'User not found.' })
     }
 
-    // Some older pantry rows store the user id as text, not as an ObjectId (see pantryUserQuery in pantry.js)
     const either = [id, new mongoose.Types.ObjectId(id)]
 
     const [pantry, mealPlans, shoppingLists, preferences, comments, likes, shares, invites, requests] = await Promise.all([
@@ -119,7 +108,6 @@ router.delete('/:id', checkId, async (req, res) => {
         email: deletedUser.email,
         role: deletedUser.role
       },
-      // how much of their data was removed with them
       removed: {
         pantryItems: pantry.deletedCount,
         mealPlans: mealPlans.deletedCount,

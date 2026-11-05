@@ -1,7 +1,3 @@
-// Tests for how pantry names are matched to recipe ingredients (services/ingredientnames.js).
-// The planner (pantry match %, cooking deductions) and the shopping list all use this one rule.
-// Run from the server folder with:   npm test
-
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
@@ -59,6 +55,6 @@ test('shopping list: pantry milk no longer counts towards coconut milk', () => {
     ingredients: [{ name: 'coconut milk', quantity: 400, unit: 'ml' }],
   }
   const [line] = buildShoppingItems([laksa], [{ name: 'Milk', quantity: 1, unit: 'l' }])
-  assert.equal(line.quantity, 400) // still to buy
+  assert.equal(line.quantity, 400)
   assert.equal(line.pantryQuantity, 0)
 })

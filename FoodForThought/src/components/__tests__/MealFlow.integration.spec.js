@@ -1,15 +1,3 @@
-// MealFlow.integration.spec.js - integration tests: each page together with its REAL child components
-//
-//   Planner.vue      + AddMealModal.vue + ConfirmDialog.vue
-//   ShoppingList.vue + ShoppingModeModal.vue
-//   Pantry.vue       + SuggestionModal.vue + ConfirmDialog.vue
-//
-// The component specs (Planner/ShoppingList/Pantry.spec.js) check each page on its own with stubs.
-// These tests check the pages and their modals pass the right props and react to the real events,
-// i.e. that a user can actually finish the job through the real UI. The server is still the
-// fake one (fakeServer.js); the full stack with Express + MongoDB is covered by the Playwright E2E tests.
-//
-// Run:  npx vitest run src/components/__tests__/MealFlow.integration.spec.js
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, DOMWrapper } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
@@ -25,13 +13,11 @@ import {
 vi.mock('axios', async () => (await import('./fakeServer')).axiosModule)
 enableAutoUnmount(afterEach)
 
-const TODAY = new Date(2026, 10, 4, 10, 0, 0) // Wednesday 4 Nov 2026
+const TODAY = new Date(2026, 10, 4, 10, 0, 0)
 const THIS_WEEK = '2026-11-02'
 
-// A page with the app's one ConfirmDialog next to it, the way App.vue mounts them
 const withDialog = (Page) => defineComponent({ name: 'WithDialog', render: () => [h(Page), h(ConfirmDialog)] })
 
-// Modals are teleported to <body>, so look for them there (the page is attached to the document)
 const body = () => new DOMWrapper(document.body)
 const dialog = () => body().find('[role="alertdialog"]')
 
@@ -62,10 +48,10 @@ describe('Planner + AddMealModal', () => {
 
     await button(wrapper, 'Add Meal').trigger('click')
     const modal = body().get('[aria-labelledby="modal-add-title"]')
-    expect(label(modal.get('[data-testid="add-meal-quick"]'))).toContain('Tofu Stir-fry') // from GET /planner/recipe-options
+    expect(label(modal.get('[data-testid="add-meal-quick"]'))).toContain('Tofu Stir-fry')
 
     await button(modal, 'Lunch').trigger('click')
-    await button(modal, 'Increase servings').trigger('click') // 2 -> 3
+    await button(modal, 'Increase servings').trigger('click')
     await modal.findAll('button').find((b) => label(b).startsWith('Tofu Stir-fry')).trigger('click')
     await button(modal, 'Add to plan').trigger('click')
     await flushPromises()
@@ -73,7 +59,7 @@ describe('Planner + AddMealModal', () => {
     expect(server.last('POST /planner/entries').body).toEqual({
       start: THIS_WEEK, dayOfWeek: 2, mealSlot: 'lunch', servings: 3, recipeId: 'r2',
     })
-    expect(body().find('[aria-labelledby="modal-add-title"]').exists()).toBe(false) // modal closed
+    expect(body().find('[aria-labelledby="modal-add-title"]').exists()).toBe(false)
     const card = wrapper.get('[data-testid="meal-card"]')
     expect(text(card)).toContain('Tofu Stir-fry')
     expect(text(card)).toContain('Lunch')
@@ -94,10 +80,9 @@ describe('Planner + AddMealModal', () => {
     const modal = body().get('[aria-labelledby="modal-add-title"]')
     await modal.get('#add-meal-search').setValue('lak')
     await modal.get('#add-meal-search').setValue('laksa')
-    await vi.advanceTimersByTimeAsync(600) // the modal waits 0.6 s after the last key press
+    await vi.advanceTimersByTimeAsync(600)
     await flushPromises()
 
-    // only ONE search for "laksa", not one per key press (saves the Spoonacular quota)
     expect(server.count('GET /planner/recipe-search')).toBe(1)
     expect(server.last('GET /planner/recipe-search').params).toEqual({ search: 'laksa' })
     expect(label(modal.get('[data-testid="add-meal-online"]'))).toContain('Curry Laksa')
@@ -120,7 +105,7 @@ describe('Planner + ConfirmDialog', () => {
     await button(wrapper, 'Remove Chicken Rice').trigger('click')
     await flushPromises()
     expect(dialog().get('h2').text()).toBe('Remove Chicken Rice?')
-    expect(document.activeElement?.textContent.trim()).toBe('Cancel') // safe default: Enter won't delete
+    expect(document.activeElement?.textContent.trim()).toBe('Cancel')
 
     await button(dialog(), 'Cancel').trigger('click')
     await flushPromises()
@@ -164,7 +149,7 @@ describe('ShoppingList + ShoppingModeModal', () => {
     expect(modal.text()).toContain('1 of 2 in your basket')
     expect(modal.findAll('[data-testid="sm-basket-item"]').map(label).join(' ')).toContain('Ginger')
 
-    await modal.get('[data-testid="sm-finish"]').trigger('click') // "Add 1 to pantry"
+    await modal.get('[data-testid="sm-finish"]').trigger('click')
     expect(label(modal.get('[data-testid="sm-review"]'))).toContain('Add 1 item to your pantry?')
     await modal.get('[data-testid="sm-confirm"]').trigger('click')
     await flushPromises()
@@ -176,7 +161,7 @@ describe('ShoppingList + ShoppingModeModal', () => {
     await button(modal, 'Close shopping mode').trigger('click')
     await flushPromises()
     expect(body().find('[data-testid="shopping-mode"]').exists()).toBe(false)
-    expect(label(wrapper)).toContain('Added to pantry') // the page shows the same result
+    expect(label(wrapper)).toContain('Added to pantry')
   })
 })
 
@@ -204,7 +189,7 @@ describe('Pantry + SuggestionModal / ConfirmDialog', () => {
 
     await button(modal, 'Vegetarian').trigger('click')
     await button(modal, 'egg').trigger('click')
-    await modal.get('form').trigger('submit') // "Find Recipes"
+    await modal.get('form').trigger('submit')
     await flushPromises()
     expect(server.last('GET /pantry/suggestions').params).toEqual({ diet: 'vegetarian', intolerances: 'egg' })
 

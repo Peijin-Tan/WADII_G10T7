@@ -1,13 +1,10 @@
 <script setup>
-/* Live list of the password rules under a "new password" box (Register, Change Password).
-   Each rule turns green with a tick once the typed password meets it.
-   Rules: src/utils/passwordRules.js */
 import { computed } from 'vue'
 import { checkPassword, MAX_PASSWORD_LENGTH } from '@/utils/passwordRules'
 
 const props = defineProps({
   password: { type: String, default: '' },
-  id: { type: String, default: undefined }, // for aria-describedby on the input
+  id: { type: String, default: undefined },
 })
 
 const rules = computed(() => checkPassword(props.password))
@@ -71,7 +68,6 @@ const tooLong = computed(() => new TextEncoder().encode(props.password).length >
   gap: 6px;
   transition: color 0.15s ease;
 }
-/* an odd last rule gets the full row instead of wrapping in half a column */
 .pw-check-list li:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }

@@ -201,26 +201,21 @@
 import { toISODate, mondayOf } from '@/utils/dates';
 
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-const MIN_SEARCH = 2; // same minimum as GET /planner/recipe-search
+const MIN_SEARCH = 2;
 
 export default {
   name: 'AddMealModal',
 
   props: {
-    // 'YYYY-MM-DD' of the day the user clicked "Add Meal" on (defaults to today)
     defaultDate: { type: String, default: () => toISODate(new Date()) },
     defaultSlot: { type: String, default: 'Dinner' },
-    // Saved recipes for "Quick Suggestions" (GET /planner/recipe-options), same shape as the swap modal uses
     recipes: { type: Array, default: () => [] },
-    // Results of the last search, filled in by Planner.vue (GET /planner/recipe-search):
-    // { query, saved: [], online: [], warning, loading, error }
     searchResults: {
       type: Object,
       default: () => ({ query: '', saved: [], online: [], warning: '', loading: false, error: '' }),
     },
   },
 
-  // search(query): the parent searches saved + Spoonacular recipes and passes them back as searchResults
   emits: ['close', 'add', 'search'],
 
   data() {
@@ -236,8 +231,6 @@ export default {
   },
 
   watch: {
-    // Wait until the user stops typing (600 ms) before searching, so we don't use
-    // Spoonacular's daily quota on every key press ("c", "ch", "chi", ...)
     query(value) {
       clearTimeout(this.searchTimer);
       if (value.length < MIN_SEARCH) return;
@@ -246,7 +239,6 @@ export default {
   },
 
   computed: {
-    // The 7 days of the week containing defaultDate, for the Day dropdown
     weekDays() {
       const start = mondayOf(new Date(`${this.defaultDate}T00:00:00`));
       const today = toISODate(new Date());
@@ -259,7 +251,6 @@ export default {
       });
     },
 
-    // Saved recipes matching the search, filtered here so results appear instantly while the server search runs
     localMatches() {
       const q = this.query.toLowerCase();
       return this.recipes.filter((r) =>
@@ -270,17 +261,14 @@ export default {
       );
     },
 
-    // True once the server's results are for exactly what's in the search box (not an older search)
     resultsAreFresh() {
       return this.searchResults.query === this.query && !this.searchResults.loading;
     },
 
-    // Still waiting: either the 600 ms typing pause, or the request itself
     onlinePending() {
       return this.query.length >= MIN_SEARCH && !this.resultsAreFresh;
     },
 
-    // The lists shown under the search box
     resultGroups() {
       if (this.query.length < MIN_SEARCH) {
         return [{ key: 'quick', title: 'Quick Suggestions', recipes: this.recipes.slice(0, 5) }];
@@ -315,12 +303,9 @@ export default {
 
     selectRecipe(recipe) {
       this.selectedRecipe = recipe;
-      // Start from the recipe's own servings, but the planner only allows 1-12
-      // (many Spoonacular recipes serve 16+, which the server would reject)
       this.servings = Math.min(Math.max(recipe.servings || this.servings, 1), 12);
     },
 
-    // "520 kcal · 31g protein · 35m prep" (user recipes may have no nutrition yet, so skip missing parts)
     recipeMeta(r) {
       const n = r.nutrition || {};
       return [
@@ -338,7 +323,7 @@ export default {
         day: new Date(`${date}T00:00:00`).toLocaleDateString('en-SG', { weekday: 'long' }),
         mealSlot: this.selectedSlot,
         servings: this.servings,
-        recipe: this.selectedRecipe, // source 'spoonacular' = not saved yet; Planner.vue sends its externalId
+        recipe: this.selectedRecipe,
       });
       this.close();
     },
@@ -351,8 +336,7 @@ export default {
 </script>
 
 <style scoped>
-/* ---------- Design tokens (delete if you moved these to assets/styles/tokens.css) ---------- */
-.fft-backdrop {
+/* ---------- Design tokens (delete if you moved these to assets/styles/tokens.css) ---------- */.fft-backdrop {
   --fft-primary: #3a6a3a;
   --fft-primary-hover: #2f572f;
   --fft-on-primary: #ffffff;
@@ -385,8 +369,7 @@ export default {
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ---------- Shell ---------- */
-.fft-modal {
+/* ---------- Shell ---------- */.fft-modal {
   max-width: 36rem;
   border-radius: 1rem;
   overflow: hidden;
@@ -407,8 +390,7 @@ export default {
 
 .min-w-0 { min-width: 0; }
 
-/* ---------- Typography ---------- */
-.fft-title { font-size: 1.25rem; font-weight: 600; }
+/* ---------- Typography ---------- */.fft-title { font-size: 1.25rem; font-weight: 600; }
 .fft-overline {
   font-size: 11px;
   font-weight: 600;
@@ -426,8 +408,7 @@ export default {
 .fs-18 { font-size: 18px; }
 .fs-20 { font-size: 20px; }
 
-/* ---------- Close button ---------- */
-.fft-icon-btn {
+/* ---------- Close button ---------- */.fft-icon-btn {
   width: 2rem;
   height: 2rem;
   border: 0;
@@ -441,8 +422,7 @@ export default {
 }
 .fft-icon-btn:hover { background: var(--fft-surface-high); color: var(--fft-on-surface); }
 
-/* ---------- Inputs ---------- */
-.fft-input {
+/* ---------- Inputs ---------- */.fft-input {
   padding: 0.625rem 1rem 0.625rem 2.5rem;
   border-radius: 0.75rem;
   font-size: 0.875rem;
@@ -468,8 +448,7 @@ export default {
   z-index: 1;
 }
 
-/* ---------- Meal slot buttons ---------- */
-.fft-slot {
+/* ---------- Meal slot buttons ---------- */.fft-slot {
   padding: 0.5rem 0.25rem;
   border: 0;
   border-radius: 0.75rem;
@@ -487,8 +466,7 @@ export default {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-/* ---------- Suggestions ---------- */
-.fft-suggestion {
+/* ---------- Suggestions ---------- */.fft-suggestion {
   width: 100%;
   border-radius: 0.75rem;
   border: 1px solid transparent;
@@ -515,9 +493,7 @@ export default {
 .fft-suggestion--active .fft-suggestion-check { color: var(--fft-primary); }
 
 .fft-empty { font-size: 0.875rem; color: var(--fft-outline); }
-.fft-warning { color: #9a5b13; } /* amber: Spoonacular unavailable, saved results still shown */
-
-/* recipe photo thumbnail (Spoonacular and user recipes with an image) */
+.fft-warning { color: #9a5b13; }
 .fft-suggestion-img {
   width: 2.5rem;
   height: 2.5rem;
@@ -526,8 +502,7 @@ export default {
   background: var(--fft-surface-high);
 }
 
-/* ---------- Servings stepper ---------- */
-.fft-stepper {
+/* ---------- Servings stepper ---------- */.fft-stepper {
   border-radius: 0.75rem;
   background: var(--fft-surface-low);
   border: 1px solid var(--fft-outline-variant);
@@ -547,8 +522,7 @@ export default {
 .fft-stepper-btn:hover:not(:disabled) { background: var(--fft-surface-high); }
 .fft-stepper-btn:disabled { opacity: 0.4; }
 
-/* ---------- "Create your own recipe" link ---------- */
-.fft-create {
+/* ---------- "Create your own recipe" link ---------- */.fft-create {
   border-radius: 0.75rem;
   border: 1px dashed var(--fft-outline-variant);
   color: var(--fft-on-surface);
@@ -557,8 +531,7 @@ export default {
 }
 .fft-create:hover { background: var(--fft-surface-low); border-color: var(--fft-primary); }
 
-/* ---------- Buttons & links ---------- */
-.fft-link { color: var(--fft-primary); text-decoration: none; }
+/* ---------- Buttons & links ---------- */.fft-link { color: var(--fft-primary); text-decoration: none; }
 .fft-link:hover { text-decoration: underline; }
 
 .fft-btn-primary,
@@ -574,8 +547,7 @@ export default {
 .fft-btn-secondary { background: var(--fft-surface-high); color: var(--fft-on-surface); }
 .fft-btn-secondary:hover { background: var(--fft-surface-highest); }
 
-/* ---------- Small screens ---------- */
-@media (max-width: 575.98px) {
+/* ---------- Small screens ---------- */@media (max-width: 575.98px) {
   .fft-modal-body { padding: 1rem !important; }
   .fft-modal-header,
   .fft-modal-footer { padding-left: 1rem !important; padding-right: 1rem !important; }

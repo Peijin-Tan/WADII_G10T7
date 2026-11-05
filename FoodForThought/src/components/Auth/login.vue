@@ -30,8 +30,6 @@ async function handleSubmit() {
     auth.setLogin(response.data)
     password.value = ''
 
-    // Back to the page the user was trying to open (?redirect=/pantry), otherwise their home page.
-    // Only paths inside this site ("/..." but not "//other-site.com") are followed.
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
     const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : ''
     const isAdmin = auth.user?.role === 'admin'

@@ -10,17 +10,12 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-// No navbar on the login, register and landing pages,
-// or on the admin dashboard (it has its own sidebar, like an admin console)
 const showMainNav = computed(() => !['/login', '/register', '/home', '/admindashboard'].includes(route.path))
 const isLoggedIn = computed(() => Boolean(auth.token))
 const isAdmin = computed(() => isLoggedIn.value && auth.user?.role === 'admin')
 const displayName = computed(() => auth.user?.name || 'Your account')
-// "Eleen Chia" -> "EC", shown in the avatar circle (no external image needed; same as the Profile page)
 const initials = computed(() => initialsOf(auth.user?.name))
 
-// Main links, in the order a week goes: overview -> plan -> shop -> stock -> find recipes.
-// The same list feeds the navbar and the footer, so they always match.
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Dashboard', icon: 'space_dashboard' },
   { to: '/planner', label: 'Weekly Plan', icon: 'calendar_month' },
@@ -30,17 +25,15 @@ const NAV_LINKS = [
   { to: '/community', label: 'Community', icon: 'groups' },
 ]
 
-const menuOpen = ref(false) // phone / tablet: the collapsed menu panel
-const userMenuOpen = ref(false) // desktop: the account dropdown
+const menuOpen = ref(false)
+const userMenuOpen = ref(false)
 const userMenu = ref(null)
 
-// Any navigation closes both menus
 watch(() => route.fullPath, () => {
   menuOpen.value = false
   userMenuOpen.value = false
 })
 
-// Clicking outside the account dropdown, or pressing Esc, closes it
 function onDocumentClick(e) {
   if (userMenuOpen.value && userMenu.value && !userMenu.value.contains(e.target)) userMenuOpen.value = false
 }
@@ -178,8 +171,6 @@ function handleLogout() {
 </template>
 
 <style>
-
-/* Undo the Vue starter layout (main.css turns #app into a 2-column grid at >=1024px) */
 body {
   display: block !important;
   max-width: none !important;
@@ -188,8 +179,7 @@ body {
 
 #app {
   display: flex !important;
-  /* column layout so the footer can stick to the bottom */
-  flex-direction: column;
+   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
   grid-template-columns: none !important;
@@ -229,8 +219,7 @@ body {
 
 .app-nav-container { position: relative; }
 
-/* ----- Logo + hamburger ----- */
-.app-nav-row {
+/* ----- Logo + hamburger ----- */.app-nav-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -248,7 +237,6 @@ body {
 .app-brand:hover { opacity: 0.85; }
 .app-brand:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nav-primary); }
 
-/* Logo is about 5:1 (wide): 32px tall on phones, up to 40px on large screens */
 .app-logo {
   display: block;
   height: clamp(32px, 3vw, 40px);
@@ -272,8 +260,7 @@ body {
 .app-toggler:focus { box-shadow: none; }
 .app-toggler:focus-visible { box-shadow: 0 0 0 2px var(--nav-primary); }
 
-/* ----- Main links ----- */
-.app-nav {
+/* ----- Main links ----- */.app-nav {
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -303,15 +290,13 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-/* ----- Right side ----- */
-.app-user-controls {
+/* ----- Right side ----- */.app-user-controls {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-shrink: 0;
 }
 
-/* Admin: separate from the main links, with its own darker look, so it's clearly a staff tool */
 .app-admin-link {
   display: inline-flex;
   align-items: center;
@@ -354,7 +339,6 @@ body {
   white-space: nowrap;
 }
 
-/* Desktop account dropdown */
 .app-user-menu { position: relative; }
 .app-user-button {
   display: flex;
@@ -405,7 +389,6 @@ body {
 .app-menu-item--logout .material-symbols-outlined { color: #a23e18; }
 .app-menu-divider { margin: 4px 6px; border-color: var(--nav-surface-high); opacity: 1; }
 
-/* Logged out */
 .app-auth-buttons { display: flex; align-items: center; gap: 0.5rem; }
 .app-signup-link {
   padding: 0.55rem 0.8rem;
@@ -435,8 +418,7 @@ body {
 .app-signup-link:focus-visible,
 .app-login-button:focus-visible { outline: 2px solid var(--nav-primary); outline-offset: 2px; }
 
-/* ----- Desktop (xl, 1200px+): logo | links (centred) | account ----- */
-@media (min-width: 1200px) {
+/* ----- Desktop (xl, 1200px+): logo | links (centred) | account ----- */@media (min-width: 1200px) {
   .app-navbar-bar { min-height: 80px; }
 
   .app-collapse {
@@ -446,26 +428,22 @@ body {
     gap: 1rem;
   }
 
-  /* the pill only wraps its links and sits in the middle of the free space */
-  .app-nav {
+   .app-nav {
     flex: 0 0 auto;
     margin: 0 auto;
   }
 }
 
-/* A little tighter between 1200 and 1400px so everything fits on one line */
 @media (min-width: 1200px) and (max-width: 1399.98px) {
   .app-nav-link { padding: 0.5rem 0.6rem !important; font-size: 0.8125rem; }
   .app-nav-icon { display: none; }
   .app-user-name { display: none; }
 }
 
-/* ----- Phone / tablet (below 1200px): hamburger opens a panel ----- */
-@media (max-width: 1199.98px) {
+/* ----- Phone / tablet (below 1200px): hamburger opens a panel ----- */@media (max-width: 1199.98px) {
   .app-nav-row { width: 100%; }
 
-  /* Panel floats under the bar instead of pushing the page down */
-  .app-navbar .app-collapse {
+   .app-navbar .app-collapse {
     position: absolute;
     top: 100%;
     left: 0;
@@ -479,8 +457,7 @@ body {
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
   }
 
-  /* links stacked; each highlight only wraps its own label + icon, not the whole panel width */
-  .app-nav {
+   .app-nav {
     flex-direction: column;
     align-items: flex-start;
     background: transparent;
@@ -510,7 +487,6 @@ body {
   .app-signup-link { justify-content: center; text-align: center; padding: 0.75rem; }
 }
 
-/* Footer (margin-top: auto pushes it to the bottom on short pages) */
 .app-footer {
   margin-top: auto;
   background: #f4f4ed;
