@@ -1,10 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import axios from 'axios'
-
+import { createApi } from '@/services/api'
 const route = useRoute()
-
+const postApi = createApi('/posts')
 const post = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -17,10 +16,7 @@ async function loadPost() {
   post.value = null
 
   try {
-    const response = await axios.get(
-      `/posts/${route.params.id}`
-    )
-
+    const response = await postApi.get(`/${route.params.id}`)
     post.value = response.data
   } catch (err) {
     if (err.response?.status === 404) {
