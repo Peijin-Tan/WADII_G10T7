@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
-import axios from 'axios'
+import { createApi } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
@@ -10,7 +10,7 @@ const props = defineProps({
     required: true
   }
 })
-
+const api = createApi('/activity')
 const auth = useAuthStore()
 
 const comments = ref([])
@@ -64,9 +64,8 @@ async function loadComments() {
   loadError.value = ''
 
   try {
-    const response = await axios.get(
-      '/activity/recipes/' + props.recipeId + '/comments',
-      requestConfig()
+    const response = await api.get(
+      '/recipes/' + props.recipeId + '/comments'
     )
 
     if (version !== requestVersion) return
@@ -119,12 +118,11 @@ async function submitComment() {
   submitting.value = true
 
   try {
-    const response = await axios.post(
-      '/activity/recipes/' + props.recipeId + '/comments',
+    const response = await api.post(
+      '/recipes/' + props.recipeId + '/comments',
       {
         content: cleanedContent
-      },
-      requestConfig()
+      }
     )
 
     if (version !== requestVersion) return
@@ -194,12 +192,11 @@ async function saveComment(comment) {
   busyCommentIds.value.push(comment._id)
 
   try {
-    const response = await axios.put(
-      '/activity/comments/' + comment._id,
+    const response = await api.put(
+      '/comments/' + comment._id,
       {
         content: cleanedContent
-      },
-      requestConfig()
+      }
     )
 
     if (version !== requestVersion) return
@@ -245,9 +242,8 @@ async function deleteComment(comment) {
   busyCommentIds.value.push(comment._id)
 
   try {
-    await axios.delete(
-      '/activity/comments/' + comment._id,
-      requestConfig()
+    await api.delete(
+      '/comments/' + comment._id
     )
 
     if (version !== requestVersion) return
