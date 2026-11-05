@@ -9,7 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL
 
 const auth = useAuthStore()
 const router = useRouter()
-const activityApi = createApi(`${API_URL}/activity`)
+const activityApi = createApi('/activity')
 const activeTab = ref('comments')
 
 // The three tabs at the top of the page (underlined tab bar, see .cm-tabs styles)
