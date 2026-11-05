@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { API_URL } from '@/services/api'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -57,7 +58,7 @@ async function fetchRecipes() {
         }
       : {}
 
-    const response = await axios.get('/api/recipes', config)
+    const response = await axios.get(`${API_URL}/recipes`, config)
     recipes.value = response.data.data
   } catch (err) {
     console.error(err)
@@ -93,7 +94,7 @@ async function searchRecipes() {
 
     const [savedResponse, spoonacularResponse] = await Promise.all([
       // Search MongoDB recipes, including user-created recipes
-      axios.get('/api/recipes', auth.token
+      axios.get(`${API_URL}/recipes`, auth.token
         ? {
             headers: {
               Authorization: `Bearer ${auth.token}`
@@ -103,7 +104,7 @@ async function searchRecipes() {
       ),
 
       // Search Spoonacular recipes
-      axios.get('/api/recipes/search', {
+      axios.get(`${API_URL}/recipes/search`, {
         params: {
           query: searchTerm
         }
@@ -224,7 +225,7 @@ async function loadMyLikes() {
   try {
     if (!auth.token) return
 
-    const response = await axios.get('/api/recipes/liked', {
+    const response = await axios.get(`${API_URL}/recipes/liked`, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
@@ -305,7 +306,7 @@ async function loadPantryIngredients() {
   try {
     const token = auth.token
 
-    const { data } = await axios.get('http://localhost:8000/pantry/', {
+    const { data } = await axios.get(`${API_URL}/pantry/`, {
       headers: token
         ? { Authorization: `Bearer ${token}` }
         : {},
