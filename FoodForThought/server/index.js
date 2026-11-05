@@ -55,7 +55,11 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many requests. Please wait a few minutes and try again.' },
 })
-app.use(limiter)
+// DISABLE_RATE_LIMIT=true turns both limits off, ONLY for running the automated E2E tests locally
+// (a full Playwright run makes hundreds of requests and logs in many times). Never set it in production.
+const rateLimitOff = process.env.DISABLE_RATE_LIMIT === 'true'
+if (rateLimitOff) console.warn('Rate limiting is OFF (DISABLE_RATE_LIMIT=true). Only use this for local testing.')
+if (!rateLimitOff) app.use(limiter)
 
 // Logging in / signing up keeps a tight limit so passwords can't be guessed quickly:
 // 10 FAILED attempts per 15 minutes per IP (successful logins don't count).
@@ -67,7 +71,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many failed attempts. Please wait 15 minutes and try again.' },
 })
-app.use(['/auth/login', '/auth/register'], authLimiter)
+if (!rateLimitOff) app.use(['/auth/login', '/auth/register'], authLimiter)
 
 // Mount routes
 app.use('/auth', authRouter)

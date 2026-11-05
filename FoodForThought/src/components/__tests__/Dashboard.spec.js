@@ -4,7 +4,17 @@ import axios from 'axios'
 import Dashboard from '@/views/Dashboard.vue'
 import { renderFeature, flushPromises, button, text, rankedRecipe, progress, serverError, deferred } from './featureTestSupport'
 
-vi.mock('axios', () => ({ default: { get: vi.fn() } }))
+// Dashboard.vue also loads this week's meal plan through the shared api client (axios.create),
+// so the mock needs create() as well; the planner calls answer with an empty week.
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn(),
+    create: () => ({
+      get: vi.fn((url) => Promise.resolve({ data: url === '/recipe-options' ? [] : { entries: [] } })),
+      interceptors: { request: { use: () => {} }, response: { use: () => {} } },
+    }),
+  },
+}))
 enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.resetAllMocks()

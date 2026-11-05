@@ -104,6 +104,7 @@ function handleLogout() {
               <!-- Desktop: account dropdown -->
               <div ref="userMenu" class="app-user-menu d-none d-xl-block">
                 <button type="button" class="app-user-button" :aria-expanded="userMenuOpen" aria-haspopup="menu"
+                  :aria-label="`Account menu for ${displayName}`"
                   @click="userMenuOpen = !userMenuOpen">
                   <span class="app-avatar" aria-hidden="true">{{ initials }}</span>
                   <span class="app-user-name">{{ displayName }}</span>
