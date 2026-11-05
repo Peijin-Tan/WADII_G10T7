@@ -1,5 +1,6 @@
 allowBuilds:
   bcrypt: true
+  mongodb-memory-server: true
 
 allowedDeprecatedVersions:
   csurf: '*'
