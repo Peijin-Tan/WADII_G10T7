@@ -5,11 +5,12 @@ import { createApi } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import NeighbourPantry from '@/components/community/NeighbourPantry.vue'
 
+const API_URL = import.meta.env.VITE_API_URL
+
 const auth = useAuthStore()
 const router = useRouter()
 const activityApi = createApi(`${API_URL}/activity`)
 const activeTab = ref('comments')
-const API_URL = import.meta.env.VITE_API_URL
 
 // The three tabs at the top of the page (underlined tab bar, see .cm-tabs styles)
 const COMMUNITY_TABS = [
@@ -152,7 +153,7 @@ async function loadLikes() {
   likesError.value = ''
 
   try {
-    const response = 	activityApi.get('/likes', requestConfig())
+    const response = await activityApi.get('/likes', requestConfig())
 
     if (token === auth.token) {
       likes.value = response.data
