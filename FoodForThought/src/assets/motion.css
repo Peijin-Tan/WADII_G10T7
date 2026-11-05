@@ -1,0 +1,64 @@
+:root {
+   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);       --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+   --dur-press: 160ms;    --dur-fast: 150ms;     --dur-modal: 200ms;    --dur-exit: 150ms;   }
+
+html {
+   -webkit-tap-highlight-color: transparent;
+   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+a,
+button,
+.btn,
+[role='button'],
+label,
+summary {
+  touch-action: manipulation;
+}
+
+button,
+.btn,
+[role='button'],
+.nav-link,
+.dropdown-item {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+.btn,
+button {
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    opacity var(--dur-fast) ease,
+    scale var(--dur-press) var(--ease-out);
+}
+
+.btn:active:not(:disabled):not(.disabled),
+button:active:not(:disabled),
+[role='button']:active {
+  scale: 0.97;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled):not(.disabled),
+  button:active:not(:disabled),
+  [role='button']:active {
+    scale: none;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

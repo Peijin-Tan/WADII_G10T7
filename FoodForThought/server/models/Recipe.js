@@ -8,6 +8,14 @@ const recipeSchema = new mongoose.Schema(
       default: undefined
     },
 
+    createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function () {
+      return this.source === 'user'
+    }
+    },
+
     title: {
       type: String,
       required: true
@@ -66,6 +74,12 @@ const recipeSchema = new mongoose.Schema(
       unit: {
         type: String,
         required: true
+      },
+
+      // Optional supermarket aisle from Spoonacular (e.g. "Milk, Eggs, Other Dairy").
+      // The shopping list uses it to sort items into sections; without it they all go to "Other".
+      aisle: {
+        type: String
       }
     }],
 
@@ -107,14 +121,6 @@ const recipeSchema = new mongoose.Schema(
       enum: ['spoonacular', 'user'],
       default: 'user'
     },
-
-    createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: function () {
-      return this.source === 'user'
-    }
-  },
 
     sourceUrl: {
       type: String

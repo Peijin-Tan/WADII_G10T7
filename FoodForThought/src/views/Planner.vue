@@ -1,0 +1,1537 @@
+<script setup>
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { createApi, errorMessage } from '@/services/api'
+import { addDays, toISODate, mondayOf, startOfToday } from '@/utils/dates'
+import RecipeModal from '@/components/Mealplan/RecipeModal.vue'
+import SwapMealModal from '@/components/Mealplan/SwapMealModal.vue'
+import AddMealModal from '@/components/Mealplan/AddMealModal.vue'
+import AppAlert from '@/components/ui/AppAlert.vue'
+import PageIntro from '@/components/ui/PageIntro.vue'
+import { useConfirm } from '@/composables/useConfirm'
+
+/* ---------- API ---------- */
+const api = createApi('/planner')
+const shoppingApi = createApi('/shoppinglist')
+const router = useRouter()
+const route = useRoute()
+const confirm = useConfirm()
+
+/* ---------- Date helpers ---------- */
+const fmt = (d, opts) => d.toLocaleDateString('en-US', opts)
+const sameDay = (a, b) => a.getTime() === b.getTime()
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+
+const today = startOfToday()
+const todayIndex = (today.getDay() + 6) % 7
+const thisMonday = mondayOf(today)
+
+/* ---------- Week navigation ---------- */
+const weekOffset = ref(0)
+
+const weekStart = computed(() => addDays(thisMonday, weekOffset.value * 7))
+const weekEnd = computed(() => addDays(weekStart.value, 6))
+const weekStartISO = computed(() => toISODate(weekStart.value))
+
+const weekRange = computed(() => {
+  const o = { month: 'short', day: 'numeric' }
+  return `${fmt(weekStart.value, o)} – ${fmt(weekEnd.value, o)}`
+})
+
+const weekLabel = computed(() => {
+  const n = weekOffset.value
+  if (n === 0) return 'This week'
+  if (n === 1) return 'Next week'
+  if (n === -1) return 'Last week'
+  return n > 0 ? `${n} weeks ahead` : `${-n} weeks ago`
+})
+
+/* ---------- Loading the week from the backend ---------- */
+const plan = ref({ id: null, entries: [] })
+const loading = ref(false)
+const saving = ref(false)
+const errorMsg = ref('')
+
+let latestRequest = 0
+
+async function loadWeek() {
+  const requestId = ++latestRequest
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    const res = await api.get('/', { params: { start: weekStartISO.value } })
+    if (requestId === latestRequest) plan.value = res.data
+  } catch (err) {
+    if (requestId === latestRequest) {
+      plan.value = { id: null, entries: [] }
+      errorMsg.value = errorMessage(err, 'Could not load your meal plan.')
+    }
+  } finally {
+    if (requestId === latestRequest) loading.value = false
+  }
+}
+
+watch(weekStartISO, loadWeek, { immediate: true })
+
+const recipeOptions = ref([])
+async function loadRecipeOptions() {
+  try {
+    const res = await api.get('/recipe-options', { params: { limit: 50 } })
+    recipeOptions.value = res.data
+  } catch (err) {
+    console.error('Could not load recipe options', err)
+  }
+}
+onMounted(loadRecipeOptions)
+
+async function saveChange(request) {
+  saving.value = true
+  errorMsg.value = ''
+  try {
+    const res = await request
+    latestRequest++
+    loading.value = false
+    plan.value = res.data
+    return res.data
+  } catch (err) {
+    errorMsg.value = errorMessage(err, 'Could not save your change. Please try again.')
+    return null
+  } finally {
+    saving.value = false
+  }
+}
+
+/* ---------- Turning API entries into what the cards + modals need ---------- */
+const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack']
+const SLOT_PILL = { breakfast: 'fft-pill-gray', lunch: 'fft-pill-green', dinner: 'fft-pill-amber', snack: 'fft-pill-peach' }
+
+const entries = computed(() =>
+  plan.value.entries.map((e) => ({
+    ...e,
+    slotKey: e.mealSlot,
+    mealSlot: capitalize(e.mealSlot),
+    day: fmt(addDays(weekStart.value, e.dayOfWeek), { weekday: 'long' }),
+  }))
+)
+
+const hasPlan = computed(() => entries.value.length > 0)
+
+const kcalOf = (entry) => (entry.status === 'Skipped' ? 0 : entry.recipe.nutrition.calories || 0)
+const sum = (list, fn) => list.reduce((total, item) => total + fn(item), 0)
+
+const entriesByDay = computed(() => {
+  const byDay = Array.from({ length: 7 }, () => [])
+  for (const e of entries.value) byDay[e.dayOfWeek].push(e)
+  byDay.forEach((list) => list.sort((a, b) => SLOT_ORDER.indexOf(a.slotKey) - SLOT_ORDER.indexOf(b.slotKey)))
+  return byDay
+})
+
+/* ---------- Control bar ---------- */
+const metrics = computed(() => {
+  const all = entries.value
+  const cooked = all.filter((e) => e.status === 'Cooked').length
+  const daysWithMeals = entriesByDay.value.filter((list) => list.length > 0)
+  const avgKcal = daysWithMeals.length
+    ? Math.round(sum(daysWithMeals, (list) => sum(list, kcalOf)) / daysWithMeals.length)
+    : 0
+  return [
+    { label: 'Meals Cooked', value: String(cooked), unit: `/ ${all.length} planned`, icon: 'restaurant_menu', bg: 'fft-bg-green-light text-fft-primary' },
+    { label: 'Daily Calorie Avg', value: avgKcal ? avgKcal.toLocaleString() : '—', unit: avgKcal ? 'kcal' : '', icon: 'local_fire_department', bg: 'fft-bg-peach text-fft-secondary' },
+  ]
+})
+
+/* ---------- Days ---------- */
+const days = computed(() =>
+  entriesByDay.value.map((list, i) => {
+    const date = addDays(weekStart.value, i)
+    const cooked = list.filter((e) => e.status === 'Cooked').length
+    return {
+      date,
+      name: `${fmt(date, { weekday: 'short' })} ${date.getDate()}`,
+      today: sameDay(date, today),
+      meals: `${cooked}/${list.length}`,
+      kcal: sum(list, kcalOf).toLocaleString(),
+    }
+  })
+)
+
+const activeIndex = ref(todayIndex)
+watch(weekOffset, (n) => {
+  activeIndex.value = n === 0 ? todayIndex : 0
+})
+
+const activeEntries = computed(() => entriesByDay.value[activeIndex.value])
+
+const activeDayLong = computed(() =>
+  fmt(days.value[activeIndex.value].date, { weekday: 'long', month: 'short', day: 'numeric' })
+)
+
+const dayStatus = computed(() => {
+  const d = days.value[activeIndex.value].date
+  const stillPlanned = activeEntries.value.some((e) => e.status === 'Planned')
+  if (sameDay(d, today)) return { text: 'Today', class: 'fft-pill-green' }
+  if (d > today) return { text: 'Upcoming', class: 'fft-pill-amber' }
+  if (stillPlanned) return { text: 'Not logged yet', class: 'fft-pill-peach' }
+  return { text: activeEntries.value.length ? 'Completed' : 'Past', class: 'fft-pill-gray' }
+})
+
+const daySummary = computed(() => {
+  const list = activeEntries.value
+  const ingredients = list.flatMap((e) => e.recipe.ingredients)
+  const inPantry = ingredients.filter((i) => i.inPantry).length
+  return {
+    kcal: sum(list, kcalOf).toLocaleString(),
+    count: list.length,
+    minutes: sum(list.filter((e) => e.status !== 'Skipped'), (e) => e.recipe.prepMinutes || 0),
+    pantryPercent: ingredients.length ? Math.round((inPantry / ingredients.length) * 100) : null,
+  }
+})
+
+const missingIngredients = computed(() => {
+  const names = new Set()
+  for (const e of entries.value) {
+    if (e.status === 'Skipped') continue
+    for (const ing of e.recipe.ingredients) {
+      if (!ing.inPantry) names.add(ing.name.toLowerCase())
+    }
+  }
+  return [...names]
+})
+
+const ctaText = computed(() =>
+  hasPlan.value
+    ? `${missingIngredients.value.length} ingredients needed for this week's ${entries.value.length} planned meals.`
+    : 'Plan some meals for this week to build your grocery list.'
+)
+
+/* ---------- Modals ---------- */
+const addTarget = ref(null)
+const selectedEntry = ref(null)
+const swapEntry = ref(null)
+
+function openAddMeal(slot = 'Dinner') {
+  addTarget.value = { date: toISODate(days.value[activeIndex.value].date), mealSlot: slot }
+}
+
+onMounted(() => {
+  const day = Number(route.query.day)
+  const slot = String(route.query.add || '')
+  if (!Number.isInteger(day) || day < 0 || day > 6 || !['breakfast', 'lunch', 'dinner', 'snack'].includes(slot)) return
+  weekOffset.value = 0
+  activeIndex.value = day
+  openAddMeal(capitalize(slot))
+  router.replace({ query: {} })
+})
+
+/* ---------- Add Meal modal: searching saved + Spoonacular recipes ---------- */
+const recipeSearch = ref({ query: '', saved: [], online: [], warning: '', loading: false, error: '' })
+let latestSearch = 0
+
+async function searchRecipes(query) {
+  const requestId = ++latestSearch
+  recipeSearch.value = { query, saved: [], online: [], warning: '', loading: true, error: '' }
+  try {
+    const { data } = await api.get('/recipe-search', { params: { search: query } })
+    if (requestId === latestSearch) {
+      recipeSearch.value = { query, saved: data.saved, online: data.online, warning: data.warning || '', loading: false, error: '' }
+    }
+  } catch (err) {
+    if (requestId === latestSearch) {
+      recipeSearch.value = { ...recipeSearch.value, loading: false, error: errorMessage(err, 'Could not search recipes.') }
+    }
+  }
+}
+
+function closeAddMeal() {
+  addTarget.value = null
+  latestSearch++
+  recipeSearch.value = { query: '', saved: [], online: [], warning: '', loading: false, error: '' }
+}
+
+async function addMealToPlan(payload) {
+  const chosenDay = new Date(`${payload.date}T00:00:00`)
+  const dayOfWeek = Math.round((chosenDay - weekStart.value) / 86400000)
+  const body = {
+    start: weekStartISO.value,
+    dayOfWeek,
+    mealSlot: payload.mealSlot.toLowerCase(),
+    servings: payload.servings,
+  }
+  if (payload.recipe.source === 'spoonacular') {
+    body.spoonacularId = payload.recipe.externalId
+  } else {
+    body.recipeId = payload.recipe.id
+  }
+  await saveChange(api.post('/entries', body))
+  if (errorMsg.value) return
+  activeIndex.value = dayOfWeek
+  if (body.spoonacularId) loadRecipeOptions()
+}
+
+async function onStatusChange({ entryId, status }) {
+  const data = await saveChange(api.patch(`/entries/${entryId}`, { status }))
+  if (data) showPantryToast(data.pantryUpdate)
+}
+
+/* ---------- Small pantry message after a status change ---------- */
+const pantryToast = ref('')
+let toastTimer
+
+function shortList(names) {
+  if (names.length <= 3) return names.join(', ')
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+}
+
+function showPantryToast(update) {
+  if (!update) return
+  let text = ''
+  if (update.restored?.length) {
+    text = `Put back in your pantry: ${shortList(update.restored.map((d) => d.name))}`
+  } else if (update.deducted?.length) {
+    text = `Deducted from your pantry: ${shortList(update.deducted.map((d) => d.name))}`
+  } else if (update.skipped?.length) {
+    text = "Marked as cooked. None of its ingredients were in your pantry."
+  }
+  if (!text) return
+  pantryToast.value = text
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (pantryToast.value = ''), 4000)
+}
+onBeforeUnmount(() => clearTimeout(toastTimer))
+
+/* ---------- Card controls: status + meal time ---------- */
+const STATUS_OPTIONS = [
+  { value: 'Planned', label: 'Planned', icon: 'schedule', tone: 'planned' },
+  { value: 'Cooked', label: 'Cooked', icon: 'check_circle', tone: 'cooked' },
+  { value: 'Skipped', label: 'Skipped', icon: 'do_not_disturb_on', tone: 'skipped' },
+]
+const SLOT_OPTIONS = [
+  { value: 'breakfast', label: 'Breakfast', icon: 'bakery_dining' },
+  { value: 'lunch', label: 'Lunch', icon: 'lunch_dining' },
+  { value: 'dinner', label: 'Dinner', icon: 'dinner_dining' },
+  { value: 'snack', label: 'Snack', icon: 'cookie' },
+]
+const statusMeta = (status) => STATUS_OPTIONS.find((s) => s.value === status) || STATUS_OPTIONS[0]
+const slotMeta = (slot) => SLOT_OPTIONS.find((s) => s.value === slot) || SLOT_OPTIONS[0]
+
+const controlsKey = ref(0)
+
+async function changeStatus(entry, status) {
+  if (status === entry.status) return
+  await onStatusChange({ entryId: entry.id, status })
+  if (errorMsg.value) controlsKey.value++
+}
+
+async function changeMealTime(entry, slot) {
+  if (slot === entry.slotKey) return
+  await saveChange(api.patch(`/entries/${entry.id}`, { mealSlot: slot }))
+  if (errorMsg.value) controlsKey.value++
+}
+
+function swapMeal({ entryId, recipe }) {
+  return saveChange(api.patch(`/entries/${entryId}`, { recipeId: recipe.id }))
+}
+
+async function removeEntry(entry) {
+  const ok = await confirm({
+    title: `Remove ${entry.recipe.title}?`,
+    message: entry.status === 'Cooked'
+      ? `It comes off ${entry.day}'s ${entry.mealSlot.toLowerCase()}. What it used from your pantry stays used.`
+      : `It comes off ${entry.day}'s ${entry.mealSlot.toLowerCase()} and its ingredients leave your shopping list next time you update it.`,
+    confirmText: 'Remove meal',
+  })
+  if (!ok) return
+  return saveChange(api.delete(`/entries/${entry.id}`))
+}
+
+/* ---------- Weekly macro split (stats row) ---------- */
+const macros = computed(() => {
+  const eaten = entries.value.filter((e) => e.status !== 'Skipped')
+  const grams = (key) => Math.round(sum(eaten, (e) => e.recipe.nutrition[key] || 0))
+  const protein = grams('protein')
+  const carbs = grams('carbs')
+  const fat = grams('fat')
+  const totalKcal = protein * 4 + carbs * 4 + fat * 9
+  const pct = (kcal) => (totalKcal ? Math.round((kcal / totalKcal) * 100) : 0)
+  return [
+    { name: 'Protein', grams: protein, percent: pct(protein * 4), colorClass: 'fft-macro-protein' },
+    { name: 'Carbs', grams: carbs, percent: pct(carbs * 4), colorClass: 'fft-macro-carbs' },
+    { name: 'Fat', grams: fat, percent: pct(fat * 9), colorClass: 'fft-macro-fat' },
+  ]
+})
+const hasMacros = computed(() => macros.value.some((m) => m.grams > 0))
+
+/* ---------- Grocery sync button ---------- */
+const syncState = ref('idle')
+const itemsToBuy = ref(0)
+
+const syncLabel = computed(() => {
+  if (syncState.value === 'syncing') return 'Updating Grocery List...'
+  if (syncState.value === 'done') {
+    return itemsToBuy.value === 1 ? '1 Item to Buy' : `${itemsToBuy.value} Items to Buy`
+  }
+  return 'Build Shopping List'
+})
+const syncIcon = computed(() => {
+  if (syncState.value === 'syncing') return 'sync'
+  if (syncState.value === 'done') return 'check'
+  return 'post_add'
+})
+
+const shoppingListLink = computed(() => ({ path: '/shoppinglist', query: { start: weekStartISO.value } }))
+
+async function sendToGrocery() {
+  if (syncState.value === 'syncing') return
+  syncState.value = 'syncing'
+  errorMsg.value = ''
+  try {
+    const { data } = await shoppingApi.post('/generate', { start: weekStartISO.value })
+    itemsToBuy.value = data.items.filter((item) => item.quantity > 0 && !item.purchased).length
+    syncState.value = 'done'
+    setTimeout(() => {
+      syncState.value = 'idle'
+      router.push(shoppingListLink.value)
+    }, 900)
+  } catch (err) {
+    errorMsg.value = errorMessage(err, 'Could not update your grocery list.')
+    syncState.value = 'idle'
+  }
+}
+</script>
+
+<template>
+  <div class="foodforthought">
+    <main class="fft-main">
+      <!-- ============ CONTROL BAR + STATS ============ -->
+      <section class="fft-controls px-4 py-3">
+        <div class="container-fluid fft-container d-flex flex-column gap-3">
+          <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+            <div class="d-flex align-items-center flex-wrap gap-3">
+              <div class="d-flex align-items-baseline flex-wrap gap-2">
+                <span class="fft-headline-lg text-nowrap">Week of {{ weekRange }}</span>
+                <span class="fft-tag">{{ weekLabel }}</span>
+              </div>
+
+              <!-- Week navigator -->
+              <div class="fft-week-switcher d-flex align-items-center gap-1">
+                <button class="fft-icon-btn fft-icon-btn-sm" title="Previous week" aria-label="Previous week"
+                  type="button" @click="weekOffset--">
+                  <span class="material-symbols-outlined">chevron_left</span>
+                </button>
+                <button type="button" class="fft-chip" :disabled="weekOffset === 0" title="Jump to the current week"
+                  @click="weekOffset = 0">
+                  This week
+                </button>
+                <button class="fft-icon-btn fft-icon-btn-sm" title="Next week" aria-label="Next week" type="button"
+                  @click="weekOffset++">
+                  <span class="material-symbols-outlined">chevron_right</span>
+                </button>
+              </div>
+
+              <span v-if="loading || saving" class="fft-label-sm text-fft-muted d-flex align-items-center gap-1"
+                role="status">
+                <span class="material-symbols-outlined fft-spin" style="font-size: 16px">progress_activity</span>
+                {{ saving ? 'Saving...' : 'Loading...' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Metric tiles + weekly macro split -->
+          <div class="row g-3 pt-1">
+            <div v-for="m in metrics" :key="m.label" class="col-6 col-lg-3">
+              <div class="fft-tile d-flex align-items-center justify-content-between h-100">
+                <div class="d-flex flex-column">
+                  <span class="fft-label-sm fft-upper text-fft-muted">{{ m.label }}</span>
+                  <span class="fft-headline-md" :class="{ 'text-fft-primary': m.accent }">
+                    {{ m.value }}
+                    <span v-if="m.unit" class="fft-body-sm text-fft-outline">{{ m.unit }}</span>
+                    <span v-if="m.note" class="fft-label-sm text-fft-primary ms-1">{{ m.note }}</span>
+                  </span>
+                </div>
+                <div class="fft-round-icon d-none d-sm-flex" :class="m.bg">
+                  <span class="material-symbols-outlined" style="font-size: 20px">{{ m.icon }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Macro split: one bar split by % of calories, grams underneath -->
+            <div class="col-12 col-lg-6">
+              <div class="fft-tile h-100 d-flex flex-column justify-content-center gap-2" data-testid="macro-split">
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                  <span class="fft-label-sm fft-upper text-fft-muted">Weekly Macro Split</span>
+                  <span class="fft-label-sm text-fft-outline">% of calories</span>
+                </div>
+                <div class="fft-macro-bar" role="img"
+                  :aria-label="macros.map((m) => `${m.name} ${m.percent}%`).join(', ')">
+                  <template v-if="hasMacros">
+                    <span v-for="m in macros" :key="m.name" :class="m.colorClass" :style="{ width: `${m.percent}%` }"></span>
+                  </template>
+                </div>
+                <div class="d-flex flex-wrap column-gap-3 row-gap-1">
+                  <span v-for="m in macros" :key="m.name" class="fft-macro-legend">
+                    <span class="fft-macro-dot" :class="m.colorClass"></span>
+                    <strong>{{ m.name }}</strong> {{ m.percent }}%
+                    <span class="text-fft-outline">· {{ m.grams }}g</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PLANNER ============ -->
+      <section class="px-4 py-4">
+        <div class="container-fluid fft-container">
+          <PageIntro page="planner" class="mb-4" />
+
+          <AppAlert v-if="errorMsg" tone="error" title="That didn't work" @dismiss="errorMsg = ''">
+            {{ errorMsg }}
+          </AppAlert>
+
+          <div class="row g-4 align-items-start">
+            <!-- Left: day picker + meals -->
+            <div class="col-12 col-xl">
+              <div class="d-flex flex-column gap-4">
+                <!-- Day tabs -->
+                <div class="fft-day-strip">
+                  <div class="d-flex align-items-center gap-1 p-1 fft-day-strip-inner">
+                    <button v-for="(d, i) in days" :key="d.name" type="button" class="fft-day"
+                      :class="{ active: activeIndex === i }" @click="activeIndex = i">
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="fft-label-md fw-semibold">{{ d.name }}</span>
+                        <span v-if="d.today" class="fft-today-pill">Today</span>
+                        <span v-else class="fft-day-count" title="Cooked / planned">{{ d.meals }}</span>
+                      </div>
+                      <span class="fft-day-kcal">
+                        {{ d.kcal }} kcal<template v-if="d.today"> · {{ d.meals }}</template>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Day summary -->
+                <div class="fft-card fft-card-bordered p-0 overflow-hidden">
+                  <div class="p-3 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                    <div class="d-flex flex-column gap-1">
+                      <div class="d-flex align-items-center flex-wrap gap-2">
+                        <h2 class="fft-headline-md m-0">{{ activeDayLong }}</h2>
+                        <span class="fft-pill" :class="dayStatus.class">{{ dayStatus.text }}</span>
+                      </div>
+                      <div v-if="daySummary.count === 0" class="fft-label-sm text-fft-muted">No meals planned yet</div>
+                      <div v-else class="fft-meta-list fft-label-sm text-fft-muted">
+                        <span class="d-flex align-items-center gap-1">
+                          <span class="material-symbols-outlined text-fft-secondary"
+                            style="font-size: 16px">local_fire_department</span>
+                          <strong>{{ daySummary.kcal }}</strong> kcal
+                        </span>
+                        <span class="d-flex align-items-center gap-1">
+                          <span class="material-symbols-outlined text-fft-primary" style="font-size: 16px">restaurant</span>
+                          {{ daySummary.count }} {{ daySummary.count === 1 ? 'meal' : 'meals' }}
+                        </span>
+                        <span class="d-flex align-items-center gap-1">
+                          <span class="material-symbols-outlined text-fft-outline" style="font-size: 16px">timer</span>
+                          {{ daySummary.minutes }}m prep
+                        </span>
+                        <span v-if="daySummary.pantryPercent !== null"
+                          class="d-flex align-items-center gap-1 text-fft-primary fw-medium">
+                          <span class="material-symbols-outlined" style="font-size: 16px">inventory_2</span>
+                          {{ daySummary.pantryPercent }}% in pantry
+                        </span>
+                      </div>
+                    </div>
+                    <button v-if="daySummary.count > 0" type="button"
+                      class="btn fft-btn-soft d-flex align-items-center gap-1 flex-shrink-0" @click="openAddMeal()">
+                      <span class="material-symbols-outlined" style="font-size: 16px">add</span>Add Meal
+                    </button>
+                  </div>
+
+                  <!-- Shopping sync -->
+                  <div
+                    class="fft-sync-bar d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-2 px-3 py-1">
+                      <div class="fft-round-icon fft-bg-green-light text-fft-primary">
+                        <span class="material-symbols-outlined" style="font-size: 20px">shopping_cart_checkout</span>
+                      </div>
+                      <div class="d-flex flex-column">
+                        <span class="fft-label-md">Ready to shop?</span>
+                        <span class="fft-body-sm text-fft-muted">{{ ctaText }}</span>
+                        <router-link :to="shoppingListLink" class="fft-inline-link d-inline-flex align-items-center gap-1">
+                          Go to shopping list
+                          <span class="material-symbols-outlined" style="font-size: 16px">arrow_forward</span>
+                        </router-link>
+                      </div>
+                    </div>
+                    <button type="button"
+                      class="btn fft-btn-primary d-flex align-items-center justify-content-center gap-2 flex-shrink-0"
+                      :disabled="syncState !== 'idle' || !hasPlan" @click="sendToGrocery">
+                      <span class="material-symbols-outlined" :class="{ 'fft-spin': syncState === 'syncing' }"
+                        style="font-size: 18px">{{ syncIcon }}</span>
+                      <span>{{ syncLabel }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Empty day -->
+                <div v-if="activeEntries.length === 0 && !loading"
+                  class="fft-card fft-card-bordered text-center py-5 d-flex flex-column align-items-center gap-2">
+                  <span class="material-symbols-outlined text-fft-outline" style="font-size: 40px">edit_calendar</span>
+                  <h3 class="fft-headline-sm m-0">Nothing planned for {{ activeDayLong }} yet</h3>
+                  <p class="fft-body-sm text-fft-muted m-0">Add a meal to get started.</p>
+                  <button class="btn fft-btn-primary d-flex align-items-center gap-1 mt-2" type="button"
+                    :disabled="saving" @click="openAddMeal()">
+                    <span class="material-symbols-outlined" style="font-size: 18px">add</span>
+                    <span>Add Meal</span>
+                  </button>
+                </div>
+
+                <!-- Meal cards: recipe info on top, one action bar underneath (same layout for every card) -->
+                <div v-else class="d-flex flex-column gap-3">
+                  <article v-for="entry in activeEntries" :key="entry.id"
+                    class="fft-card fft-card-bordered fft-hover-lift p-0 overflow-hidden fft-meal"
+                    :class="[`fft-meal--${statusMeta(entry.status).tone}`, { 'fft-meal--skipped': entry.status === 'Skipped' }]"
+                    data-testid="meal-card">
+                    <div class="d-flex flex-column flex-md-row">
+                      <!-- Every card has a photo: the recipe's own, or a placeholder if it has none (or it fails to load) -->
+                      <div class="fft-meal-img position-relative flex-shrink-0">
+                        <img v-recipe-img="entry.recipe.image" :alt="entry.recipe.image ? entry.recipe.title : ''"
+                          class="fft-cover" loading="lazy" />
+                      </div>
+
+                      <div class="p-3 d-flex flex-column gap-2 flex-grow-1 fft-min-0">
+                        <div class="d-flex align-items-start justify-content-between gap-2">
+                          <div class="d-flex align-items-center flex-wrap gap-2">
+                            <span class="fft-pill fft-slot-pill" :class="SLOT_PILL[entry.slotKey]">
+                              <span class="material-symbols-outlined" aria-hidden="true">{{ slotMeta(entry.slotKey).icon }}</span>
+                              {{ entry.mealSlot }}
+                            </span>
+                            <span v-for="tag in entry.recipe.tags.slice(0, 2)" :key="tag"
+                              class="fft-pill fft-pill-gray fw-semibold">{{ tag }}</span>
+                          </div>
+                          <!-- big status badge: the first thing you see on each card -->
+                          <span class="fft-status-badge" :class="`fft-status-badge--${statusMeta(entry.status).tone}`">
+                            <span class="material-symbols-outlined" aria-hidden="true">{{ statusMeta(entry.status).icon }}</span>
+                            {{ statusMeta(entry.status).label }}
+                          </span>
+                        </div>
+
+                        <h3 class="fft-headline-sm m-0">{{ entry.recipe.title }}</h3>
+                        <p v-if="entry.recipe.description" class="fft-body-sm text-fft-muted m-0 fft-clamp-2">
+                          {{ entry.recipe.description }}</p>
+
+                        <!-- the dots between items are drawn by .fft-meta-list, so none dangle at the start of a line -->
+                        <div class="fft-meta-list fft-label-sm text-fft-muted">
+                          <span class="fw-semibold text-fft-dark">{{ entry.recipe.nutrition.calories ?? '–' }} kcal</span>
+                          <span>{{ entry.recipe.nutrition.protein ?? '–' }}g protein</span>
+                          <span>{{ entry.recipe.nutrition.carbs ?? '–' }}g carbs</span>
+                          <span>{{ entry.servings }} {{ entry.servings === 1 ? 'serving' : 'servings' }}</span>
+                          <span v-if="entry.recipe.prepMinutes">{{ entry.recipe.prepMinutes }}m prep</span>
+                        </div>
+
+                        <!-- Up to 4 ingredients you already have (only shown when there's at least one) -->
+                        <div v-if="entry.recipe.ingredients.some((i) => i.inPantry)" class="d-flex align-items-center flex-wrap gap-2">
+                          <span class="fft-label-sm text-fft-outline">Pantry:</span>
+                          <span v-for="ing in entry.recipe.ingredients.filter((i) => i.inPantry).slice(0, 4)"
+                            :key="ing.name" class="fft-label-sm text-fft-primary d-flex align-items-center">
+                            <span class="material-symbols-outlined" style="font-size: 14px">check</span>{{ ing.name }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Action bar: status toggle + meal time picker, then recipe / swap / remove -->
+                    <div class="fft-meal-actions">
+                      <div :key="`${entry.id}-${controlsKey}`" class="fft-controls-row">
+                        <!-- Status: all three choices visible, one tap to change (was a dropdown) -->
+                        <div class="fft-status-toggle" role="radiogroup" :aria-label="`Status of ${entry.recipe.title}`">
+                          <button v-for="s in STATUS_OPTIONS" :key="s.value" type="button" role="radio"
+                            class="fft-status-option" :class="`fft-status-option--${s.tone}`"
+                            :aria-checked="entry.status === s.value" :disabled="saving"
+                            @click="changeStatus(entry, s.value)">
+                            <span class="material-symbols-outlined" aria-hidden="true">{{ s.icon }}</span>
+                            {{ s.label }}
+                          </button>
+                        </div>
+
+                        <div class="fft-picker" :class="{ 'is-disabled': saving }"
+                          title="Moving to a meal time that's already taken swaps the two meals">
+                          <span class="material-symbols-outlined fft-picker-icon" aria-hidden="true">{{
+                            slotMeta(entry.slotKey).icon }}</span>
+                          <span class="fft-picker-text">
+                            <span class="fft-picker-label">Meal time</span>
+                            <span class="fft-picker-value">{{ slotMeta(entry.slotKey).label }}</span>
+                          </span>
+                          <span class="material-symbols-outlined fft-picker-chevron" aria-hidden="true">expand_more</span>
+                          <select class="fft-picker-select" aria-label="Meal time" :value="entry.slotKey"
+                            :disabled="saving" @change="changeMealTime(entry, $event.target.value)">
+                            <option v-for="s in SLOT_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="fft-meal-buttons">
+                        <button class="btn fft-btn-soft d-flex align-items-center gap-1" type="button"
+                          @click="selectedEntry = entry">
+                          <span class="material-symbols-outlined" style="font-size: 16px">menu_book</span>Recipe
+                        </button>
+                        <button class="btn fft-btn-ghost d-flex align-items-center gap-1" type="button"
+                          :disabled="saving" title="Swap for another recipe" @click="swapEntry = entry">
+                          <span class="material-symbols-outlined" style="font-size: 16px">swap_horiz</span>Swap
+                        </button>
+                        <button class="btn fft-btn-ghost fft-btn-danger d-flex align-items-center gap-1" type="button"
+                          :disabled="saving" :aria-label="`Remove ${entry.recipe.title}`" @click="removeEntry(entry)">
+                          <span class="material-symbols-outlined" style="font-size: 16px">delete</span>Remove
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+
+                <!-- Modals (teleported to <body>, so their position here doesn't matter) -->
+                <AddMealModal v-if="addTarget" :default-date="addTarget.date" :default-slot="addTarget.mealSlot"
+                  :recipes="recipeOptions" :search-results="recipeSearch" @search="searchRecipes"
+                  @close="closeAddMeal" @add="addMealToPlan" />
+                <RecipeModal v-if="selectedEntry" :entry="selectedEntry" @close="selectedEntry = null"
+                  @update-status="onStatusChange" />
+                <SwapMealModal v-if="swapEntry" :entry="swapEntry" :recipes="recipeOptions" @close="swapEntry = null"
+                  @swap="swapMeal" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Small message after marking a meal Cooked (see showPantryToast). Tap to close. -->
+    <Transition name="pantry-toast">
+      <button v-if="pantryToast" type="button" class="pantry-toast" role="status" aria-live="polite"
+        title="Close" @click="pantryToast = ''">
+        <span class="material-symbols-outlined" aria-hidden="true">kitchen</span>
+        <span>{{ pantryToast }}</span>
+      </button>
+    </Transition>
+  </div>
+</template>
+<style scoped>
+/* ---------- Small pantry message (bottom of the screen) ---------- */.pantry-toast {
+  position: fixed;
+  right: 0;
+  bottom: 24px;
+  left: 0;
+  z-index: 1060;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;  max-width: min(520px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: #1f3a27;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: #fff;
+  font: 500 14px/20px 'Inter', sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.pantry-toast .material-symbols-outlined {
+  flex: none;
+  color: #c7ecce;
+  font-size: 20px;
+}
+.pantry-toast-enter-active,
+.pantry-toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.pantry-toast-enter-from,
+.pantry-toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pantry-toast-enter-active,
+  .pantry-toast-leave-active {
+    transition: opacity 0.2s ease;
+  }
+  .pantry-toast-enter-from,
+  .pantry-toast-leave-to {
+    transform: none;
+  }
+}
+
+/* ===== Design tokens (from the original Tailwind config) ===== */.foodforthought {
+  --fft-background: #fafaf3;
+  --fft-surface: #fafaf3;
+  --fft-surface-lowest: #ffffff;
+  --fft-surface-low: #f4f4ed;
+  --fft-surface-container: #eeeee8;
+  --fft-surface-high: #e8e9e2;
+  --fft-surface-highest: #e3e3dc;
+  --fft-on-surface: #1a1c18;
+  --fft-on-surface-variant: #424842;
+  --fft-outline: #727972;
+  --fft-outline-variant: #c2c8c0;
+
+  --fft-primary: #32533c;
+  --fft-primary-container: #4a6b53;
+  --fft-on-primary: #ffffff;
+  --fft-on-primary-container: #c5eacc;
+  --fft-primary-fixed: #c7ecce;
+  --fft-primary-fixed-dim: #abcfb2;
+  --fft-on-primary-fixed: #01210f;
+
+  --fft-secondary: #a23e18;
+  --fft-secondary-fixed: #ffdbcf;
+  --fft-on-secondary-fixed: #390c00;
+
+  --fft-tertiary: #6b4400;
+  --fft-tertiary-fixed: #ffddb5;
+  --fft-on-tertiary-fixed: #2a1800;
+
+  --fft-radius: 0.5rem;
+  --fft-radius-xl: 0.75rem;
+  --fft-radius-2xl: 1rem;
+
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--fft-on-surface);
+  background: var(--fft-background);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+.foodforthought *::-webkit-scrollbar {
+  display: none;
+}
+
+.foodforthought .material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 24px;
+  user-select: none;
+}
+
+/* ===== Typography helpers ===== */.foodforthought .fft-headline-lg {
+  font: 600 32px/40px 'Outfit', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.foodforthought .fft-headline-md {
+  font: 500 24px/32px 'Outfit', sans-serif;
+}
+
+.foodforthought .fft-headline-sm {
+  font: 500 20px/28px 'Outfit', sans-serif;
+}
+
+.foodforthought h2.fft-headline-md,
+.foodforthought h3.fft-headline-md,
+.foodforthought h3.fft-headline-sm,
+.foodforthought .fft-headline-sm.fw-semibold {
+  font-weight: 600;
+}
+
+.foodforthought .fft-label-md {
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.foodforthought .fft-label-sm {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.foodforthought .fft-body-sm {
+  font: 400 13px/20px 'Inter', sans-serif;
+}
+
+.foodforthought .fft-upper {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.foodforthought .text-fft-primary {
+  color: var(--fft-primary) !important;
+}
+
+.foodforthought .text-fft-secondary {
+  color: var(--fft-secondary) !important;
+}
+
+.foodforthought .text-fft-muted {
+  color: var(--fft-on-surface-variant) !important;
+}
+
+.foodforthought .text-fft-outline {
+  color: var(--fft-outline) !important;
+}
+
+.foodforthought .text-fft-dark {
+  color: var(--fft-on-surface) !important;
+}
+
+.foodforthought .fft-min-0 {
+  min-width: 0;
+}
+
+.foodforthought .fft-cover {
+  object-fit: cover;
+}
+
+/* ===== Week switcher + icon buttons ===== */
+.foodforthought .fft-week-switcher {
+  background: var(--fft-surface-low);
+  padding: 4px;
+  border-radius: var(--fft-radius);
+}
+
+.foodforthought .fft-icon-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--fft-radius);
+  background: var(--fft-surface-low);
+  color: var(--fft-on-surface-variant);
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.foodforthought .fft-icon-btn:hover {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-icon-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.foodforthought .fft-icon-btn-sm {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+}
+
+.foodforthought .fft-icon-btn-sm .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* ===== Buttons ===== */.foodforthought .btn {
+  border: 0;
+  border-radius: var(--fft-radius);
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  padding: 8px 16px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.foodforthought .fft-btn-primary {
+  background: var(--fft-primary);
+  color: var(--fft-on-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.foodforthought .fft-btn-primary:hover {
+  background: var(--fft-primary-container);
+  color: var(--fft-on-primary);
+}
+
+.foodforthought .fft-btn-soft {
+  background: var(--fft-surface-low);
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-btn-soft:hover {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-btn-ghost {
+  background: transparent;
+  color: var(--fft-outline);
+  padding: 8px 12px;
+}
+
+.foodforthought .fft-btn-ghost:hover {
+  color: var(--fft-on-surface);
+  background: transparent;
+}
+
+/* ===== Main layout ===== */.foodforthought .fft-main {
+  padding-top: 0;
+  background: var(--fft-background);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.foodforthought .fft-container {
+   max-width: 1140px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ===== Control bar ===== */.foodforthought .fft-controls {
+  background: var(--fft-surface-low);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.foodforthought .fft-tag {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fft-primary);
+  background: var(--fft-primary-fixed);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.foodforthought .fft-chip {
+  border: 0;
+  border-radius: 9999px;
+  padding: 4px 12px;
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface-variant);
+  font: 600 11px/14px 'Inter', sans-serif;
+  transition: background-color 0.15s;
+}
+
+.foodforthought .fft-chip:hover {
+  background: var(--fft-surface-highest);
+}
+
+.foodforthought .fft-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.foodforthought .fft-chip.active {
+  background: var(--fft-primary-container);
+  color: var(--fft-on-primary-container);
+}
+
+/* ===== Cards, tiles, pills ===== */.foodforthought .fft-tile {
+  background: var(--fft-surface-lowest);
+  padding: 16px;
+  border-radius: var(--fft-radius-xl);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.foodforthought .fft-round-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.foodforthought .fft-bg-green-light {
+  background: var(--fft-primary-fixed);
+}
+
+.foodforthought .fft-bg-peach {
+  background: var(--fft-secondary-fixed);
+}
+
+.foodforthought .fft-card {
+  background: var(--fft-surface-lowest);
+  padding: 16px;
+  border-radius: var(--fft-radius-2xl);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.foodforthought .fft-card-bordered {
+  border: 1px solid rgba(194, 200, 192, 0.4);
+}
+
+.foodforthought .fft-hover-lift {
+  transition: box-shadow 0.2s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+.foodforthought .fft-hover-lift:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+}
+
+.foodforthought .fft-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.foodforthought .fft-pill-gray {
+  background: var(--fft-surface-high);
+  color: var(--fft-on-surface-variant);
+}
+
+.foodforthought .fft-pill-green {
+  background: var(--fft-primary-fixed);
+  color: var(--fft-on-primary-fixed);
+}
+
+.foodforthought .fft-pill-peach {
+  background: var(--fft-secondary-fixed);
+  color: var(--fft-on-secondary-fixed);
+}
+
+.foodforthought .fft-pill-amber {
+  background: var(--fft-tertiary-fixed);
+  color: var(--fft-on-tertiary-fixed);
+}
+
+/* ===== Day strip ===== */.foodforthought .fft-day-strip {
+  background: var(--fft-surface-low);
+  padding: 4px;
+  border-radius: var(--fft-radius-2xl);
+  overflow-x: auto;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.foodforthought .fft-day-strip-inner {
+  min-width: max-content;
+}
+
+.foodforthought .fft-day {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 0;
+  padding: 8px 16px;
+  border-radius: var(--fft-radius-xl);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--fft-on-surface-variant);
+  transition: background-color 0.15s;
+}
+
+.foodforthought .fft-day:hover {
+  background: var(--fft-surface-lowest);
+}
+
+.foodforthought .fft-day-count {
+  font: 600 11px/14px 'Inter', sans-serif;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--fft-surface-container);
+  color: var(--fft-outline);
+}
+
+.foodforthought .fft-day-kcal {
+  font: 400 12px/18px 'Inter', sans-serif;
+  color: var(--fft-outline);
+  margin-top: 2px;
+}
+
+.foodforthought .fft-today-pill {
+  font: 600 11px/14px 'Inter', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: var(--fft-primary-fixed);
+  color: var(--fft-on-primary-fixed);
+}
+
+.foodforthought .fft-day.active {
+  background: var(--fft-primary);
+  color: var(--fft-on-primary);
+  padding: 8px 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.foodforthought .fft-day.active .fft-day-kcal {
+  color: var(--fft-primary-fixed);
+  font-weight: 500;
+}
+
+.foodforthought .fft-day.active .fft-day-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--fft-on-primary);
+}
+
+/* ===== Meal photo (same on every card) ===== */.foodforthought .fft-meal-img {
+  width: 100%;
+  height: 170px;
+  background: #e1ede1;
+  overflow: hidden;
+}
+
+.foodforthought .fft-meal-img img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+@media (min-width: 768px) {
+  .foodforthought .fft-meal-img {
+    width: 220px;
+    height: auto;
+    min-height: 180px;
+  }
+}
+
+/* ===== Meal card action bar ===== */.foodforthought .fft-meal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--fft-outline-variant, rgba(194, 200, 192, 0.6));
+  background: var(--fft-surface-low);
+}
+
+.foodforthought .fft-meal-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.foodforthought .fft-btn-danger:hover {
+  color: var(--fft-secondary);
+}
+
+.foodforthought .fft-meal--skipped > :first-child {
+  opacity: 0.6;
+}
+
+.foodforthought .fft-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.foodforthought .fft-meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 4px;
+  margin-left: -14px;
+  clip-path: inset(-4px -4px -4px 14px);
+}
+
+.foodforthought .fft-meta-list > * {
+  position: relative;
+  padding-left: 14px;
+}
+
+.foodforthought .fft-meta-list > *::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  font-weight: 700;
+  color: var(--fft-outline);
+}
+
+/* ===== Weekly macro split ===== */.foodforthought .fft-macro-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--fft-surface-high);
+}
+
+.foodforthought .fft-macro-bar > span {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.foodforthought .fft-macro-bar > span + span {
+  border-left: 2px solid var(--fft-surface-lowest);
+}
+
+.foodforthought .fft-macro-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 13px/18px 'Inter', sans-serif;
+  color: var(--fft-on-surface-variant);
+}
+
+.foodforthought .fft-macro-legend strong {
+  font-weight: 600;
+  color: var(--fft-on-surface);
+}
+
+.foodforthought .fft-macro-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.foodforthought .fft-macro-protein { background: var(--fft-primary); }
+
+.foodforthought .fft-macro-carbs { background: #c9a227; }
+
+.foodforthought .fft-macro-fat { background: var(--fft-secondary); }
+
+/* ===== "Ready to shop?" bar under the day summary ===== */.foodforthought .fft-sync-bar {
+  padding: 12px 16px;
+  border-top: 1px solid var(--fft-outline-variant, rgba(194, 200, 192, 0.6));
+  background: var(--fft-surface-low);
+}
+
+.foodforthought .fft-sync-bar > :first-child {
+  padding: 0 !important;
+}
+
+
+
+/* ===== Meal time picker ===== */.foodforthought .fft-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Meal slot label (Breakfast / Lunch / Dinner / Snack) ---------- */.foodforthought .fft-slot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px 5px 10px;
+  font: 600 15px/20px 'Outfit', sans-serif;
+  letter-spacing: 0.01em;
+}
+.foodforthought .fft-slot-pill .material-symbols-outlined { font-size: 18px; }
+
+/* ---------- Meal status: badge, coloured card edge, and the 3-way toggle ---------- */.foodforthought .fft-meal {
+  border-left-width: 6px;
+  border-left-style: solid;
+}
+.foodforthought .fft-meal--planned { border-left-color: #d99a2b; }
+.foodforthought .fft-meal--cooked { border-left-color: #2f6b45; }
+.foodforthought .fft-meal--skipped { border-left-color: #b8573a; }
+
+.foodforthought .fft-status-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 6px 10px;
+  border-radius: 9999px;
+  font: 600 14px/20px 'Inter', sans-serif;
+}
+.foodforthought .fft-status-badge .material-symbols-outlined {
+  font-size: 20px;
+  font-variation-settings: 'FILL' 1;
+}
+.foodforthought .fft-status-badge--planned { background: #fff1d9; color: #6b4400; }
+.foodforthought .fft-status-badge--cooked { background: #2f6b45; color: #fff; }
+.foodforthought .fft-status-badge--skipped { background: #fbe3da; color: #8a2f14; }
+
+.foodforthought .fft-status-toggle {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 14px;
+  background: var(--fft-surface-high);
+}
+.foodforthought .fft-status-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fft-on-surface-variant);
+  font: 600 14px/20px 'Inter', sans-serif;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.foodforthought .fft-status-option .material-symbols-outlined { font-size: 20px; }
+.foodforthought .fft-status-option:hover:not(:disabled) { background: rgba(255, 255, 255, 0.7); color: var(--fft-on-surface); }
+.foodforthought .fft-status-option:focus-visible { outline: 2px solid var(--fft-primary); outline-offset: 1px; }
+.foodforthought .fft-status-option:disabled { cursor: progress; }
+.foodforthought .fft-status-option[aria-checked='true'] { color: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+.foodforthought .fft-status-option[aria-checked='true'] .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
+.foodforthought .fft-status-option--planned[aria-checked='true'] { background: #8f5c0f; }
+.foodforthought .fft-status-option--cooked[aria-checked='true'] { background: #2f6b45; }
+.foodforthought .fft-status-option--skipped[aria-checked='true'] { background: #a23e18; }
+
+/* ---------- Pill ---------- */.foodforthought .fft-picker {
+  --tone-bg: var(--fft-surface-low, #f4f4ed);
+  --tone-bg-hover: var(--fft-surface-high, #e8e9e2);
+  --tone-fg: var(--fft-on-surface, #1a1c18);
+  --tone-icon: var(--fft-outline, #727972);
+  --tone-border: rgba(194, 200, 192, 0.6);
+
+  position: relative;
+   display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 168px;
+  padding: 6px 8px 6px 10px;
+  border-radius: var(--fft-radius-xl, 0.75rem);
+  border: 1px solid var(--tone-border);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.foodforthought .fft-picker:hover {
+  background: var(--tone-bg-hover);
+}
+
+.foodforthought .fft-picker:focus-within {
+  border-color: var(--fft-primary, #32533c);
+  box-shadow: 0 0 0 3px rgba(50, 83, 60, 0.18);
+}
+
+/* ---------- Contents ---------- */.foodforthought .fft-picker-icon {
+  font-size: 18px;
+  color: var(--tone-icon);
+  flex-shrink: 0;
+}
+
+.foodforthought .fft-picker-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.15;
+}
+
+.foodforthought .fft-picker-label {
+  font: 600 10px/12px 'Inter', sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fft-outline, #727972);
+}
+
+.foodforthought .fft-picker-value {
+  font: 600 13px/18px 'Inter', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.foodforthought .fft-picker-chevron {
+  font-size: 18px;
+  color: var(--tone-icon);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+.foodforthought .fft-picker:hover .fft-picker-chevron {
+  transform: translateY(1px);
+}
+}
+
+/* ---------- The real <select>, invisible but clickable ---------- */.foodforthought .fft-picker-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+ }
+
+/* ---------- Disabled while saving ---------- */.foodforthought .fft-picker.is-disabled {
+  opacity: 0.6;
+}
+
+.foodforthought .fft-picker.is-disabled .fft-picker-select {
+  cursor: progress;
+}
+
+@media (max-width: 575.98px) {
+   .foodforthought .fft-meal-actions .fft-controls-row {
+    width: 100%;
+    flex-direction: column;
+  }
+
+   .foodforthought .fft-status-toggle {
+    display: flex;
+    width: 100%;
+  }
+  .foodforthought .fft-status-option {
+    flex: 1;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  .foodforthought .fft-meal-actions .fft-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: 10px;
+    padding-right: 8px;
+  }
+
+
+  .foodforthought .fft-meal-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .foodforthought .fft-headline-lg {
+    font-size: 24px;
+    line-height: 30px;
+  }
+
+  .foodforthought .fft-sync-bar .btn {
+    width: 100%;
+  }
+
+}
+
+/* ===== "Go to shopping list" link ===== */.foodforthought .fft-inline-link {
+  align-self: flex-start;
+  margin-top: 2px;
+  font: 600 12px/16px 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+  color: var(--fft-primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.foodforthought .fft-inline-link:hover {
+  color: var(--fft-primary-container);
+  border-bottom-color: currentColor;
+}
+
+@media (hover: hover) and (pointer: fine) {
+.foodforthought .fft-inline-link:hover .material-symbols-outlined {
+  transform: translateX(2px);
+}
+}
+
+.foodforthought .fft-inline-link .material-symbols-outlined {
+  transition: transform 0.15s;
+}
+
+.foodforthought .fft-inline-link:focus-visible {
+  outline: 2px solid var(--fft-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.foodforthought .fft-spin {
+  animation: fft-spin 0.7s linear infinite;
+}
+
+@keyframes fft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

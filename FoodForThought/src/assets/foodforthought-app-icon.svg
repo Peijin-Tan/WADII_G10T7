@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Foodforthought app icon">
+<title>Foodforthought</title>
+<rect width="512" height="512" rx="112" fill="#4A6B53"/>
+<g transform="translate(76 70) scale(3)"><g fill="none" stroke="#FBF7EF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 64H102C102 87 83 102 60 102C37 102 18 87 18 64Z"/><path d="M60 64V42"/></g>
+<path d="M60 50C45 50 38 39 38 28C51 28 60 37 60 50Z" fill="#FBF7EF"/>
+<path d="M60 44C60 26 71 14 90 12C92 30 80 44 60 44Z" fill="#FBF7EF"/></g>
+</svg>

@@ -26,10 +26,31 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/img': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
       '/api/recipes': {
         target: 'http://localhost:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/api/preferences': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/img': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/analytics': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/activity': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       },
     },
   },

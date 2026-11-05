@@ -8,9 +8,8 @@ const likeSchema = new mongoose.Schema(
       required: true
     },
 
-    postId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Post',
+    recipeKey: {
+      type: String,
       required: true
     }
   },
@@ -19,16 +18,12 @@ const likeSchema = new mongoose.Schema(
   }
 )
 
-// A user can like the same post only once
+// Each user can like a recipe only once.
 likeSchema.index(
-  { userId: 1, postId: 1 },
+  { userId: 1, recipeKey: 1 },
   { unique: true }
 )
 
-// Count likes for a post, including within a date range
-likeSchema.index({ postId: 1, createdAt: -1 })
-
-// Community like activity within a date range
-likeSchema.index({ createdAt: -1 })
+likeSchema.index({ recipeKey: 1, createdAt: -1 })
 
 module.exports = mongoose.model('Like', likeSchema)

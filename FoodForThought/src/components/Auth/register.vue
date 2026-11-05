@@ -1,118 +1,128 @@
 <template>
-  <!-- min-vh-100 and d-flex vertically center the form in the viewport -->
-  <div class="container min-vh-100 d-flex justify-content-center align-items-center py-4">
-    <div class="row justify-content-center w-100">
-      <!-- Standardized form card widths across screen sizes -->
-      <div class="col-12 col-sm-9 col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 rounded-3">
-          <div class="card-body p-4">
-            <h5 class="card-title text-center mb-4 fw-bold">Register</h5>
+  <AuthShell
+    headline="Cook more of the week at home."
+    lede="Add what's in your kitchen, plan breakfast, lunch and dinner, then shop from one list."
+  >
+    <h1 class="auth-title">Create your account</h1>
+    <p class="auth-sub">It's free. All you need is your name, email and a password.</p>
 
-            <div v-if="errorMessage" class="alert alert-danger py-2" role="alert">
-              {{ errorMessage }}
-            </div>
-            <div v-if="successMessage" class="alert alert-success py-2" role="alert">
-              {{ successMessage }}
-            </div>
-
-            <form @submit.prevent="handleSubmit" novalidate>
-              <div class="mb-3">
-                <label for="registerName" class="form-label text-secondary small fw-semibold">Name</label>
-                <input
-                  v-model.trim="form.name"
-                  type="text"
-                  class="form-control"
-                  id="registerName"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-
-              <div class="mb-3">
-                <label for="registerEmail" class="form-label text-secondary small fw-semibold">Email address</label>
-                <input
-                  v-model.trim="form.email"
-                  type="email"
-                  class="form-control"
-                  :class="{ 'is-invalid': form.email && !isEmailValid }"
-                  id="registerEmail"
-                  placeholder="name@example.com"
-                  required
-                />
-                <div v-if="form.email && !isEmailValid" class="invalid-feedback">
-                  Please enter a valid email address.
-                </div>
-              </div>
-
-              <div class="mb-3">
-                <label for="registerPassword" class="form-label text-secondary small fw-semibold">Password</label>
-                <input
-                  v-model="form.password"
-                  type="password"
-                  class="form-control"
-                  :class="{ 'is-invalid': form.password && !isPasswordValid }"
-                  id="registerPassword"
-                  placeholder="At least 8 characters"
-                  required
-                />
-                <div v-if="form.password && !isPasswordValid" class="invalid-feedback">
-                  Password must be at least 8 characters long.
-                </div>
-              </div>
-
-              <div class="mb-4">
-                <label for="registerRole" class="form-label text-secondary small fw-semibold">Role</label>
-                <select v-model="form.role" class="form-select" id="registerRole" required>
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                class="btn btn-primary w-100 py-2 fw-semibold"
-                :disabled="isLoading || !isFormValid"
-              >
-                <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                {{ isLoading ? 'Registering...' : 'Register' }}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+    <div v-if="errorMessage" class="auth-alert is-error" role="alert">
+      <span class="material-symbols-outlined" aria-hidden="true">error</span>
+      <span>{{ errorMessage }}</span>
     </div>
-  </div>
+    <div v-if="successMessage" class="auth-alert is-success" role="status">
+      <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+      <span>{{ successMessage }}</span>
+    </div>
+
+    <form @submit.prevent="handleSubmit" novalidate>
+      <div class="auth-field">
+        <label for="registerName" class="auth-label">Name</label>
+        <input
+          id="registerName"
+          v-model.trim="form.name"
+          type="text"
+          class="auth-input"
+          placeholder="e.g. Alex Tan"
+          autocomplete="name"
+          required
+        />
+      </div>
+
+      <div class="auth-field">
+        <label for="registerEmail" class="auth-label">Email address</label>
+        <input
+          id="registerEmail"
+          v-model.trim="form.email"
+          type="email"
+          class="auth-input"
+          :class="{ 'is-invalid': form.email && !isEmailValid }"
+          placeholder="name@example.com"
+          autocomplete="email"
+          :aria-invalid="Boolean(form.email && !isEmailValid)"
+          aria-describedby="registerEmailHint"
+          required
+        />
+        <p v-if="form.email && !isEmailValid" id="registerEmailHint" class="auth-hint is-error">
+          <span class="material-symbols-outlined" aria-hidden="true">error</span>
+          Please enter a valid email address.
+        </p>
+      </div>
+
+      <div class="auth-field">
+        <label for="registerPassword" class="auth-label">Password</label>
+        <div class="auth-input-wrap">
+          <input
+            id="registerPassword"
+            v-model="form.password"
+            :type="showPassword ? 'text' : 'password'"
+            class="auth-input has-toggle"
+            :class="{ 'is-invalid': form.password && !isPasswordValid }"
+            autocomplete="new-password"
+            :aria-invalid="Boolean(form.password && !isPasswordValid)"
+            aria-describedby="registerPasswordHint"
+            required
+          />
+          <button
+            type="button"
+            class="auth-toggle"
+            aria-controls="registerPassword"
+            :aria-pressed="showPassword"
+            @click="showPassword = !showPassword"
+          >
+            {{ showPassword ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+        <!-- Always visible, so people know the rules before they type; each turns green once it's met -->
+        <PasswordChecklist id="registerPasswordHint" :password="form.password" />
+      </div>
+
+      <button type="submit" class="auth-submit" :disabled="isLoading || !isFormValid">
+        <span v-if="isLoading" class="auth-spinner" aria-hidden="true"></span>
+        {{ isLoading ? 'Creating account...' : 'Create account' }}
+      </button>
+    </form>
+
+    <p class="auth-switch">
+      Already have an account? <router-link to="/login">Log in</router-link>
+    </p>
+  </AuthShell>
 </template>
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
+import { API_URL } from '@/services/api'
+import AuthShell from './AuthShell.vue'
+import PasswordChecklist from './PasswordChecklist.vue'
+import { isStrongPassword } from '@/utils/passwordRules'
 
 const router = useRouter()
+const auth = useAuthStore()
 
 const form = reactive({
   name: '',
   email: '',
-  password: '',
-  role: 'user'
+  password: ''
+  // (no role: every new account is a normal user; admins are promoted on the admin dashboard)
 })
 
 const isLoading = ref(false)
+const showPassword = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const isEmailValid = computed(() => emailRegex.test(form.email))
-const isPasswordValid = computed(() => form.password.length >= 8)
-const isRoleValid = computed(() => ['user', 'admin'].includes(form.role))
+const isPasswordValid = computed(() => isStrongPassword(form.password))
 
 const isFormValid = computed(() => {
   return (
     form.name.trim().length > 0 &&
     isEmailValid.value &&
-    isPasswordValid.value &&
-    isRoleValid.value
+    isPasswordValid.value
   )
 })
 
@@ -128,23 +138,29 @@ const handleSubmit = async () => {
   isLoading.value = true
 
   try {
-    const response = await axios.post('http://localhost:8000/auth/register', {
+    await axios.post(`${API_URL}/auth/register`, {
       name: form.name,
       email: form.email,
-      password: form.password,
-      role: form.role
+      password: form.password
     })
 
-    successMessage.value = response.data.message || 'Account created successfully!'
+    // Log the new account straight in, so the dashboard opens signed in
+    // (before, it went to /dashboard without a login token and bounced back to the login page)
+    const { data } = await axios.post(`${API_URL}/auth/login`, {
+      email: form.email,
+      password: form.password
+    })
+    auth.setLogin(data)
 
+    successMessage.value = 'Account created! Taking you to your dashboard…'
     setTimeout(() => {
       router.push('/dashboard')
-    }, 1500)
+    }, 1000)
   } catch (err) {
     if (err.response) {
       errorMessage.value = err.response.data.message || 'Registration failed.'
     } else {
-      errorMessage.value = 'Cannot connect to backend server. Is Express running on port 5000?'
+      errorMessage.value = 'Cannot connect to backend server. Is Express running on port 8000?'
     }
   } finally {
     isLoading.value = false;
