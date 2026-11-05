@@ -30,8 +30,11 @@ const app = express()
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://wadii-g10-t7-beryl.vercel.app'
-  ]
+    'https://wadii-g10-t7-beryl.vercel.app',
+    'https://wadii-g10-t7-bhxfn692p-foodfor-thought.vercel.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
 // Serve uploaded recipe images from the frontend public/img folder
