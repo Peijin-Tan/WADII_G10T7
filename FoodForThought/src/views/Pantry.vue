@@ -16,6 +16,7 @@ import { useConfirm } from '@/composables/useConfirm'
 const auth = useAuthStore()
 const router = useRouter()
 const confirm = useConfirm()
+const API_URL = import.meta.env.VITE_API_URL
 
 function withAuth(instance) {
   instance.interceptors.request.use((config) => {
@@ -35,7 +36,7 @@ function withAuth(instance) {
   return instance
 }
 
-const api = withAuth(axios.create({ baseURL: 'http://localhost:8000/pantry' }))
+const api = withAuth(axios.create({ baseURL: `${API_URL}/pantry` }))
 
 const idOf = (item) => item.id || item._id
 
