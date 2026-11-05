@@ -7,7 +7,7 @@ FoodForThought helps users decide what to cook and encourages them to build sust
 GitHub Repository: https://github.com/Peijin-Tan/WADII_G10T7
 
 # Application URL
-
+https://wadii-g10-t7-beryl.vercel.app/
 
 # Prerequisites
 Before setting up the application, ensure the following are installed:
