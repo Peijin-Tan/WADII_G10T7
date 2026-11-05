@@ -120,4 +120,4 @@ async function connectDb() {
   })
 })()
 
-
+module.exports = app
