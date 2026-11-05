@@ -13,7 +13,7 @@ import DashboardAnalytics from '@/components/DashboardAnalytics.vue'
 import WeekAtGlance from '@/components/Dashboard/WeekAtGlance.vue'
 
 const auth = useAuthStore()
-
+const API_URL = import.meta.env.VITE_API_URL
 const topRecipes = ref([])
 const currentIndex = ref(0)
 const loadingRecipes = ref(true)
@@ -71,7 +71,7 @@ async function loadTopRecipes() {
   recipesError.value = ''
 
   try {
-    const response = await axios.get('/analytics', {
+    const response = await axios.get(`${API_URL}/analytics`, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
@@ -105,14 +105,11 @@ async function loadMealProgress() {
   loadingMealProgress.value = true
 
   try {
-    const response = await axios.get(
-      '/analytics/meal-progress',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    )
+    const response = await axios.get(`${API_URL}/analytics/meal-progress`, {
+  headers: {
+    Authorization: `Bearer ${token}`
+  }
+})
 
     if (
       request !== mealProgressRequest ||
