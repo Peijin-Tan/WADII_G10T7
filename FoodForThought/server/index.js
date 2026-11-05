@@ -28,7 +28,10 @@ const adminRouter = require('./src/router/admin')
 
 const app = express()
 app.use(cors({
-  origin: 'http://localhost:5173'
+  origin: [
+    'http://localhost:5173',
+    'https://wadii-g10-t7-beryl.vercel.app'
+  ]
 }))
 
 // Serve uploaded recipe images from the frontend public/img folder
