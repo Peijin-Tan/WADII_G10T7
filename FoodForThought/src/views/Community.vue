@@ -7,8 +7,9 @@ import NeighbourPantry from '@/components/community/NeighbourPantry.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
-const activityApi = createApi('/activity')
+const activityApi = createApi(`${API_URL}/activity`)
 const activeTab = ref('comments')
+const API_URL = import.meta.env.VITE_API_URL
 
 // The three tabs at the top of the page (underlined tab bar, see .cm-tabs styles)
 const COMMUNITY_TABS = [
