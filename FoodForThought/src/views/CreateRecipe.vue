@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
+import { API_URL } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -141,7 +142,7 @@ async function uploadImage(event) {
 
   try {
     const response = await axios.post(
-      '/api/recipes/upload-image',
+      `${API_URL}/recipes/upload-image`,
       formData,
       {
         headers: {
@@ -220,7 +221,7 @@ async function createRecipe() {
       sourceUrl: ''
     }
 
-    await axios.post('/api/recipes', recipeData, {
+    await axios.post(`${API_URL}/recipes`, recipeData, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
