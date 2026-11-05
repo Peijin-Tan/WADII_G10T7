@@ -3,6 +3,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import axios from 'axios'
+import { API_URL } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { initialsOf } from '@/utils/initials'
 
@@ -25,7 +26,7 @@ async function fetchMyRecipes() {
   recipeError.value = ''
 
   try {
-    const response = await axios.get('/api/recipes/mine', {
+    const response = await axios.get(`${API_URL}/recipes/mine`, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
@@ -62,7 +63,7 @@ async function deleteRecipe(recipe) {
   recipeError.value = ''
 
   try {
-    await axios.delete(`/api/recipes/${recipe._id}`, {
+    await axios.delete(`${API_URL}/recipes/${recipe._id}`, {
       headers: {
         Authorization: `Bearer ${auth.token}`
       }
