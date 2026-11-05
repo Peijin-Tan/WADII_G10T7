@@ -100,9 +100,13 @@ Expected Result 11: Comments added and displayed in recipe detail page (can also
 
 # Test Account Credentials
 For user (You may register a new account through the application)
+
 Email: peijin@gmail.com
 Password: 12121212
 
 For admin
 Email: admin@foodforthought.com
 Password: AdminPass123!
+
+# AI Usage
+We used AI during the ideation of our web application to provide inspiration for our initial idea and help us explore possible features. AI also supported our debugging process by helping us understand error messages which allowed us to resolve any errors. In addition, we used AI to assist in consolidating styles and colours that had a few discrepancies to improve consistency and maintainability across our web pages.
