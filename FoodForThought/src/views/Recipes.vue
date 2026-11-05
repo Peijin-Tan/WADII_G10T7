@@ -184,7 +184,7 @@ async function toggleLike(recipe) {
   try {
     let response
 
-    const likeUrl = `${API_URL}/activity/recipes/${recipe._id}/like`
+    const likeUrl = `${API_URL}/recipes/${getRecipeKey(recipe)}/like`
 
     if (isLiked(recipe)) {
       response = await axios.delete(likeUrl, config)
