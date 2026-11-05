@@ -14,7 +14,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.11.1",
     "multer": "^2.5.0",
-    "multer-storage-cloudinary": "^4.0.0"
+    "multer-storage-cloudinary-v2": "^1.0.3"
   },
   "scripts": {
     "start": "node index.js",

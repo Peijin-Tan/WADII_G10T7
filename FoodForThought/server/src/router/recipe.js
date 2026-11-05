@@ -9,7 +9,7 @@ const UserPreference = require('../../models/UserPreference')
 const requireAuth = require('../middleware/auth')
 const multer = require('multer')
 const cloudinary = require('cloudinary').v2
-const { CloudinaryStorage } = require('multer-storage-cloudinary')
+const { CloudinaryStorage } = require('multer-storage-cloudinary-v2')
 
 const router = express.Router()
 
