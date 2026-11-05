@@ -7,37 +7,28 @@ const Comment = require('../../models/Comment')
 const Post = require('../../models/Post')
 const UserPreference = require('../../models/UserPreference')
 const requireAuth = require('../middleware/auth')
-const path = require('path')
-const fs = require('fs')
 const multer = require('multer')
+const cloudinary = require('cloudinary').v2
+const { CloudinaryStorage } = require('multer-storage-cloudinary')
 
 const router = express.Router()
 
 
-// Create uploads folder if it doesn't exist
-const uploadDir = path.join(__dirname, '../../../public/img')
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+})
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true })
-}
-
-// Configure image storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir)
-  },
-
-  filename: (req, file, cb) => {
-    const uniqueName =
-      Date.now() + '-' + Math.round(Math.random() * 1E9)
-
-    const extension = path.extname(file.originalname).toLowerCase()
-
-    cb(null, uniqueName + extension)
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'foodforthought/recipes',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ width: 1200, height: 1200, crop: 'limit' }]
   }
 })
 
-// Only allow image files
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     'image/jpeg',
@@ -53,12 +44,14 @@ const fileFilter = (req, file, cb) => {
 }
 
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+  storage,
+  fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB maximum
+    fileSize: 5 * 1024 * 1024
   }
 })
+
+
 
 // Allow both logged-in and guest users to browse recipes.
 // If a token is provided, verify it before continuing.
@@ -713,13 +706,10 @@ router.post(
         })
       }
 
-      const imageUrl = `/img/${req.file.filename}`
-
       return res.status(200).json({
         message: 'Image uploaded successfully',
-        imageUrl: imageUrl
+        imageUrl: req.file.path
       })
-
     } catch (error) {
       console.error('Image upload error:', error)
 
@@ -729,5 +719,6 @@ router.post(
     }
   }
 )
+
 
 module.exports = router
