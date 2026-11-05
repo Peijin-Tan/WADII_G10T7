@@ -3,6 +3,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import { API_URL } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -73,7 +74,7 @@ async function fetchRecipe() {
   error.value = ''
 
   try {
-    const response = await axios.get(`/api/recipes/${recipeId}`)
+    const response = await axios.get(`${API_URL}/recipes/${recipeId}`)
     const recipe = response.data.data
 
     // Check that the logged-in user owns this recipe
@@ -171,7 +172,7 @@ async function uploadImage(event) {
 
   try {
     const response = await axios.post(
-      '/api/recipes/upload-image',
+      `${API_URL}/recipes/upload-image`,
       formData,
       {
         headers: {
@@ -264,7 +265,7 @@ async function updateRecipe() {
     }
 
     await axios.put(
-      `/api/recipes/${recipeId}`,
+      `${API_URL}/recipes/${recipeId}`,
       recipeData,
       {
         headers: {

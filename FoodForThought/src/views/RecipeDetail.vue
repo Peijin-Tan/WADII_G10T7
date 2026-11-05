@@ -3,7 +3,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
-import { createApi, errorMessage } from '@/services/api'
+import { API_URL, createApi, errorMessage } from '@/services/api'
 import RecipeComments from '@/components/RecipeComments.vue'
 import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
@@ -36,7 +36,7 @@ async function fetchRecipe() {
 
   try {
     const response = await axios.get(
-      `/api/recipes/${route.params.id}`
+      `${API_URL}/recipes/${route.params.id}`
     )
 
     recipe.value = response.data.data
