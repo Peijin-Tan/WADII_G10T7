@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ref, computed, onMounted } from 'vue'
 import { createApi, errorMessage } from '@/services/api'
 import { toISODate, daysUntil } from '@/utils/dates'
-import { PANTRY_UNITS as UNITS, PANTRY_CATEGORIES as CATEGORIES, formatQty } from '@/constants/pantry'
+import { PANTRY_UNITS as UNITS, PANTRY_STORAGE_UNITS as STORAGE_UNITS, SPOON_UNITS, PANTRY_CATEGORIES as CATEGORIES, formatQty } from '@/constants/pantry'
 import { categoryStyle } from '@/constants/categoryColors'
 import suggestionsModal from '../components/SuggestionModal.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
@@ -174,7 +174,8 @@ async function onAdd() {
   // Tell the user whether it was new or merged into an existing item
   const added = items.value.find((i) => !idsBefore.has(idOf(i)))
   if (added) {
-    showNotice(`Added ${added.name}`)
+    // shows what was saved, e.g. "Added Jasmine rice (370 g)" after typing 2 cups
+    showNotice(`Added ${added.name} (${formatQty(added.quantity, added.unit)})`)
   } else {
     const merged = items.value.find((i) => i.name.toLowerCase() === name.toLowerCase()) ||
       items.value.find((i) => i.normalizedName && name.toLowerCase().startsWith(i.normalizedName))
@@ -371,9 +372,12 @@ async function onRemove(item) {
                   </div>
                   <div class="col-6 d-flex flex-column gap-1">
                     <label class="fft-label-sm text-fft-muted" for="ing-unit">Unit</label>
-                    <select id="ing-unit" v-model="form.unit" class="fft-input">
+                    <select id="ing-unit" v-model="form.unit" class="fft-input" aria-describedby="ing-unit-hint">
                       <option v-for="u in UNITS" :key="u" :value="u">{{ u }}</option>
                     </select>
+                    <small v-if="SPOON_UNITS.includes(form.unit)" id="ing-unit-hint" class="text-fft-muted" data-testid="pantry-unit-hint">
+                      Saved as g or ml
+                    </small>
                   </div>
                 </div>
 
@@ -461,7 +465,7 @@ async function onRemove(item) {
                       </div>
                       <div class="col-6 col-md-2">
                         <select v-model="editForm.unit" class="fft-input" aria-label="Unit">
-                          <option v-for="u in UNITS" :key="u" :value="u">{{ u }}</option>
+                          <option v-for="u in STORAGE_UNITS" :key="u" :value="u">{{ u }}</option>
                         </select>
                       </div>
                       <div class="col-6 col-md-2">

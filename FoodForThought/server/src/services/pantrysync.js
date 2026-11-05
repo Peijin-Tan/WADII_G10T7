@@ -10,7 +10,7 @@
 
 const Pantry = require('../../models/Pantry')
 const { normalizeName, pantryAmount, pantryCategory } = require('./shoppinglistbuilder')
-const { convertAmount } = require('./units')
+const { convertAmount, toPantryUnit } = require('./units')
 
 const PANTRY_NAME_MAX = 60 // same as maxlength on Pantry.name
 
@@ -24,14 +24,16 @@ async function getPantry(userId) {
 // Returns null if added, or a reason it was skipped.
 async function addBasketItem(userId, basket) {
   const existing = await Pantry.findOne({ user: userId, normalizedName: normalizeName(basket.name) })
+  // The pantry keeps g / ml, not tsp / tbsp / cup (a basket set to "2 cup" rice adds 370 g)
+  const stored = toPantryUnit(basket.quantity, basket.unit, basket.name)
 
   if (!existing) {
     // normalizedName is filled in by the Pantry model's pre('validate') hook
     await Pantry.create({
       user: userId,
       name: basket.name.slice(0, PANTRY_NAME_MAX),
-      quantity: basket.quantity,
-      unit: basket.unit,
+      quantity: stored.quantity,
+      unit: stored.unit,
       category: basket.category,
       expiryDate: basket.expiryDate || undefined,
     })
@@ -39,7 +41,7 @@ async function addBasketItem(userId, basket) {
   }
 
   // Already in the pantry: add to it in the unit it's stored in (2 kg into a row kept in g adds 2000 g)
-  const amount = convertAmount(basket.quantity, basket.unit, existing.unit)
+  const amount = convertAmount(stored.quantity, stored.unit, existing.unit, basket.name)
   if (amount === null) return `your pantry stores it in ${existing.unit}`
 
   const hadStock = existing.quantity > 0

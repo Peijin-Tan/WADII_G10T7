@@ -31,7 +31,9 @@ export function createApi(path = '') {
     (err) => {
       if (err.response?.status === 401) {
         useAuthStore().logout()
-        router.push('/login')
+        // come back to this page after logging in again
+        const here = router.currentRoute.value
+        router.push(here.meta.public ? '/login' : { path: '/login', query: { redirect: here.fullPath } })
       }
       return Promise.reject(err)
     },

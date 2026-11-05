@@ -2,7 +2,13 @@
 // Pantry options used by the Pantry page, the shopping list and shopping mode.
 // MUST match the enums in server/models/Pantry.js (UNITS and CATEGORIES).
 
+// Units you can TYPE an amount in (Add Ingredient form, shopping mode)
 export const PANTRY_UNITS = ['pcs', 'g', 'kg', 'ml', 'l', 'tsp', 'tbsp', 'cup']
+
+// Units the pantry actually STORES. tsp / tbsp / cup are converted by the server into g
+// (solids like rice, flour, sugar) or ml (liquids, and anything else) - see server/src/services/units.js
+export const PANTRY_STORAGE_UNITS = ['pcs', 'g', 'kg', 'ml', 'l']
+export const SPOON_UNITS = ['tsp', 'tbsp', 'cup']
 
 export const PANTRY_CATEGORIES = [
   { value: 'produce', label: 'Produce', icon: 'nutrition' },

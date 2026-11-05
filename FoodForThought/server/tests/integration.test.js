@@ -8,7 +8,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const { buildShoppingItems, pantryAmount, reconcileItems } = require('../src/services/shoppinglistbuilder')
-const { convertAmount } = require('../src/services/units')
+const { convertAmount, toPantryUnit } = require('../src/services/units')
 const { ingredientMatches } = require('../src/services/ingredientnames')
 const { pantryBeforeCooking } = require('../src/router/shoppinglist')
 const UserPreference = require('../models/UserPreference')
@@ -101,13 +101,34 @@ test('pantry milk in ml covers a recipe that uses cups', () => {
   assert.equal(toBuy(items, 'milk'), 0) // 1 cup = 240 ml
 })
 
-test('weight and volume are never mixed up', () => {
-  assert.equal(convertAmount(2, 'cups', 'g'), null)
+test('cups and grams are compared for ingredients with a known weight per cup', () => {
+  // 1 cup uncooked rice is about 185 g, so 2 cups (370 g) is covered by 1 kg in the pantry
+  assert.equal(Math.round(convertAmount(2, 'cups', 'g', 'jasmine rice')), 370)
   const items = buildShoppingItems(
     [meal('Planned', [{ name: 'rice', quantity: 2, unit: 'cups' }])],
     [{ name: 'rice', quantity: 1, unit: 'kg' }],
   )
-  assert.equal(toBuy(items, 'rice'), 2) // can't tell how many cups 1 kg is, so still buy it
+  assert.equal(toBuy(items, 'rice'), 0)
+})
+
+test('weight and volume are still never mixed up when the weight per cup is unknown', () => {
+  assert.equal(convertAmount(2, 'cups', 'g'), null) // no ingredient name
+  assert.equal(convertAmount(2, 'cups', 'g', 'spinach'), null) // a cup of leaves weighs too little to guess
+  const items = buildShoppingItems(
+    [meal('Planned', [{ name: 'spinach', quantity: 2, unit: 'cups' }])],
+    [{ name: 'spinach', quantity: 500, unit: 'g' }],
+  )
+  assert.equal(toBuy(items, 'spinach'), 2) // can't tell how many cups 500 g is, so still buy it
+})
+
+test('the pantry stores spoon and cup measures as g or ml', () => {
+  assert.deepEqual(toPantryUnit(3, 'cup', 'Jasmine rice'), { quantity: 554, unit: 'g' })
+  assert.deepEqual(toPantryUnit(2, 'tbsp', 'soy sauce'), { quantity: 30, unit: 'ml' })
+  assert.deepEqual(toPantryUnit(1, 'cup', 'almond milk'), { quantity: 240, unit: 'ml' }) // milk, not almonds
+  assert.deepEqual(toPantryUnit(1, 'tsp', 'chilli flakes'), { quantity: 4.9, unit: 'ml' }) // weight unknown -> ml
+  assert.deepEqual(toPantryUnit(500, 'g', 'chicken'), { quantity: 500, unit: 'g' }) // other units unchanged
+  // a list item bought in cups goes into an empty pantry in g
+  assert.deepEqual(pantryAmount({ name: 'rice', quantity: 3, unit: 'cup' }, null), { quantity: 554, unit: 'g' })
 })
 
 test('bought tablespoons can be added to a pantry item stored in ml', () => {

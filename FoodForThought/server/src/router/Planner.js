@@ -92,7 +92,8 @@ async function deductFromPantry(userId, entry) {
       result.skipped.push({ name: ing.name, reason: 'not in pantry' })
       continue
     }
-    const needed = convertAmount(Number(ing.amount) * scale, ing.unit, item.unit)
+    // the ingredient's name lets cups of rice come out of rice stored in g
+    const needed = convertAmount(Number(ing.amount) * scale, ing.unit, item.unit, ing.name)
     if (needed === null) {
       result.skipped.push({ name: ing.name, reason: `can't convert ${ing.unit || 'pieces'} to ${item.unit}` })
       continue
@@ -116,8 +117,10 @@ async function restoreToPantry(userId, entry) {
     let item = await Pantry.findOne({ _id: d.pantryItemId, user: userId })
     if (!item) item = await Pantry.findOne({ user: userId, normalizedName: normalizeIngredient(d.name) })
 
-    if (item && item.unit === d.unit) {
-      item.quantity = round2(item.quantity + d.quantity)
+    // Rows saved in cups are now kept in g or ml, so convert back into the row's unit when it differs
+    const back = item ? convertAmount(d.quantity, d.unit, item.unit, d.name) : null
+    if (item && back !== null) {
+      item.quantity = round2(item.quantity + back)
       await item.save()
     } else if (!item) {
       await Pantry.create({ user: userId, name: d.name, quantity: d.quantity, unit: d.unit })

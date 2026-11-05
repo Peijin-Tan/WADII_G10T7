@@ -107,9 +107,10 @@ test('the earlier use-by date is kept, so older stock is used first', async (t) 
 })
 
 test('units that cannot be converted are skipped with a reason', async (t) => {
-  const row = pantryRow({ name: 'Rice', quantity: 2, unit: 'cup' })
+  // A cup of spinach has no reliable weight, so it can't be added to spinach kept in g
+  const row = pantryRow({ name: 'Spinach', quantity: 200, unit: 'g' })
   t.mock.method(Pantry, 'findOne', async () => row)
-  const reason = await addBasketItem('u1', { name: 'Rice', quantity: 1, unit: 'kg' })
-  assert.match(reason, /stores it in cup/)
+  const reason = await addBasketItem('u1', { name: 'Spinach', quantity: 2, unit: 'cup' })
+  assert.match(reason, /stores it in g/)
   assert.equal(row.saved, false)
 })

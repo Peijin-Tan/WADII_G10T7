@@ -274,7 +274,8 @@ module.exports = function createPantrySharingRouter({ PantryLegacy, pantryUserQu
       }).populate('owner', '_id name').sort({ createdAt: -1 }).limit(20).lean(),
     ])
 
-    res.json({ incoming, outgoing })
+    // Hide requests from/to an account that was deleted (populate gives null for them)
+    res.json({ incoming: incoming.filter((r) => r.requester), outgoing: outgoing.filter((r) => r.owner) })
   }))
 
   // POST /pantry/requests   { friendId, items: [{ itemId, quantity }], message? }
@@ -360,6 +361,10 @@ module.exports = function createPantrySharingRouter({ PantryLegacy, pantryUserQu
 
       if (status === 'approved') {
         const requesterId = String(request.requester)
+        // The borrower's account may have been deleted: never move items to nobody
+        if (!(await User.exists({ _id: requesterId }).session(session))) {
+          throw httpError(409, 'This person no longer has an account, so nothing was moved.')
+        }
         if (!(await findShare(req.userId, requesterId).session(session))) {
           throw httpError(409, 'You are no longer neighbours, so this request can\'t be approved.')
         }
@@ -395,7 +400,7 @@ module.exports = function createPantrySharingRouter({ PantryLegacy, pantryUserQu
     if (!ownerItem) throw httpError(409, `${item.name} is no longer in your pantry.`)
 
     const ownerUnit = String(ownerItem.unit || 'pcs')
-    const asOwnerUnit = convertAmount(quantity, item.unit || ownerUnit, ownerUnit)
+    const asOwnerUnit = convertAmount(quantity, item.unit || ownerUnit, ownerUnit, item.name)
     const transferQty = Number.isFinite(asOwnerUnit) ? asOwnerUnit : quantity
     const ownerQty = Number(ownerItem.quantity) || 0
     if (ownerQty < transferQty) throw httpError(409, `You don't have enough ${item.name} left to approve this.`)
@@ -407,7 +412,7 @@ module.exports = function createPantrySharingRouter({ PantryLegacy, pantryUserQu
 
     let added = transferQty
     if (requesterItem) {
-      added = convertAmount(transferQty, ownerUnit, String(requesterItem.unit || ownerUnit))
+      added = convertAmount(transferQty, ownerUnit, String(requesterItem.unit || ownerUnit), item.name)
       if (!Number.isFinite(added)) {
         throw httpError(409, `They keep ${item.name} in ${requesterItem.unit} but you have it in ${ownerUnit}, so it can't be added to their pantry automatically.`)
       }

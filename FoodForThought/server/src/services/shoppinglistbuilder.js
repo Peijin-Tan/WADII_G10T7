@@ -40,7 +40,7 @@ const SHOPPING_ORDER = [
    Names
 ---------------------------------------------------------------- */
 const { normalizeIngredient, ingredientMatches } = require('./ingredientnames');
-const { convertAmount, unitInfo } = require('./units');
+const { convertAmount, unitInfo, toPantryUnit } = require('./units');
 
 // Ingredient names use the SAME rule as the pantry, so list items and
 // pantry items match: "Eggs" -> "egg", "Cherry Tomatoes" -> "cherry tomato".
@@ -93,8 +93,9 @@ function normalizeUnit(unit) {
 // An amount in one unit, expressed in another: 2 tbsp -> 29.58 ml, 1 kg -> 1000 g.
 // Uses the shared converter (services/units.js); units it doesn't know ("can", "pack")
 // only match the exact same unit. Returns null if they can't be compared.
-function amountIn(amount, fromUnit, toUnit) {
-  const converted = convertAmount(amount, fromUnit, toUnit);
+// With the ingredient name, cups and grams can be compared too (3 cups rice vs 1.5 kg rice in the pantry).
+function amountIn(amount, fromUnit, toUnit, ingredientName) {
+  const converted = convertAmount(amount, fromUnit, toUnit, ingredientName);
   if (converted !== null) return converted;
   const from = normalizeUnit(fromUnit);
   const to = normalizeUnit(toUnit);
@@ -258,7 +259,7 @@ function buildShoppingItems(meals, pantry = []) {
         });
       }
       const need = needs.get(normalizedName);
-      addAmount(need.amounts, amount * factor * ratio, unit);
+      addAmount(need.amounts, amount * factor * ratio, unit, ing.name);
 
       // Remember which recipes use this item (once per recipe), for the tags in the UI.
       const alreadyListed = need.usedIn.some((u) => String(u.recipeId) === String(meal.recipeId));
@@ -282,24 +283,25 @@ function buildShoppingItems(meals, pantry = []) {
   const needList = [...needs.values()];
   needList.forEach((need) => need.amounts.forEach((amt) => { amt.covered = 0; }));
 
-  const takeFromPantry = (amt, rows) => {
+  // `name` = the recipe's ingredient name, so cups of rice can be compared with rice stored in g
+  const takeFromPantry = (amt, rows, name) => {
     for (const row of rows) {
       const stillNeeded = amt.needed - amt.covered;
       if (stillNeeded <= 1e-9) return;
-      const available = amountIn(row.left, row.unit, amt.unit); // the row's stock, in this amount's unit
-      if (!(available > 0)) continue; // empty, or units that can't be compared (cups vs g)
+      const available = amountIn(row.left, row.unit, amt.unit, name); // the row's stock, in this amount's unit
+      if (!(available > 0)) continue; // empty, or units that can't be compared (pieces vs g)
       const take = Math.min(stillNeeded, available);
       amt.covered += take;
-      row.left -= amountIn(take, amt.unit, row.unit);
+      row.left -= amountIn(take, amt.unit, row.unit, name);
     }
   };
   for (const need of needList) {
     const rows = stock.filter((row) => row.name === need.normalizedName);
-    need.amounts.forEach((amt) => takeFromPantry(amt, rows));
+    need.amounts.forEach((amt) => takeFromPantry(amt, rows, need.normalizedName));
   }
   for (const need of needList) {
     const rows = stock.filter((row) => row.name !== need.normalizedName && ingredientMatches(row.name, need.normalizedName));
-    need.amounts.forEach((amt) => takeFromPantry(amt, rows));
+    need.amounts.forEach((amt) => takeFromPantry(amt, rows, need.normalizedName));
   }
 
   // 4. Subtract what the pantry covers, then round.
@@ -343,18 +345,24 @@ function unitSize(unit) {
 // Adds `amount` (in `unit`) to a list of amounts. Merges into an amount in a unit it can
 // convert to, switching that amount to the smaller of the two units; otherwise adds a new one.
 //   [{ 1 tbsp }] + 1 tsp  -> [{ 4 tsp }]      (1 tbsp = 3 tsp)
+//   [{ 1 cup rice }] + 200 g rice -> [{ 385 g }]   (weight and volume, for ingredients we know)
 //   [{ 1 piece }] + 1 inch -> [{ 1 piece }, { 1 inch }]
-function addAmount(amounts, amount, unit) {
-  const match = amounts.find((amt) => amountIn(1, unit, amt.unit) !== null);
+function addAmount(amounts, amount, unit, name) {
+  const match = amounts.find((amt) => amountIn(1, unit, amt.unit, name) !== null);
   if (!match) {
     amounts.push({ unit, needed: amount });
     return;
   }
-  if (unitSize(unit) < unitSize(match.unit)) {
-    match.needed = amountIn(match.needed, match.unit, unit);
+  // Weight wins over volume (rice is bought by the kg, not the cup); otherwise the smaller unit
+  const group = (u) => unitInfo(u)?.group;
+  const prefer = group(unit) !== group(match.unit)
+    ? group(unit) === 'weight'
+    : unitSize(unit) < unitSize(match.unit);
+  if (prefer) {
+    match.needed = amountIn(match.needed, match.unit, unit, name);
     match.unit = unit;
   }
-  match.needed += amountIn(amount, unit, match.unit);
+  match.needed += amountIn(amount, unit, match.unit, name);
 }
 
 // Every amount on a line: the main one plus alsoNeed, as [{ quantity, unit }]
@@ -415,8 +423,8 @@ function reconcileItems(oldItems, freshItems) {
 
 /* ---------------------------------------------------------------
    Pantry conversion (for "Add bought items to pantry")
-   The pantry model only accepts units g, kg, ml, l, pcs, tsp, tbsp, cup
-   and its own category names, so list items are translated here.
+   The pantry stores g, kg, ml, l and pcs (tsp / tbsp / cup are turned into g or ml by
+   toPantryUnit in units.js) and uses its own category names, so list items are translated here.
 ---------------------------------------------------------------- */
 const PANTRY_UNIT = { g: 'g', ml: 'ml', piece: 'pcs', clove: 'pcs', tsp: 'tsp', tbsp: 'tbsp', cup: 'cup' };
 
@@ -454,10 +462,12 @@ function pantryCategory(item) {
 function defaultBasket(item) {
   const pantryUnit = PANTRY_UNIT[item.unit];
   const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+  // "3 cup jasmine rice" goes in the basket as "554 g", the way the pantry keeps it
+  const stored = pantryUnit ? toPantryUnit(quantity, pantryUnit, item.name) : { quantity, unit: 'pcs' };
   return {
     name: String(item.name || '').trim().slice(0, 60),
-    quantity: Math.round(quantity * 100) / 100,
-    unit: pantryUnit || 'pcs',
+    quantity: Math.round(stored.quantity * 100) / 100,
+    unit: stored.unit,
     category: pantryCategory(item),
     expiryDate: null,
     addToPantry: Boolean(pantryUnit),
@@ -473,15 +483,17 @@ function defaultBasket(item) {
    Examples:
      300 g chicken, pantry has it in kg  -> { quantity: 0.3, unit: 'kg' }
      2 piece egg,   pantry has none      -> { quantity: 2,   unit: 'pcs' }
+     3 cup rice,    pantry has none      -> { quantity: 554, unit: 'g' }   (no cups in the pantry)
+     3 cup rice,    pantry has it in kg  -> { quantity: 0.554, unit: 'kg' }
      1 bottle soap                       -> { skip: ... } (pantry has no "bottle")
-     200 g rice,    pantry has it in cup -> { skip: ... } (can't convert g to cups) */
+     2 cup spinach, pantry has it in g   -> { skip: ... } (no reliable weight per cup) */
 function pantryAmount(item, existingUnit) {
   const pantryUnit = PANTRY_UNIT[item.unit];
   if (!pantryUnit) return { skip: `the pantry can't store "${item.unit}"` };
-  if (!existingUnit) return { quantity: item.quantity, unit: pantryUnit };
+  if (!existingUnit) return toPantryUnit(item.quantity, pantryUnit, item.name);
 
-  // Same converter as cooking and list-building: 300 g -> 0.3 kg, 2 tbsp -> 29.58 ml
-  const converted = amountIn(item.quantity, item.unit, existingUnit);
+  // Same converter as cooking and list-building: 300 g -> 0.3 kg, 2 tbsp -> 29.58 ml, 1 cup rice -> 185 g
+  const converted = amountIn(item.quantity, item.unit, existingUnit, item.name);
   if (converted === null) return { skip: `your pantry stores it in ${existingUnit}` };
 
   return { quantity: Math.round(converted * 1000) / 1000, unit: existingUnit };

@@ -31,7 +31,7 @@ const router = express.Router()
 // ingredientMatches:   whole-word match, "chicken" matches "chicken breast" but "egg" doesn't match "eggplant".
 // Both live in services/ingredientnames.js so the planner and shopping list use exactly the same rule.
 const { normalizeIngredient, ingredientMatches } = require('../services/ingredientnames')
-const { convertAmount } = require('../services/units')
+const { convertAmount, toPantryUnit, isSpoonUnit } = require('../services/units')
 const UserPreference = require('../../models/UserPreference')
 
 /* ------------------------------------------------------------------ */
@@ -218,9 +218,18 @@ function pantryUserQuery(userId) {
   return { user: { $in: values } }
 }
 
-// The user's whole pantry, sorted for the page
-function loadPantry(userId) {
-  return PantryLegacy.find(pantryUserQuery(userId)).sort({ category: 1, name: 1 })
+// The user's whole pantry, sorted for the page.
+// Rows saved before the pantry stopped storing spoon / cup measures ("3 cup jasmine rice")
+// are converted to g or ml the first time the pantry is loaded, so old data gets fixed too.
+async function loadPantry(userId) {
+  const items = await PantryLegacy.find(pantryUserQuery(userId)).sort({ category: 1, name: 1 })
+  const old = items.filter((item) => isSpoonUnit(item.get('unit')))
+  for (const item of old) {
+    const stored = toPantryUnit(Number(item.get('quantity')) || 0, item.get('unit'), item.get('name'))
+    item.set({ quantity: stored.quantity, unit: stored.unit })
+    await item.save()
+  }
+  return items
 }
 
 // Finds one item, making sure it belongs to the logged-in user
@@ -289,8 +298,11 @@ router.post('/', handle(async (req, res) => {
   const { name } = req.body
   if (!name || !String(name).trim()) throw httpError(400, 'Ingredient name is required')
   const normalizedName = normalizeIngredient(name)
-  const quantity = Number(req.body.quantity ?? 1)
-  if (!Number.isFinite(quantity) || quantity <= 0) throw httpError(400, 'Quantity must be more than 0')
+  const typedQuantity = Number(req.body.quantity ?? 1)
+  if (!Number.isFinite(typedQuantity) || typedQuantity <= 0) throw httpError(400, 'Quantity must be more than 0')
+  if (req.body.unit && !Pantry.UNITS.includes(req.body.unit)) throw httpError(400, `Unit must be one of: ${Pantry.UNITS.join(', ')}`)
+  // tsp / tbsp / cup are stored as g or ml: "2 cup rice" is saved as 370 g, "2 tbsp soy sauce" as 30 ml
+  const { quantity, unit: typedUnit } = req.body.unit ? toPantryUnit(typedQuantity, req.body.unit, name) : { quantity: typedQuantity, unit: undefined }
   if (req.body.expiryDate && Number.isNaN(new Date(req.body.expiryDate).getTime())) {
     throw httpError(400, 'Use-by date must be a valid date')
   }
@@ -300,8 +312,8 @@ router.post('/', handle(async (req, res) => {
   if (existing) {
     // Already in the pantry -> add to the quantity instead of making a duplicate.
     // Convert to the unit the pantry already uses first, so 500 g added to "1 kg rice" gives 1.5 kg (not 501 kg).
-    const unit = req.body.unit || existing.unit
-    const added = convertAmount(quantity, unit, existing.unit)
+    const unit = typedUnit || existing.unit
+    const added = convertAmount(quantity, unit, existing.unit, name)
     if (added === null) {
       throw httpError(409, `You already have ${existing.name} in ${existing.unit}. Add it in a matching unit, or edit the item instead.`)
     }
@@ -316,6 +328,9 @@ router.post('/', handle(async (req, res) => {
   EDITABLE.forEach((f) => {
     if (req.body[f] !== undefined && req.body[f] !== '') data[f] = req.body[f]
   })
+  data.name = String(name).trim()
+  data.quantity = quantity
+  if (typedUnit) data.unit = typedUnit
   await Pantry.create(data) // runs schema validation
 
   res.status(201).json({ items: await loadPantry(req.userId) })
@@ -329,6 +344,7 @@ function checkEdits(body) {
     if (body[f] !== undefined) edits[f] = body[f]
   })
   if (edits.name !== undefined && !String(edits.name).trim()) throw httpError(400, 'Ingredient name is required')
+  if (edits.name !== undefined) edits.name = String(edits.name).trim() // "  Eggs  " -> "Eggs"
   if (edits.quantity !== undefined) {
     const quantity = edits.quantity === '' || edits.quantity === null ? NaN : Number(edits.quantity)
     if (!Number.isFinite(quantity) || quantity < 0) throw httpError(400, 'Quantity must be 0 or more')
@@ -353,6 +369,13 @@ router.patch('/:itemId', handle(async (req, res) => {
     // renaming onto another item ("Garlic" -> "Milk" when Milk exists): say which one, instead of a vague 409
     const clash = await PantryLegacy.findOne({ ...pantryUserQuery(req.userId), normalizedName: normalizeIngredient(edits.name), _id: { $ne: item._id } })
     if (clash) throw httpError(409, `${clash.name} is already in your pantry. Edit that item instead, or pick another name.`)
+  }
+  // Switched to a spoon / cup measure: store it as g or ml instead (1 cup rice -> 185 g)
+  const unit = edits.unit ?? item.get('unit')
+  if (isSpoonUnit(unit)) {
+    const stored = toPantryUnit(edits.quantity ?? Number(item.get('quantity')) ?? 0, unit, edits.name ?? item.get('name'))
+    edits.quantity = stored.quantity
+    edits.unit = stored.unit
   }
   // .set() (not Object.assign): PantryLegacy has an empty schema, so plain assignment isn't saved
   item.set(edits)

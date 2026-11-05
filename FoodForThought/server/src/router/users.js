@@ -15,6 +15,9 @@ const ShoppingList = require('../../models/ShoppingList')
 const UserPreference = require('../../models/UserPreference')
 const Comment = require('../../models/Comment')
 const Like = require('../../models/Like')
+const PantryShare = require('../../models/PantryShare')
+const NeighbourInvite = require('../../models/NeighbourInvite')
+const PantryRequest = require('../../models/PantryRequest')
 const requireAuth = require('../middleware/auth')
 const requireAdmin = require('../middleware/requireAdmin')
 const router = express.Router()
@@ -74,7 +77,10 @@ router.patch('/:id/role', checkId, async (req, res) => {
 
 // DELETE /users/:id
 // Also removes the user's personal data, so nothing is left behind that belongs to nobody:
-// pantry, meal plans, shopping lists, dietary preferences, comments and likes.
+// pantry, meal plans, shopping lists, dietary preferences, comments and likes, and their
+// Neighbour Pantry links: neighbour shares and invites (both directions) and borrow requests
+// they sent or received. Without that, a neighbour still saw "Someone wants to borrow" and
+// approving it took items out of their pantry and gave them to an account that no longer exists.
 // Recipes and community posts they shared are kept, because other people may have planned them.
 router.delete('/:id', checkId, async (req, res) => {
   try {
@@ -90,13 +96,19 @@ router.delete('/:id', checkId, async (req, res) => {
       return res.status(404).json({ message: 'User not found.' })
     }
 
-    const [pantry, mealPlans, shoppingLists, preferences, comments, likes] = await Promise.all([
-      Pantry.deleteMany({ user: id }),
+    // Some older pantry rows store the user id as text, not as an ObjectId (see pantryUserQuery in pantry.js)
+    const either = [id, new mongoose.Types.ObjectId(id)]
+
+    const [pantry, mealPlans, shoppingLists, preferences, comments, likes, shares, invites, requests] = await Promise.all([
+      Pantry.collection.deleteMany({ user: { $in: either } }),
       MealPlan.deleteMany({ userId: id }),
       ShoppingList.deleteMany({ userId: id }),
       UserPreference.deleteMany({ userId: id }),
       Comment.deleteMany({ userId: id }),
       Like.deleteMany({ userId: id }),
+      PantryShare.deleteMany({ $or: [{ owner: id }, { friend: id }] }),
+      NeighbourInvite.deleteMany({ $or: [{ from: id }, { to: id }] }),
+      PantryRequest.deleteMany({ $or: [{ requester: id }, { owner: id }] }),
     ])
 
     return res.status(200).json({
@@ -115,6 +127,9 @@ router.delete('/:id', checkId, async (req, res) => {
         preferences: preferences.deletedCount,
         comments: comments.deletedCount,
         likes: likes.deletedCount,
+        neighbourLinks: shares.deletedCount,
+        neighbourInvites: invites.deletedCount,
+        borrowRequests: requests.deletedCount,
       }
     })
   } catch (error) {
