@@ -1,13 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import axios from 'axios'
+import { createApi } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import NeighbourPantry from '@/components/community/NeighbourPantry.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
-
+const activityApi = createApi('/activity')
 const activeTab = ref('comments')
 
 // The three tabs at the top of the page (underlined tab bar, see .cm-tabs styles)
@@ -123,10 +123,7 @@ async function loadComments() {
   commentsError.value = ''
 
   try {
-    const response = await axios.get(
-      '/activity/comments',
-      requestConfig()
-    )
+    const response = await activityApi.get('/comments', requestConfig())
 
     if (token === auth.token) {
       comments.value = response.data
@@ -154,10 +151,7 @@ async function loadLikes() {
   likesError.value = ''
 
   try {
-    const response = await axios.get(
-      '/activity/likes',
-      requestConfig()
-    )
+    const response = 	activityApi.get('/likes', requestConfig())
 
     if (token === auth.token) {
       likes.value = response.data
@@ -230,8 +224,8 @@ async function saveComment(comment) {
   busyCommentIds.value.push(comment._id)
 
   try {
-    const response = await axios.put(
-      '/activity/comments/' + comment._id,
+    const response = await activityApi.put(
+      '/comments/' + comment._id,
       {
         content: content
       },
@@ -282,10 +276,7 @@ async function deleteComment(comment) {
   busyCommentIds.value.push(comment._id)
 
   try {
-    await axios.delete(
-      '/activity/comments/' + comment._id,
-      requestConfig()
-    )
+    await activityApi.delete('/comments/' + comment._id, requestConfig())
 
     if (token !== auth.token) return
 
@@ -324,10 +315,7 @@ async function unlikeRecipe(like) {
   busyLikeIds.value.push(like._id)
 
   try {
-    await axios.delete(
-      '/activity/likes/' + like._id,
-      requestConfig()
-    )
+    await activityApi.delete('/likes/' + like._id, requestConfig())
 
     if (token !== auth.token) return
 
